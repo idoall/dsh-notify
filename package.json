@@ -1,0 +1,80 @@
+{
+  "name": "dsh-notify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH web plugin: in-page task notifications for DeepSeek Harness — a top-right toast, a sidebar bell with unread/read history, a WebAudio cue that also plays while the page is hidden, and a flashing background tab title. No service worker, no web push, no OS notification matrix.",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "node tscheck.mjs && tsc --noEmit",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs",
+    "prepare": "node scripts/build.mjs",
+    "pack:check": "node scripts/pack-check.mjs",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run pack:check"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.2"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@types/node": "^22.15.29",
+    "@types/react": "^18.3.23",
+    "esbuild": "^0.25.5",
+    "jsdom": "^26.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.7.3"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idoall/dsh-notify.git"
+  },
+  "homepage": "https://github.com/idoall/dsh-notify#readme",
+  "bugs": {
+    "url": "https://github.com/idoall/dsh-notify/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "notifications",
+    "toast",
+    "web"
+  ]
+}

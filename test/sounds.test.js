@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { BUILTIN_SOUNDS, SOUND_BYTES, parseSoundChoice, soundFileName, validSoundName } from '../src/sound-choices.js';
+import { createSoundLibrary } from '../src/sounds.js';
+
+test('sound names are single path segments with an allow-listed audio extension', () => {
+  assert.equal(validSoundName('ding.mp3'), true); assert.equal(validSoundName('My Chime.WAV'), false, 'spaces are not accepted');
+  assert.equal(validSoundName('../../etc/passwd.mp3'), false); assert.equal(validSoundName('..%2fetc.mp3'), false);
+  assert.equal(validSoundName('/etc/passwd.mp3'), false); assert.equal(validSoundName('a/b.mp3'), false); assert.equal(validSoundName('a\\b.mp3'), false);
+  assert.equal(validSoundName('.hidden.mp3'), false, 'a leading dot would create a hidden file');
+  assert.equal(validSoundName('ding.exe'), false); assert.equal(validSoundName('ding'), false); assert.equal(validSoundName(''), false); assert.equal(validSoundName(undefined), false);
+  assert.equal(validSoundName(`${'a'.repeat(70)}.mp3`), false, 'over-long names are refused');
+  assert.equal(soundFileName('Ding.MP3'), 'Ding.mp3'); assert.equal(soundFileName('ding.mp3'), 'ding.mp3'); assert.equal(soundFileName('bad.txt'), undefined);
+});
+test('a stored sound setting parses to a built-in or a custom file, never to a path', () => {
+  assert.deepEqual(parseSoundChoice('ping'), { kind: 'builtin', id: 'ping' });
+  assert.deepEqual(parseSoundChoice('custom:ding.mp3'), { kind: 'custom', name: 'ding.mp3' });
+  assert.deepEqual(parseSoundChoice('custom:../secret.mp3'), { kind: 'builtin', id: 'chime' }, 'a tampered setting falls back to the default');
+  assert.deepEqual(parseSoundChoice('nonsense'), { kind: 'builtin', id: 'chime' });
+  assert.deepEqual(parseSoundChoice(undefined), { kind: 'builtin', id: 'chime' });
+  assert.deepEqual(BUILTIN_SOUNDS, ['chime', 'ping', 'alert', 'none']);
+});
+test('the sound library refuses traversal, oversized uploads and disabled persistence', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-sounds-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const library = createSoundLibrary({ dataDir: dir });
+  assert.deepEqual(await library.list(), []);
+  assert.deepEqual(await library.put('../escape.mp3', Buffer.from('x')), { ok: false, reason: 'invalid-name' });
+  assert.deepEqual(await library.put('note.txt', Buffer.from('x')), { ok: false, reason: 'invalid-name' });
+  assert.deepEqual(await library.put('ding.mp3', Buffer.alloc(0)), { ok: false, reason: 'empty' });
+  assert.deepEqual(await library.put('ding.mp3', Buffer.alloc(SOUND_BYTES + 1)), { ok: false, reason: 'too-large' });
+  const stored = await library.put('Ding.MP3', Buffer.from('audio-bytes'));
+  assert.deepEqual(stored, { ok: true, name: 'Ding.mp3', bytes: 11 });
+  assert.deepEqual((await library.list()).map((entry) => entry.name), ['Ding.mp3']);
+  const read = await library.read('Ding.mp3');
+  assert.equal(read.type, 'audio/mpeg'); assert.equal(read.bytes.toString(), 'audio-bytes');
+  assert.equal(await library.read('../escape.mp3'), undefined);
+  assert.equal(await library.read('missing.mp3'), undefined);
+  assert.equal(await library.remove('Ding.mp3'), true); assert.equal(await library.remove('Ding.mp3'), false);
+  assert.deepEqual(await library.list(), []);
+  const disabled = createSoundLibrary({ dataDir: undefined });
+  assert.equal(disabled.enabled, false);
+  assert.deepEqual(await disabled.put('ding.mp3', Buffer.from('x')), { ok: false, reason: 'persistence-disabled' });
+  assert.equal(await disabled.read('ding.mp3'), undefined);
+  await writeFile(join(dir, 'stray.mp3'), 'not-in-sounds-dir');
+  assert.deepEqual(await library.list(), [], 'only the sounds directory is ever listed');
+});

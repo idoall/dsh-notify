@@ -1,0 +1,5 @@
+# Bundle mount. Persistence stays disabled until the profile owner supplies an
+# absolute config.dataDir in its own patch; the plugin never guesses a profile.
+- insert:
+    - id: dsh-notify
+      name: dsh-notify
