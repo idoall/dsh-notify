@@ -511,6 +511,9 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     if (pendingInteraction) sawPending.current = true;
     const live = state.records.find((record) => record.eventId === toast.eventId);
     if (!shouldCloseOpenToast({ toast, pendingInteraction, liveRecord: live, sawPending: sawPending.current })) return;
+    // Resolved elsewhere means handled: stop counting it as unread too, or the bell keeps nagging
+    // about something the user already answered.
+    if (!toast.localOnly) void acknowledgeRecord(toast).catch(() => {});
     toastTimer.current?.destroy?.(); toastTimer.current = null; setToast(null);
   }, [pending, state.records, toast]);
   React.useEffect(() => {

@@ -68,6 +68,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   const listeners = new Set(); let pendingMap = new Map();
   const observable = { getSnapshot: () => pendingMap, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } };
   const publish = (next) => { pendingMap = next; for (const listener of listeners) listener(); };
+  const calls = [];
   const earlier = { eventId: 'turn:prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
   const question = (callId, phase) => ({ eventId: `question:s1:${callId}`, mergeKey: `question:s1:${callId}`, kind: 'question', sessionId: 's1', title: '需要回复', body: '要不要继续？', at: 2, unread: true, phase });
   // A realistic host: the cursor only advances when the record set actually changes.
@@ -80,7 +81,11 @@ test('a question toast closes itself when the answer happens elsewhere', async (
     // The store re-registers its poller whenever the cursor moves, so keep the latest callback and make
     // the page visible so the attention indicator never registers one of its own.
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url) => String(url).includes('/pull?') ? response(cursor === 1 ? { reset: true, epoch: 1, cursor, items: [earlier] } : { reset: false, epoch: 1, cursor, items: [earlier, record] }) : response({}),
+    fetch: async (url, init) => {
+      if (String(url).includes('/pull?')) return response(cursor === 1 ? { reset: true, epoch: 1, cursor, items: [earlier] } : { reset: false, epoch: 1, cursor, items: [earlier, record] });
+      if (String(url).includes('/ack')) { calls.push(`ack:${JSON.parse(init.body).eventId}`); return response({ ok: true }); }
+      return response({});
+    },
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -116,6 +121,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   assert.equal(answerCount(), 2, 'answering from the toast is offered while it is pending');
   await act(async () => { publish(new Map()); }); await settle();
   assert.equal(toastNode(), null, 'an answer given in the composer closes the toast');
+  assert.deepEqual(calls.filter((call) => call.startsWith('ack:')), ['ack:question:s1:call-1'], 'and it stops counting as unread, because it was handled');
 
 });
 
