@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createSoundPlayer, navigateNotificationRecord, revealTurn, readRetentionCutoff, layoutFor, toastPolicy, toastQueue, channelStatus, prioritizedToastRecords, toastStyleForKind, installClientStyles, CLIENT_CSS, SETTINGS_CSS, BELL_CLASS, bellActionStyle, bellBadgeStyle, toastAnchor, statusTone, resultTone, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createSoundPlayer, navigateNotificationRecord, shouldCloseOpenToast, revealTurn, readRetentionCutoff, layoutFor, toastPolicy, toastQueue, channelStatus, prioritizedToastRecords, toastStyleForKind, installClientStyles, CLIENT_CSS, SETTINGS_CSS, BELL_CLASS, bellActionStyle, bellBadgeStyle, toastAnchor, statusTone, resultTone, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout has safe touch target and persistent open toast', () => { assert.deepEqual(layoutFor({width:375,coarse:true}), {narrow:true,hitTarget:44}); assert.equal(toastPolicy({phase:'open'},{width:375}).persistent,true); });
 test('toast queue caps narrow and desktop and exposes the single remaining channel', () => { assert.equal(toastQueue([{phase:'settled'},{phase:'settled'},{phase:'settled'}],375).length,2); assert.equal(toastQueue([{phase:'settled'},{phase:'settled'},{phase:'settled'}],1024).length,3); assert.equal(channelStatus({},{}).length, 1, 'only 页面里 remains'); assert.equal(channelStatus({},{})[0].id, 'A'); });
 test('toast styles map kind tokens and colors', () => { assert.equal(toastStyleForKind('approval').token, 'warning'); assert.equal(toastStyleForKind('completed').token, 'success'); assert.match(toastStyleForKind('failed').borderInlineStart, /danger/); });
@@ -218,4 +218,22 @@ test('a record with nowhere to go is still dismissible, while a real session sta
   const normal = { eventId: 'normal', sessionId: 's1', turn: 4 };
   assert.deepEqual(await navigateNotificationRecord(normal, { sessions, acknowledge }), { status: 'acknowledged' });
   assert.deepEqual(acked, ['self-test', 'deleted', 'normal']);
+});
+
+test('an open toast closes exactly when a second signal says the question is resolved', () => {
+  const open = { phase: 'open', eventId: 'q1' };
+  const settled = { phase: 'settled', eventId: 'q1' };
+  // Nothing to do for settled toasts or when the interaction is still pending.
+  assert.equal(shouldCloseOpenToast({ toast: null }), false);
+  assert.equal(shouldCloseOpenToast({ toast: settled, liveRecord: settled, sawPending: true }), false, 'only open toasts auto-close');
+  assert.equal(shouldCloseOpenToast({ toast: open, pendingInteraction: { id: 'q1' }, sawPending: true }), false, 'still pending means still shown');
+  // Before the interaction is published an empty map means "not yet" — dismissing here would blink.
+  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: open, sawPending: false }), false);
+  // Signal 1: this page saw it pending and the official interaction is gone (answered in the composer).
+  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: open, sawPending: true }), true);
+  // Signal 2: the host settled the record and a later pull reported it.
+  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: settled, sawPending: false }), true);
+  // A missing live record (already deleted) is not evidence either way.
+  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: undefined, sawPending: false }), false);
+  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: undefined, sawPending: true }), true);
 });

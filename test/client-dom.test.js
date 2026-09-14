@@ -62,6 +62,65 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
   assert.deepEqual(audioSrc, ['/plugins/dsh-notify/sound?name=ding.mp3'], 'a custom choice plays the uploaded file');
 });
 
+test('a question toast closes itself when the answer happens elsewhere', async (t) => {
+  const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
+  let root; let mounted; let pullTimer;
+  const listeners = new Set(); let pendingMap = new Map();
+  const observable = { getSnapshot: () => pendingMap, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } };
+  const publish = (next) => { pendingMap = next; for (const listener of listeners) listener(); };
+  const earlier = { eventId: 'turn:prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
+  const question = (callId, phase) => ({ eventId: `question:s1:${callId}`, mergeKey: `question:s1:${callId}`, kind: 'question', sessionId: 's1', title: '需要回复', body: '要不要继续？', at: 2, unread: true, phase });
+  // A realistic host: the cursor only advances when the record set actually changes.
+  let record = question('call-1', 'open'); let cursor = 1;
+  const values = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
+    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
+    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
+    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
+    // The store re-registers its poller whenever the cursor moves, so keep the latest callback and make
+    // the page visible so the attention indicator never registers one of its own.
+    setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
+    fetch: async (url) => String(url).includes('/pull?') ? response(cursor === 1 ? { reset: true, epoch: 1, cursor, items: [earlier] } : { reset: false, epoch: 1, cursor, items: [earlier, record] }) : response({}),
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  t.after(async () => {
+    const open = document.querySelector('aside[role="status"] button[aria-label="关闭通知"]');
+    if (open) { await act(async () => { open.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); }); }
+    if (root) await act(async () => { root.unmount(); });
+    mounted?.destroy();
+    for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
+    dom.window.close();
+  });
+  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, value: false });
+  const sessions = { binding: () => ({}), open: () => true, list: { getSnapshot: () => ({ current: 's1', byId: { s1: { id: 's1' } } }) } };
+  const components = new Map();
+  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
+  mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ pendingInteractions: observable }) });
+  root = createRoot(document.getElementById('root'));
+  const Overlay = components.get('shell.overlay');
+  const settle = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); }); };
+  const toastNode = () => document.querySelector('aside[role="status"]');
+  const answerCount = () => toastNode()?.querySelectorAll('.dsh-notify-toast-answer').length ?? 0;
+  await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
+  await settle();
+
+  cursor = 2;   // the host now reports the open question
+  await act(async () => { await pullTimer(); }); await settle();
+  assert.ok(toastNode(), 'the question is toasted');
+  assert.equal(answerCount(), 1, 'without a pending interaction only the session link is offered');
+
+  // The official composer holds the question and the user answers it there: the toast must follow.
+  await act(async () => { publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q1', options: [{ label: '继续' }] }], answer: async () => {} }]])); });
+  assert.equal(answerCount(), 2, 'answering from the toast is offered while it is pending');
+  await act(async () => { publish(new Map()); }); await settle();
+  assert.equal(toastNode(), null, 'an answer given in the composer closes the toast');
+
+});
+
+
+
 test('an unanswered record never starves later toasts, and every record is toasted at most once', async (t) => {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
   let root; let mounted; let pullTimer; let release = false;

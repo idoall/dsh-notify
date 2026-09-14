@@ -500,6 +500,19 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     // The local path arms a countdown too, so it has to disarm on unmount like the queue does.
     return () => { globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local); toastTimer.current?.destroy?.(); toastTimer.current = null; };
   }, []);
+  // An open toast must not outlive the thing it asks about. The user can answer in the composer, in
+  // another browser, or through the official modal, and none of those paths touch this element: the
+  // toast is a snapshot, so it has to watch the two authoritative signals itself.
+  const sawPending = React.useRef(false);
+  React.useEffect(() => { sawPending.current = false; }, [toast?.eventId]);
+  React.useEffect(() => {
+    if (!toast || toast.phase !== 'open') return;
+    const pendingInteraction = pendingInteractionFor(pending, toast.sessionId);
+    if (pendingInteraction) sawPending.current = true;
+    const live = state.records.find((record) => record.eventId === toast.eventId);
+    if (!shouldCloseOpenToast({ toast, pendingInteraction, liveRecord: live, sawPending: sawPending.current })) return;
+    toastTimer.current?.destroy?.(); toastTimer.current = null; setToast(null);
+  }, [pending, state.records, toast]);
   React.useEffect(() => {
     const seen = toasted.current;
     const ids = new Set(state.records.map((record) => record.eventId));
@@ -706,6 +719,18 @@ export function sessionLabel(sessions, sessionId) {
  * Answering that same object resolves the Host waterfall, so the toast and the composer stay in
  * sync for free: whichever one answers first makes the other disappear.
  */
+/**
+ * Should an open toast close by itself? Two authoritative signals say yes: the record is no longer
+ * open (the host settled it, seen through a pull), or this page watched it wait and the official
+ * pending interaction is gone (answered in the composer, another browser or the official modal).
+ * Never on an empty pending map alone — before the interaction arrives that means "not yet".
+ */
+export function shouldCloseOpenToast({ toast, pendingInteraction, liveRecord, sawPending = false } = {}) {
+  if (!toast || toast.phase !== 'open') return false;
+  if (pendingInteraction) return false;
+  if (liveRecord && liveRecord.phase !== 'open') return true;
+  return Boolean(sawPending);
+}
 export function pendingInteractionFor(pending, sessionId) {
   if (!pending || typeof pending.get !== 'function' || typeof sessionId !== 'string') return null;
   return pending.get(sessionId) ?? null;
