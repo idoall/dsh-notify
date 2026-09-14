@@ -292,6 +292,12 @@ function useNotificationState() {
 export function channelStatus() { return [
   { id: 'A', label: '页面里', state: 'available', detail: 'Toast + 铃铛历史 + 提示音 + 后台标题闪动' },
 ]; }
+/**
+ * Full toast order: records waiting on the user come first, then everything else, each group newest
+ * first (the store already sorts by `at` descending). A queue — not "the one latest record" — is what
+ * keeps a single unanswered record from starving every later notification.
+ */
+export function toastOrder(records = []) { return [...records.filter((record) => record?.phase === 'open'), ...records.filter((record) => record?.phase !== 'open')]; }
 export function prioritizedToastRecords(records = []) { const open = records.filter((record) => record?.phase === 'open'); return open.length ? open : records; }
 export function toastQueue(records = [], width = 1024) { return prioritizedToastRecords(records).slice(0, width < 760 ? 2 : 3).map((record) => ({ record, ...toastPolicy(record, { width }), paused: false })); }
 export function pwaGuidance({ ios = false, secure = globalThis.isSecureContext, standalone = false } = {}) {
@@ -450,7 +456,7 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
 const attentionIndicator = createAttentionIndicator();
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
 function ToastOverlay({ sessions, pendingInteractions } = {}) {
-  const state = useNotificationState(); const [, refresh] = React.useState(0); const [toast, setToast] = React.useState(null); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [paused, setPaused] = React.useState(false); const [answerError, setAnswerError] = React.useState(null); const lastEvent = React.useRef(null);
+  const state = useNotificationState(); const [, refresh] = React.useState(0); const [toast, setToast] = React.useState(null); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [paused, setPaused] = React.useState(false); const [answerError, setAnswerError] = React.useState(null); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null); const toastTimer = React.useRef(null); const toastRef = React.useRef(null);
@@ -481,21 +487,28 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     } catch { return; }
     return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
   }, [toast]);
+  const showToast = (record) => {
+    toasted.current.add(record.eventId);
+    setToast(record); toastTimer.current?.destroy?.();
+    void soundPlayer.play();
+    const policy = toastPolicy(record, { width: globalThis.innerWidth });
+    if (policy.timeoutMs) toastTimer.current = createToastTimer({ durationMs: policy.timeoutMs, onExpire: () => setToast(null) });
+  };
   React.useEffect(() => {
-    const local = (event) => { if (event?.detail?.localOnly) { lastEvent.current = event.detail.eventId; setToast(event.detail); } };
+    const local = (event) => { if (event?.detail?.localOnly) showToast(event.detail); };
     globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
-    return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
+    // The local path arms a countdown too, so it has to disarm on unmount like the queue does.
+    return () => { globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local); toastTimer.current?.destroy?.(); toastTimer.current = null; };
   }, []);
   React.useEffect(() => {
-    const latest = prioritizedToastRecords(state.records)[0];
-    if (state.reset) { lastEvent.current = latest?.eventId ?? lastEvent.current; return; }
-    if (!latest) { setToast(null); return; }
-    if (lastEvent.current === null) { lastEvent.current = latest.eventId; if (!latest.localOnly) return; }
-    if (lastEvent.current === latest.eventId) return;
-    lastEvent.current = latest.eventId; setToast(latest); toastTimer.current?.destroy?.();
-    void soundPlayer.play();
-    const policy = toastPolicy(latest, { width: globalThis.innerWidth });
-    if (policy.timeoutMs) toastTimer.current = createToastTimer({ durationMs: policy.timeoutMs, onExpire: () => setToast(null) });
+    const seen = toasted.current;
+    const ids = new Set(state.records.map((record) => record.eventId));
+    for (const id of seen) if (!ids.has(id)) seen.delete(id);   // keep the set bounded by live records
+    // A reset (clear/delete) and the first pull after mount are history: never toast them.
+    if (state.reset || !primed.current) { primed.current = true; for (const id of ids) seen.add(id); return; }
+    const next = toastOrder(state.records).find((record) => !seen.has(record.eventId));
+    if (!next) return;
+    showToast(next);
     return () => { toastTimer.current?.destroy?.(); toastTimer.current = null; };
   }, [state.records]);
   if (!toast || !toastConfig.toastEnabled || toastConfig.toastPosition === 'off') return null;
@@ -611,7 +624,7 @@ function BellAction({ wide, sessions }) {
   React.useEffect(() => { if (!open) setSelecting(false); }, [open]);
   const unreadTotal = state.records.filter((record) => record.unread).length;
   React.useEffect(() => {
-    const sync = () => attentionIndicator.update({ unread: unreadTotal, visible: !globalThis.document?.hidden });
+    const sync = () => attentionIndicator.update({ unread: toastConfig.toastPosition === 'off' ? 0 : unreadTotal, visible: !globalThis.document?.hidden });
     sync();
     globalThis.document?.addEventListener?.('visibilitychange', sync);
     return () => globalThis.document?.removeEventListener?.('visibilitychange', sync);

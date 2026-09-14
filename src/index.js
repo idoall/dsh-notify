@@ -226,6 +226,10 @@ export async function apply(ctx, config = {}) {
       else if (event?.type === 'turn/end') {
         const error = pendingErrors.get(`${sessionId}:${data.turn}`);
         pendingErrors.delete(`${sessionId}:${data.turn}`);
+        // A turn just ended, so nothing can still be waiting on this session: a record left open is a
+        // leftover whose decision event was never observed, and one leftover used to shadow every
+        // later toast. Persist the expiry before the completion notification.
+        for (const stale of reducer.expireOpenForSession(sessionId)) await dispatch(stale);
         await dispatch(reducer.turnEnd({ sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) }));
       }
     });

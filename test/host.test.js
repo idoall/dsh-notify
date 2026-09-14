@@ -369,3 +369,18 @@ test('a job notification never turns a raw command line into its title', () => {
   assert.equal(jobNotification({ label: 'a; rm -rf /', status: 'completed' }).body, '已完成');
   assert.equal(jobNotification({ label: 'echo `id`', status: 'completed' }).body, '已完成');
 });
+
+test('a turn that ends expires leftover open records so they cannot shadow later notifications', async () => {
+  const { EventReducer } = await import('../src/core.js');
+  const reducer = new EventReducer(() => 1000);
+  const open = reducer.approvalAsked({ id: 'approval-1', toolName: 'Bash', reason: '需要写入', turn: 4 }, 'session-a');
+  const other = reducer.approvalAsked({ id: 'approval-2', toolName: 'Bash', turn: 4 }, 'session-b');
+  assert.equal(open.phase, 'open');
+  const expired = reducer.expireOpenForSession('session-a');
+  assert.deepEqual(expired.map((record) => record.eventId), [open.eventId]);
+  assert.equal(open.phase, 'expired'); assert.equal(open.outcome, 'expired');
+  assert.equal(other.phase, 'open', 'another session is untouched');
+  assert.deepEqual(reducer.expireOpenForSession('session-a'), [], 'expiring twice is a no-op');
+  const settled = reducer.approvalDecided('approval-1', 'approved');
+  assert.equal(settled, open); assert.equal(settled.phase, 'settled', 'a late decision still wins');
+});

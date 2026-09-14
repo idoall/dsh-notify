@@ -62,6 +62,48 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
   assert.deepEqual(audioSrc, ['/plugins/dsh-notify/sound?name=ding.mp3'], 'a custom choice plays the uploaded file');
 });
 
+test('an unanswered record never starves later toasts, and every record is toasted at most once', async (t) => {
+  const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
+  let root; let mounted; let pullTimer; let release = false;
+  // The exact shape that used to break: one 3-hour-old approval left open by a missed decision event.
+  const staleApproval = { eventId: 'approval-stale', mergeKey: 'approval:old', kind: 'approval', sessionId: 's1', title: '需要审批', body: '旧审批', at: 1, unread: false, phase: 'open' };
+  const completion = { eventId: 'completion-new', mergeKey: 'turn:s1:9', kind: 'completed', sessionId: 's1', title: '任务完成', body: '新完成', at: 9, unread: true, phase: 'settled' };
+  let items = [staleApproval];
+  const values = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
+    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
+    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
+    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
+    setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
+    fetch: async (url) => String(url).includes('/pull?') ? response({ reset: release ? false : true, epoch: 1, cursor: 1, items }) : response({}),
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, value: false });
+
+  const components = new Map();
+  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
+  mounted = mountNotifyClient({ slots, getUiSession: () => undefined });
+  root = createRoot(document.getElementById('root'));
+  const Overlay = components.get('shell.overlay');
+  await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+  assert.equal(document.querySelector('aside.dsh-notify-toast'), null, 'history never toasts on load, even when it contains an open record');
+
+  release = true; items = [completion, staleApproval];
+  await act(async () => { await pullTimer(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  const toast = document.querySelector('aside.dsh-notify-toast');
+  assert.ok(toast, 'a completion still toasts while an unrelated record is left open');
+  assert.match(toast.textContent, /任务完成/);
+
+  await act(async () => { await pullTimer(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  assert.match(document.querySelector('aside.dsh-notify-toast').textContent, /任务完成/, 'the same record is not re-toasted by a later poll');
+});
+
 test('the history panel splits unread from read, deletes a selection, and clears everything', async (t) => {
   const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true;
   const calls = []; let records = [];

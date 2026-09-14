@@ -63,6 +63,21 @@ export class EventReducer {
     if (!callId) return null;
     return this.settleQuestionKey(`question:${sessionId}:${callId}`, outcome);
   }
+  /**
+   * At the end of a turn nothing can still be waiting on that session, so any record left open is a
+   * leftover whose decision event we never saw. Expiring it here matters: a single stale open record
+   * used to shadow every later notification (see the client toast queue).
+   */
+  expireOpenForSession(sessionId) {
+    const expired = [];
+    for (const record of this.records.values()) {
+      if (record.sessionId !== sessionId || record.phase !== 'open') continue;
+      record.phase = 'expired';
+      record.outcome = 'expired';
+      expired.push(record);
+    }
+    return expired;
+  }
   turnEnd(event) {
     if (event.origin === 'subagent' || !isNotifiableEnd(event.reason)) return null;
     const reason = typeof event.reason === 'string' ? event.reason : event.reason.kind;
