@@ -185,6 +185,23 @@ export async function apply(ctx, config = {}) {
     return record;
   };
   const safely = (work) => { Promise.resolve().then(work).catch(() => { diagnostics.eventErrors += 1; }); };
+  /**
+   * Never let one of our listeners hold the host's event chain forever. Cordis awaits listener
+   * promises, so a listener that waits on a stuck write would wedge session creation, the HTTP API
+   * and every other plugin. This bounds our own work: past the deadline we resolve with the fallback
+   * and record the timeout, so the host always moves on.
+   */
+  const bounded = async (work, ms = 20_000, fallback = undefined) => {
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(work),
+        new Promise((resolve) => { timer = setTimeout(() => { diagnostics.eventErrors += 1; resolve(fallback); }, ms); }),
+      ]);
+    } catch { diagnostics.eventErrors += 1; return fallback; } finally { clearTimeout(timer); }
+  };
+  /** Yield to the event loop so a long rebuild cannot starve HTTP handling. */
+  const yieldToHost = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   // A live `tool/call` is the ONLY authoritative live signal for a human interaction:
   // dsh-user-questions emits `user-questions/request` through scopeTarget(agent, agent), which a
@@ -234,9 +251,13 @@ export async function apply(ctx, config = {}) {
       }
     });
   });
-  ctx?.on?.('session/created', (session) => safely(async () => {
+  ctx?.on?.('session/created', (session) => safely(() => bounded(async () => {
     const openCalls = new Map();
+    let seen = 0;
     for (const event of session?.snapshotEvents?.() ?? []) {
+      seen += 1;
+      // Long histories are the normal case here; yield periodically so the host keeps serving.
+      if (seen % 400 === 0) await yieldToHost();
       const data = event?.data ?? {};
       if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked(data, session.id), { historical: true });
       else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome), { historical: true });
@@ -247,7 +268,7 @@ export async function apply(ctx, config = {}) {
       }
     }
     for (const [callId, call] of openCalls) await dispatch(reducer.question({ sessionId: session.id, callId, intent: call.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(call.name, call.arguments), turn: call.turn }), { historical: true });
-  }));
+  })));
   ctx?.on?.('approval/request', (request, next) => { try { /* live reason is non-authoritative */ } catch { diagnostics.eventErrors += 1; } return next(); });
   ctx?.on?.('user-questions/request', (request, next) => {
     let record; let signal; let opening = Promise.resolve(); let settlement;
@@ -274,8 +295,10 @@ export async function apply(ctx, config = {}) {
     let delegated;
     try { delegated = next(); } catch (error) { delegated = Promise.reject(error); }
     return Promise.resolve(delegated).then(
-      async (answer) => { await settle(signal?.aborted ? 'abort' : 'settled'); return answer; },
-      async (error) => { await settle(signal?.aborted || error?.code === 'ASK_ABORTED' ? 'abort' : 'error'); throw error; },
+      // The host awaits this waterfall, so the bookkeeping is bounded: the answer is returned to the
+      // official flow even if our own write is stuck.
+      async (answer) => { await bounded(() => settle(signal?.aborted ? 'abort' : 'settled'), 10_000); return answer; },
+      async (error) => { await bounded(() => settle(signal?.aborted || error?.code === 'ASK_ABORTED' ? 'abort' : 'error'), 10_000); throw error; },
     ).finally(() => signal?.removeEventListener?.('abort', abort));
   });
   ctx?.on?.('agent/error', ({ agent, turn, error }) => { pendingErrors.set(`${sessionIdOf(agent)}:${turn}`, error); });

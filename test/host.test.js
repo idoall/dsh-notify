@@ -384,3 +384,26 @@ test('a turn that ends expires leftover open records so they cannot shadow later
   const settled = reducer.approvalDecided('approval-1', 'approved');
   assert.equal(settled, open); assert.equal(settled.phase, 'settled', 'a late decision still wins');
 });
+
+test('a stuck write can never wedge the host: our scans and waterfalls are bounded', async (t) => {
+  const listeners = new Map();
+  const ctx = { get: () => undefined, on: (name, handler) => { listeners.set(name, handler); return () => {}; }, effect: (fn) => fn?.(), emit() {} };
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-bounded-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runtime = await apply(ctx, { dataDir: dir });
+  // Poison every write, then make sure the session scan still returns instead of hanging forever.
+  const store = runtime.store;
+  const original = store.putRecord.bind(store);
+  store.putRecord = () => new Promise(() => {});
+  const scan = listeners.get('session/created');
+  assert.equal(typeof scan, 'function');
+  const started = Date.now();
+  const result = await Promise.race([
+    Promise.resolve(scan({ id: 'session-stuck', snapshotEvents: () => [{ type: 'approval/asked', data: { id: 'a1', turn: 1 } }] })),
+    new Promise((resolve) => setTimeout(() => resolve('hung'), 3000)),
+  ]);
+  assert.notEqual(result, 'hung', 'the listener returned even though every write was stuck');
+  assert.ok(Date.now() - started < 3000);
+  store.putRecord = original;
+  await runtime();
+});
