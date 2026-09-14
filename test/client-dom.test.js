@@ -72,7 +72,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   const earlier = { eventId: 'turn:prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
   const question = (callId, phase) => ({ eventId: `question:s1:${callId}`, mergeKey: `question:s1:${callId}`, kind: 'question', sessionId: 's1', title: '需要回复', body: '要不要继续？', at: 2, unread: true, phase });
   // A realistic host: the cursor only advances when the record set actually changes.
-  let record = question('call-1', 'open'); let cursor = 1;
+  let record = question('call-9', 'open'); let cursor = 1;
   const values = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
     Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
@@ -121,7 +121,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   assert.equal(answerCount(), 2, 'answering from the toast is offered while it is pending');
   await act(async () => { publish(new Map()); }); await settle();
   assert.equal(toastNode(), null, 'an answer given in the composer closes the toast');
-  assert.deepEqual(calls.filter((call) => call.startsWith('ack:')), ['ack:question:s1:call-1'], 'and it stops counting as unread, because it was handled');
+  assert.deepEqual(calls.filter((call) => call.startsWith('ack:')), ['ack:question:s1:call-9'], 'and it stops counting as unread, because it was handled');
 
 });
 

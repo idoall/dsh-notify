@@ -757,9 +757,14 @@ export function toastAnswer(record, interaction) {
 }
 /** The answer batch shape the official composer sends; an option is selected by its label. */
 export function answerBatch(questionId, label) { return { answers: [{ id: questionId, selected: [label] }] }; }
+// Answering in the toast acknowledges, and the auto-close that follows would acknowledge again: one
+// record is acknowledged at most once per page session.
+const acknowledged = new Set();
 const acknowledgeRecord = async (record) => {
+  if (acknowledged.has(record.eventId)) { emitRecordsRead([record.eventId]); return; }
+  acknowledged.add(record.eventId);
   const result = await fetchJson('/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId: record.eventId }) });
-  if (result?.ok !== true) throw new Error('ack failed');
+  if (result?.ok !== true) { acknowledged.delete(record.eventId); throw new Error('ack failed'); }
   // The Host appends a change for the ack, but waiting for the next poll left the bell showing an
   // already-confirmed record as unread. Update the local copy the moment the Host confirms.
   emitRecordsRead([record.eventId]);
