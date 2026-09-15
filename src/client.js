@@ -623,20 +623,27 @@ function BellAction({ wide, sessions }) {
       // A record that still claims to wait on the user, while this page holds no interaction for it,
       // is a leftover: settle it so the pending badge cannot get stuck on something nobody can answer.
       if (record.phase === 'open' && !pendingInteractionFor(pending, record.sessionId) && result?.status !== 'navigation-failed') {
-        await settleNotificationRecord(record.eventId).catch(() => {});
-        setNotice('这条已不在等待你（对应的提问/审批已结束），已标记为已处理。');
+        try { await settleNotificationRecord(record.eventId); setNotice('这条已不在等待你（对应的提问/审批已结束），已标记为已处理。'); }
+        catch { setNotice('这条仍显示为待处理：没能通知宿主（重启 DSH 后会自动清理）。'); }
       }
     } catch (error) { setNotice(`标记已读失败：${error?.message || '未知错误'}`); }
   };
   const settleOne = (record) => runHistory(async () => {
-    const result = await settleNotificationRecord(record.eventId);
-    setNotice(result?.ok ? '这条已不再计入待处理。' : '这条已经处理过了。');
+    try {
+      const result = await settleNotificationRecord(record.eventId);
+      setNotice(result?.ok ? '这条已不再计入待处理。' : '这条已经处理过了。');
+    } catch {
+      // Say what actually happened instead of implying the host agreed with us.
+      setNotice('没能通知宿主（旧版宿主需要重启 DSH 才支持此操作）；你也可以用「选择…」删除这一条。');
+    }
   });
   const settleMany = () => runHistory(async () => {
     const targets = rows.filter((record) => selected.has(record.eventId) && record.phase === 'open');
-    for (const record of targets) await settleNotificationRecord(record.eventId);
+    if (!targets.length) { setNotice('选中的里面没有待处理的。'); return; }
+    let done = 0;
+    for (const record of targets) { try { await settleNotificationRecord(record.eventId); done += 1; } catch { break; } }
     setSelected(new Set());
-    setNotice(targets.length ? `已把 ${targets.length} 条标记为已处理。` : '选中的里面没有待处理的。');
+    setNotice(done === targets.length ? `已把 ${done} 条标记为已处理。` : `只成功 ${done}/${targets.length} 条（旧版宿主需要重启 DSH 才支持此操作）。`);
   });
   const toggleSelected = (eventId) => setSelected((old) => { if (eventId === undefined) return new Set(); const next = new Set(old); if (next.has(eventId)) next.delete(eventId); else next.add(eventId); return next; });
   const runHistory = async (work) => { if (busy) return; setBusy(true); setNotice(null); try { await work(); } catch (error) { setNotice(error?.message || '操作失败'); } finally { setBusy(false); } };
