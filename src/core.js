@@ -68,10 +68,13 @@ export class EventReducer {
    * leftover whose decision event we never saw. Expiring it here matters: a single stale open record
    * used to shadow every later notification (see the client toast queue).
    */
-  expireOpenForSession(sessionId) {
+  expireOpenForSession(sessionId, endedTurn = Number.POSITIVE_INFINITY) {
     const expired = [];
     for (const record of this.records.values()) {
       if (record.sessionId !== sessionId || record.phase !== 'open') continue;
+      // During a rebuild we only know which turns already ended; a record asked during a later turn
+      // (or without a turn) is left alone so a live question is never closed by a restart.
+      if (Number.isSafeInteger(record.turn) ? record.turn > endedTurn : endedTurn !== Number.POSITIVE_INFINITY) continue;
       record.phase = 'expired';
       record.outcome = 'expired';
       expired.push(record);

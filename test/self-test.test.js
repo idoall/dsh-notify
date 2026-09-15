@@ -38,9 +38,9 @@ const click = async (document, text, times = 1) => { const target = button(docum
   assert.equal(document.querySelector('[aria-label="D 后台推送"]'), null, 'the push channel is gone');
   await click(document, '测试页面浮层'); assert.equal(posts, 0); const toast = document.querySelector('aside[role="status"]'); assert.ok(toast, document.body.innerHTML); assert.match(toast.textContent, /自测：页面浮层/);
   const bell = document.querySelector('button[aria-label^="通知"]'); await act(async () => bell.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-  const readTab = [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.includes('已读'));
+  const readTab = [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.includes('历史'));
   await act(async () => readTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-  assert.match(document.querySelector('section[aria-label="通知历史"]').textContent, /自测：页面浮层/, 'the self-test record is not unread, so it lives under 已读');
+  assert.match(document.querySelector('section[aria-label="通知历史"]').textContent, /自测：页面浮层/, 'a self-test record is finished work, so it lives under 历史');
   await click(document, '添加页内自测记录'); assert.equal(posts, 0); assert.ok(button(document, '确认写入自测历史'));
   await click(document, '确认写入自测历史'); assert.equal(posts, 1); assert.deepEqual(dimensions, ['a-history']); assert.ok(button(document, '清理此自测记录'));
 });

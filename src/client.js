@@ -562,34 +562,38 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
       React.createElement('strong', { className: 'dsh-notify-toast-title' }, toast.title),
       toast.body ? React.createElement('p', { className: 'dsh-notify-toast-text' }, toast.body) : null,
       answerButtons()),
-    React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); if (toast.phase !== 'open') void acknowledgeRecord(toast).catch(() => {}); dismiss(); } }, '\u00d7'),
+    React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); void acknowledgeRecord(toast).catch(() => {}); dismiss(); } }, '\u00d7'),
     timeoutMs ? React.createElement('span', { className: 'dsh-notify-toast-progress', 'aria-hidden': true, style: { animationDuration: `${timeoutMs}ms`, animationPlayState: paused ? 'paused' : 'running' } }) : null);
 }
 function BellAction({ wide, sessions }) {
   const state = useNotificationState(); const [open, setOpen] = React.useState(false); const [dialog, setDialog] = React.useState(false);
-  const [tab, setTab] = React.useState('unread'); const [selected, setSelected] = React.useState(() => new Set()); const [confirming, setConfirming] = React.useState(null); const [selecting, setSelecting] = React.useState(false);
+  const [tab, setTab] = React.useState('pending'); const [selected, setSelected] = React.useState(() => new Set()); const [confirming, setConfirming] = React.useState(null); const [selecting, setSelecting] = React.useState(false);
   const [page, setPage] = React.useState(1); const [busy, setBusy] = React.useState(false); const [notice, setNotice] = React.useState(null);
   const buttonRef = React.useRef(null);
   // Tab membership is snapshotted, while each row's look follows the live record: a row you just
   // confirmed fades in place (二级边框 + 二级字色) and only moves into 已读 on the next fetch.
+  // Tabs are 待处理 / 历史 so the panel agrees with the badge: 待处理 is the same set the badge counts,
+  // 历史 is everything else (finished work, answered questions, failures).
   const partition = React.useMemo(() => {
-    const unread = new Set(); const read = new Set();
-    for (const record of state.records) (record.unread ? unread : read).add(record.eventId);
-    return { unread, read };
+    const pendingIds = new Set(); const historyIds = new Set();
+    for (const record of state.records) (record.phase === 'open' ? pendingIds : historyIds).add(record.eventId);
+    return { pending: pendingIds, history: historyIds };
   }, [open, tab]);   // a poll must never re-order the list under the user's cursor
   const inTab = (record) => {
-    const known = partition.unread.has(record.eventId) ? 'unread' : partition.read.has(record.eventId) ? 'read' : (record.unread ? 'unread' : 'read');
-    return tab === known ? true : false;
+    const known = partition.pending.has(record.eventId) ? 'pending' : partition.history.has(record.eventId) ? 'history' : (record.phase === 'open' ? 'pending' : 'history');
+    return tab === known;
   };
-  const liveUnread = state.records.filter((record) => record.unread);
-  const unreadRecords = liveUnread;
-  const readRecords = state.records.filter((record) => !record.unread);
-  const cutoff = tab === 'read' ? readRetentionCutoff(toastConfig.readRetentionDays ?? 0) : null;
+  const knownIds = (bucket) => state.records.filter((record) => partition[bucket].has(record.eventId));
+  // The badge answers "does anything still wait on me?" — not "how much history is unread". A
+  // finished task is news, not a to-do, and counting both is what made the number impossible to
+  // reconcile with the toasts the user actually saw.
+  const pending = state.records.filter((record) => record.phase === 'open');
+  const pendingTotal = pending.length;
+  const cutoff = tab === 'history' ? readRetentionCutoff(toastConfig.readRetentionDays ?? 0) : null;
   const rows = state.records.filter(inTab).filter((record) => cutoff === null || Number(record.at || 0) >= cutoff);
-  const hiddenByRetention = tab === 'read' && cutoff !== null ? state.records.filter((record) => partition.read.has(record.eventId) && Number(record.at || 0) < cutoff).length : 0;
+  const hiddenByRetention = tab === 'history' && cutoff !== null ? state.records.filter((record) => partition.history.has(record.eventId) && !record.unread && Number(record.at || 0) < cutoff).length : 0;
   const visible = rows.slice(0, page * HISTORY_PAGE);
   const selectedIds = [...selected].filter((id) => rows.some((record) => record.eventId === id));
-  const unread = unreadRecords.length;
   const narrow = layoutFor({ width: globalThis.innerWidth }).narrow;
   const close = () => { setOpen(false); setDialog(false); setSelected(new Set()); setConfirming(null); setNotice(null); setSelecting(false); buttonRef.current?.focus?.(); };
   // Explicit size + margin 0: as a popover the UA would otherwise shrink this to fit-content and
@@ -602,7 +606,7 @@ function BellAction({ wide, sessions }) {
     try {
       const result = await navigateRecord(record, sessions);
       if (result?.status === 'acknowledged-without-session') setNotice('这条通知没有可打开的会话（例如自测记录，或原会话已删除），已直接标记为已读。');
-      else if (result?.status === 'navigation-failed') setNotice('打不开对应的会话；这条仍保持未读，可稍后重试或点「全部已读」。');
+      else if (result?.status === 'navigation-failed') setNotice('打不开对应的会话；这条仍保持未读，可稍后重试或点「全部标记已读」。');
     } catch (error) { setNotice(`标记已读失败：${error?.message || '未知错误'}`); }
   };
   const toggleSelected = (eventId) => setSelected((old) => { if (eventId === undefined) return new Set(); const next = new Set(old); if (next.has(eventId)) next.delete(eventId); else next.add(eventId); return next; });
@@ -638,13 +642,23 @@ function BellAction({ wide, sessions }) {
   }, [open]);
   React.useEffect(() => { if (open) setPage(1); }, [open, tab]);
   React.useEffect(() => { if (!open) setSelecting(false); }, [open]);
-  const unreadTotal = state.records.filter((record) => record.unread).length;
+  // The flash means "something wants your attention", so it fires for work still waiting on you and
+  // for anything unread that arrived while this tab was hidden — never for a stale backlog, which is
+  // what used to make it flash every time the user switched away.
+  const seenWhenVisible = React.useRef(new Set());
   React.useEffect(() => {
-    const sync = () => attentionIndicator.update({ unread: toastConfig.toastPosition === 'off' ? 0 : unreadTotal, visible: !globalThis.document?.hidden });
+    const sync = () => {
+      const visible = !globalThis.document?.hidden;
+      const unreadIds = state.records.filter((record) => record.unread).map((record) => record.eventId);
+      if (visible) seenWhenVisible.current = new Set(unreadIds);
+      const fresh = unreadIds.filter((id) => !seenWhenVisible.current.has(id)).length;
+      const signal = pendingTotal > 0 || fresh > 0 ? 1 : 0;
+      attentionIndicator.update({ unread: toastConfig.toastPosition === 'off' ? 0 : signal, visible });
+    };
     sync();
     globalThis.document?.addEventListener?.('visibilitychange', sync);
     return () => globalThis.document?.removeEventListener?.('visibilitychange', sync);
-  }, [unreadTotal]);
+  }, [state.records, pendingTotal]);
   React.useEffect(() => {
     const onKey = (event) => { if (event.key === 'Escape') close(); };
     const showHistory = () => { setOpen(true); setDialog(true); };
@@ -667,8 +681,8 @@ function BellAction({ wide, sessions }) {
       React.createElement('strong', null, state.offline ? '通知历史（同步离线）' : '通知历史'),
       React.createElement('button', { type: 'button', className: 'dsh-notify-history-close', 'aria-label': '关闭通知历史', onClick: close }, '\u00d7')),
     React.createElement('div', { className: 'dsh-notify-history-tabs', role: 'tablist' },
-      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'unread', 'data-active': tab === 'unread', onClick: () => setTab('unread') }, `未读 ${unread}`),
-      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'read', 'data-active': tab === 'read', onClick: () => setTab('read') }, `已读 ${readRecords.length}`)),
+      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'pending', 'data-active': tab === 'pending', onClick: () => setTab('pending') }, `待处理 ${pendingTotal}`),
+      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'history', 'data-active': tab === 'history', onClick: () => setTab('history') }, `历史 ${knownIds('history').length}`)),
     React.createElement('div', { className: 'dsh-notify-history-actions' },
       selecting
         ? React.createElement(React.Fragment, null,
@@ -678,7 +692,7 @@ function BellAction({ wide, sessions }) {
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => setConfirming('clear') }, '全部删除'),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => { setSelected(new Set()); setSelecting(false); setConfirming(null); } }, '完成'))
         : React.createElement(React.Fragment, null,
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || unread === 0, onClick: () => void ackAll() }, '全部已读'),
+          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || state.records.every((record) => !record.unread), onClick: () => void ackAll() }, '全部标记已读'),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || rows.length === 0, onClick: () => setSelecting(true) }, '选择…'))),
     confirming === 'delete' && React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认删除选中通知' },
       hint(`将删除选中的 ${selectedIds.length} 条通知；这一步不可撤销。`),
@@ -692,13 +706,13 @@ function BellAction({ wide, sessions }) {
         React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => setConfirming(null) }, '取消'))),
     notice ? React.createElement('p', { className: 'dsh-notify-history-notice', role: 'status' }, notice) : null,
     React.createElement('p', { className: 'dsh-notify-hint' }, selecting ? '点条目或复选框勾选，然后点「删除选中」；这一步不可撤销。' : '点任一条通知即可跳到它的会话；要批量清理时点「选择…」。'),
-    hiddenByRetention > 0 ? React.createElement('p', { className: 'dsh-notify-hint' }, `按设置已隐藏 ${hiddenByRetention} 条更早的已读通知。`) : null,
+    hiddenByRetention > 0 ? React.createElement('p', { className: 'dsh-notify-hint' }, `按设置已隐藏 ${hiddenByRetention} 条更早的已读历史。`) : null,
     rows.length === 0
-      ? React.createElement('p', { className: 'dsh-notify-hint' }, tab === 'unread' ? '没有未读通知' : '还没有已读通知')
+      ? React.createElement('p', { className: 'dsh-notify-hint' }, tab === 'pending' ? '没有等你处理的通知' : '还没有历史通知')
       : React.createElement('ul', { className: 'dsh-notify-history-list' }, visible.map(historyRow)),
     rows.length > visible.length ? React.createElement('button', { type: 'button', className: 'dsh-notify-history-more', onClick: () => setPage((value) => value + 1) }, `加载更多（还有 ${rows.length - visible.length} 条）`) : null);
   return React.createElement(React.Fragment, null,
-    React.createElement('button', { ref: buttonRef, className: BELL_CLASS, type: 'button', onClick: () => { setOpen((value) => !value); setDialog(true); }, 'aria-expanded': open, 'aria-label': `通知${unread ? `，${unread} 条未读` : ''}`, title: state.offline ? '通知同步离线' : '通知', style: bellActionStyle(wide) }, React.createElement('span', { 'aria-hidden': true, style: { width: wide ? 18 : 20, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center', fontSize: wide ? 16 : 18, lineHeight: 1 } }, '♧'), wide && React.createElement('span', { style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, '通知'), unread > 0 && React.createElement('span', { 'aria-label': `${unread} 条未读`, style: bellBadgeStyle(wide) }, unread > 99 ? '99+' : String(unread))),
+    React.createElement('button', { ref: buttonRef, className: BELL_CLASS, type: 'button', onClick: () => { setOpen((value) => !value); setDialog(true); }, 'aria-expanded': open, 'aria-label': `通知${pendingTotal ? `，${pendingTotal} 条待处理` : ''}`, title: state.offline ? '通知同步离线' : '通知', style: bellActionStyle(wide) }, React.createElement('span', { 'aria-hidden': true, style: { width: wide ? 18 : 20, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center', fontSize: wide ? 16 : 18, lineHeight: 1 } }, '♧'), wide && React.createElement('span', { style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, '通知'), pendingTotal > 0 && React.createElement('span', { 'aria-label': `${pendingTotal} 条待处理`, style: bellBadgeStyle(wide) }, pendingTotal > 99 ? '99+' : String(pendingTotal))),
     open && React.createElement('div', { ref: dialogRef, popover: 'manual', role: 'dialog', 'aria-modal': true, 'aria-label': '通知历史', style: backdropStyle, onClick: close }, historyPanel()));
 }
 /**

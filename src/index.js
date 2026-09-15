@@ -254,10 +254,12 @@ export async function apply(ctx, config = {}) {
   ctx?.on?.('session/created', (session) => safely(() => bounded(async () => {
     const openCalls = new Map();
     let seen = 0;
+    let endedTurn = 0;
     for (const event of session?.snapshotEvents?.() ?? []) {
       seen += 1;
       // Long histories are the normal case here; yield periodically so the host keeps serving.
       if (seen % 400 === 0) await yieldToHost();
+      if (event?.type === 'turn/end' && Number.isSafeInteger(event?.data?.turn)) endedTurn = Math.max(endedTurn, event.data.turn);
       const data = event?.data ?? {};
       if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked(data, session.id), { historical: true });
       else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome), { historical: true });
@@ -268,6 +270,10 @@ export async function apply(ctx, config = {}) {
       }
     }
     for (const [callId, call] of openCalls) await dispatch(reducer.question({ sessionId: session.id, callId, intent: call.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(call.name, call.arguments), turn: call.turn }), { historical: true });
+    // A restart must heal leftovers too: any record left open in a turn that has already ended is a
+    // missed decision event, and one of them used to shadow every later notification. A genuinely
+    // pending approval belongs to a turn that has not ended, so it is never touched here.
+    for (const stale of reducer.expireOpenForSession(session.id, endedTurn)) await dispatch(stale, { historical: true });
   })));
   ctx?.on?.('approval/request', (request, next) => { try { /* live reason is non-authoritative */ } catch { diagnostics.eventErrors += 1; } return next(); });
   ctx?.on?.('user-questions/request', (request, next) => {

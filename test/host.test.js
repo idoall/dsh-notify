@@ -374,8 +374,12 @@ test('a turn that ends expires leftover open records so they cannot shadow later
   const { EventReducer } = await import('../src/core.js');
   const reducer = new EventReducer(() => 1000);
   const open = reducer.approvalAsked({ id: 'approval-1', toolName: 'Bash', reason: '需要写入', turn: 4 }, 'session-a');
+  assert.equal(open.turn, 4, 'the record remembers its turn');
   const other = reducer.approvalAsked({ id: 'approval-2', toolName: 'Bash', turn: 4 }, 'session-b');
   assert.equal(open.phase, 'open');
+  // A restart only knows which turns already ended: a question asked during a turn that has not
+  // ended must survive, or a live question would be closed by the rebuild itself.
+  assert.deepEqual(reducer.expireOpenForSession('session-a', 3), [], 'an approval from a later turn is not expired');
   const expired = reducer.expireOpenForSession('session-a');
   assert.deepEqual(expired.map((record) => record.eventId), [open.eventId]);
   assert.equal(open.phase, 'expired'); assert.equal(open.outcome, 'expired');

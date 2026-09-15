@@ -169,7 +169,7 @@ test('an unanswered record never starves later toasts, and every record is toast
   assert.match(document.querySelector('aside.dsh-notify-toast').textContent, /任务完成/, 'the same record is not re-toasted by a later poll');
 });
 
-test('the history panel splits unread from read, deletes a selection, and clears everything', async (t) => {
+test('the panel splits pending from history, deletes a selection, and clears everything', async (t) => {
   const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true;
   const calls = []; let records = [];
   const values = {
@@ -197,8 +197,8 @@ test('the history panel splits unread from read, deletes a selection, and clears
   const Bell = components.get('sidebar.footer.action');
   await act(async () => { root.render(React.createElement(Bell, { ...components.get('sidebar.footer.action:props'), wide: true })); });
   records = [
-    { eventId: 'e1', mergeKey: 'turn:1', kind: 'completed', sessionId: 's1', title: '任务完成', body: '第一条', at: Date.now() - 120000, unread: true, phase: 'settled' },
-    { eventId: 'e2', mergeKey: 'turn:2', kind: 'completed', sessionId: 's1', title: '任务完成', body: '第二条', at: Date.now() - 60000, unread: true, phase: 'settled' },
+    { eventId: 'e1', mergeKey: 'question:1', kind: 'question', sessionId: 's1', title: '需要回复', body: '第一条', at: Date.now() - 120000, unread: true, phase: 'open' },
+    { eventId: 'e2', mergeKey: 'question:2', kind: 'question', sessionId: 's1', title: '需要回复', body: '第二条', at: Date.now() - 60000, unread: true, phase: 'open' },
     { eventId: 'e3', mergeKey: 'turn:3', kind: 'completed', sessionId: 's1', title: '任务完成', body: '第三条', at: Date.now(), unread: false, phase: 'settled' },
   ];
   await act(async () => { await pullTimer(); });
@@ -209,26 +209,26 @@ test('the history panel splits unread from read, deletes a selection, and clears
   const rows = () => [...panel().querySelectorAll('.dsh-notify-history-row')];
   const tab = (name) => [...panel().querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith(name));
 
-  assert.match(panel().textContent, /未读 2/); assert.match(panel().textContent, /已读 1/);
-  assert.equal(rows().length, 2, 'the unread tab shows only unread records');
+  assert.match(panel().textContent, /待处理 2/); assert.match(panel().textContent, /历史 1/);
+  assert.equal(rows().length, 2, 'the pending tab shows only records still waiting on the user');
   await act(async () => { rows()[0].querySelector('.dsh-notify-history-open').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, [['ack', 'e2']], 'clicking a row outside selection mode acknowledges its record');
+  assert.deepEqual(calls, [['ack', 'e2']], 'clicking a row outside selection mode marks it seen');
   // It must fade in place instead of jumping out of the list the user is reading.
   assert.equal(rows().length, 2, 'the confirmed row stays where it was until the next fetch');
   assert.equal(rows()[0].getAttribute('data-read'), 'true', 'and it now reads as read: 二级边框 + 二级字色');
   assert.equal(rows()[1].getAttribute('data-read'), 'false', 'the untouched row keeps the strong unread border');
   await act(async () => { await pullTimer(); });   // a background poll must not re-order the list
   await act(async () => { await pullTimer(); });
-  assert.equal(rows().length, 2, 'even after several polls the confirmed row stays put until the user reopens the list');
+  assert.equal(rows().length, 2, 'even after several polls the handled row stays put until the user reopens the list');
   // Reopening is the moment the list is allowed to regroup.
   await act(async () => { panel().querySelector('button[aria-label="关闭通知历史"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   await act(async () => { document.querySelector('button[aria-label^="通知"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 1, 'reopening the panel is when the confirmed row leaves 未读');
-  await act(async () => { tab('已读').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 2, 'and it is now listed under 已读'); assert.match(panel().textContent, /第三条/);
+  assert.equal(rows().length, 2, 'a seen question still waits for an answer, so it stays under 待处理');
+  await act(async () => { tab('历史').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  assert.equal(rows().length, 1, 'only finished work is history'); assert.match(panel().textContent, /第三条/);
 
-  await act(async () => { tab('未读').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 1, 'only the still-unread record remains here');
+  await act(async () => { tab('待处理').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  assert.equal(rows().length, 2, 'both unanswered questions are still waiting');
   assert.equal(panel().querySelectorAll('input[type="checkbox"]').length, 0, 'no checkboxes until the user asks to select');
   assert.equal(buttonIn('全部删除'), undefined, 'the destructive action is not the default one');
   assert.equal(buttonIn('删除选中'), undefined);
@@ -242,9 +242,9 @@ test('the history panel splits unread from read, deletes a selection, and clears
   assert.match(panel().textContent, /将删除选中的 1 条通知/);
   await act(async () => { buttonIn('确认删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   const deletes = calls.filter((call) => call[0] === 'delete');
-  assert.equal(deletes.length, 1); assert.deepEqual(deletes[0][1], ['e1'], 'exactly the checked record is deleted by eventId');
+  assert.equal(deletes.length, 1); assert.deepEqual(deletes[0][1], ['e2'], 'exactly the checked record is deleted by eventId');
   assert.match(panel().textContent, /已删除 1 条通知/);
-  assert.equal(rows().length, 0, 'the surviving (read) record is not shown under 未读');
+  assert.equal(rows().length, 1, 'the other question is still waiting');
 
   await act(async () => { buttonIn('全部删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   assert.match(panel().textContent, /将清空 Host 上的全部通知历史/);
@@ -362,6 +362,7 @@ test('clicking a toast jumps to its session; only a failed jump falls back to th
   await act(async () => { globalThis.dispatchEvent(new dom.window.Event('dsh-notify:open-history')); });
   const list = document.querySelector('[role="dialog"][aria-label="通知历史"]');
   assert.ok(list, 'the bell remains the way into the list');
+  await act(async () => { [...list.querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith('历史')).dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   const item = [...list.querySelectorAll('button')].find((node) => node.textContent.includes('任务完成'));
   await act(async () => { item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   assert.deepEqual(calls, [], 'an unbound session cannot be navigated to, and nothing is acknowledged by guesswork');
@@ -482,7 +483,7 @@ test('official slot component contract mounts a real clickable bell and accessib
   assert.equal(button.getAttribute('aria-expanded'), 'true');
   const dialog = document.querySelector('[role="dialog"][aria-label="通知历史"]');
   const panel = dialog?.querySelector('section[aria-label="通知历史"]');
-  assert.ok(dialog); assert.equal(dialog.getAttribute('aria-modal'), 'true'); assert.ok(panel); assert.equal(panel.parentElement, dialog); assert.equal(panel.style.position, 'fixed'); assert.equal(panel.style.insetInlineEnd, '16px'); assert.equal(panel.style.bottom, '72px'); assert.match(panel.style.width, /360px/); assert.match(panel.style.width, /100vw - 32px/); assert.equal(panel.style.boxSizing, 'border-box'); assert.match(panel.textContent, /通知历史/); assert.match(panel.textContent, /没有未读通知/);
+  assert.ok(dialog); assert.equal(dialog.getAttribute('aria-modal'), 'true'); assert.ok(panel); assert.equal(panel.parentElement, dialog); assert.equal(panel.style.position, 'fixed'); assert.equal(panel.style.insetInlineEnd, '16px'); assert.equal(panel.style.bottom, '72px'); assert.match(panel.style.width, /360px/); assert.match(panel.style.width, /100vw - 32px/); assert.equal(panel.style.boxSizing, 'border-box'); assert.match(panel.textContent, /通知历史/); assert.match(panel.textContent, /没有等你处理的通知/);
   assert.equal([...dialog.childNodes].filter((node) => node.nodeType === 1).length, 1, 'dialog content belongs inside its styled panel');
 
   await act(async () => { dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
@@ -494,7 +495,7 @@ test('official slot component contract mounts a real clickable bell and accessib
   const narrowPanel = narrowDialog?.querySelector('section[aria-label="通知历史"]');
   assert.ok(narrowDialog, 'cross-seat toast event opens the same history state'); assert.ok(narrowPanel);
   assert.equal(narrowDialog.style.display, 'flex'); assert.equal(narrowDialog.style.alignItems, 'center'); assert.equal(narrowDialog.style.justifyContent, 'center'); assert.equal(narrowDialog.style.boxSizing, 'border-box'); assert.equal(narrowDialog.style.paddingInline, '12px'); assert.match(narrowDialog.style.paddingBlockEnd, /10dvh/);
-  assert.equal(narrowPanel.style.position, 'relative'); assert.equal(narrowPanel.style.insetInlineEnd, ''); assert.equal(narrowPanel.style.bottom, ''); assert.equal(narrowPanel.style.width, '100%'); assert.equal(narrowPanel.style.minWidth, '0'); assert.equal(narrowPanel.style.boxSizing, 'border-box'); assert.equal(narrowPanel.style.maxHeight, '100%', 'the panel is capped by its flex container, which already excludes the safe-area paddings (a dvh guess overflowed the top on a phone)'); assert.equal(narrowPanel.style.overflow, 'auto'); assert.match(narrowPanel.textContent, /没有未读通知/);
+  assert.equal(narrowPanel.style.position, 'relative'); assert.equal(narrowPanel.style.insetInlineEnd, ''); assert.equal(narrowPanel.style.bottom, ''); assert.equal(narrowPanel.style.width, '100%'); assert.equal(narrowPanel.style.minWidth, '0'); assert.equal(narrowPanel.style.boxSizing, 'border-box'); assert.equal(narrowPanel.style.maxHeight, '100%', 'the panel is capped by its flex container, which already excludes the safe-area paddings (a dvh guess overflowed the top on a phone)'); assert.equal(narrowPanel.style.overflow, 'auto'); assert.match(narrowPanel.textContent, /没有等你处理的通知/);
 });
 
 test('invalid navigation and ack failure preserve unread until authoritative ack pull', async (t) => {
@@ -526,22 +527,23 @@ test('invalid navigation and ack failure preserve unread until authoritative ack
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.name === 'sidebar.footer.action') { Bell = Component; bellProps = options.inject(); } return () => {}; } };
   mounted = mountNotifyClient({ slots, sessions }); root = createRoot(document.getElementById('root'));
   await act(async () => { root.render(React.createElement(Bell, { ...bellProps, wide: true })); });
-  const bell = document.querySelector('button[aria-label^="通知"]'); assert.match(bell.getAttribute('aria-label'), /3 条未读/);
+  const bell = document.querySelector('button[aria-label^="通知"]'); assert.equal(bell.getAttribute('aria-label'), '通知', 'finished work never inflates the badge');
   await act(async () => { bell.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  const historyTab = () => [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.startsWith('历史'));
+  await act(async () => { historyTab().dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const item = (title) => [...document.querySelectorAll('section[aria-label="通知历史"] button')].find((node) => node.textContent.includes(title));
 
   await act(async () => { item('无效目标').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, []); assert.equal(current, undefined); assert.match(bell.getAttribute('aria-label'), /3 条未读/);
+  assert.deepEqual(calls, []); assert.equal(current, undefined); assert.equal(bell.getAttribute('aria-label'), '通知');
   await act(async () => { item('确认失败').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, ['ack-fail']); assert.equal(current, 'session-fail'); assert.match(bell.getAttribute('aria-label'), /3 条未读/);
+  assert.deepEqual(calls, ['ack-fail']); assert.equal(current, 'session-fail'); assert.equal(bell.getAttribute('aria-label'), '通知');
   await act(async () => { item('有效目标').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   assert.deepEqual(calls, ['ack-fail', 'success']); assert.equal(current, 'session-ok');
-  assert.match(bell.getAttribute('aria-label'), /2 条未读/, 'a confirmed record stops counting as unread immediately, not after the next poll');
-  assert.match(bell.getAttribute('aria-label'), /2 条未读/, 'the acknowledged record stops counting as unread without waiting for a pull');
+  assert.equal(bell.getAttribute('aria-label'), '通知', 'the badge never counts finished work');
   await act(async () => { await pullTimer(); });
-  assert.match(bell.getAttribute('aria-label'), /2 条未读/);
-  const readTab = [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.includes('已读'));
-  await act(async () => { readTab.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.doesNotMatch(item('有效目标').textContent, /^●/, 'the acked record moved to 已读 and lost its unread marker');
+  assert.equal(bell.getAttribute('aria-label'), '通知');
+  const historyTabButton = [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.includes('历史'));
+  await act(async () => { historyTabButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  assert.doesNotMatch(item('有效目标').textContent, /^●/, 'the acked record lost its unread marker');
   assert.match(item('有效目标').textContent, /有效目标/);
 });
