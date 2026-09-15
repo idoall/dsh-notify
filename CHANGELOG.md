@@ -1,6 +1,32 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
+
+## [0.1.1] - 2026-09-15
+
+Notify when the **task** is done, not when a **turn** is done. The sidebar badge now counts only work that still waits on you.
+
+### Added
+
+- Quiet **已处理** action on pending rows, plus batch **标记已处理**. Host `POST /settle` ends pending state (idempotent, same-origin + auth). Distinct from `/ack`, which only means “seen”.
+- Plugin config `completionGraceMs` (default `8000`). Set to `0` to restore “notify on every finished turn”.
+
+### Changed
+
+- Sidebar badge and aria-label count `phase: open` only. Finished work never inflates the number.
+- History panel tabs are **待处理 / 历史**, matching the badge. Rows still dim once seen; read retention trims the history tab.
+- Toast **×** marks every kind as read, including an open question (the composer still holds the answer).
+- Tab flash fires for pending work, or for unread that arrived while the tab was hidden — never for a stale backlog.
+- A notifiable `turn/end` is deferred: a `turn/start` or `tool/call` inside the grace window cancels it; an engaged goal holds it until `goal/activation-changed` reports the goal is gone.
+
+### Fixed
+
+- One unanswered `open` record no longer starves later toasts.
+- Answering a question in the composer (or elsewhere) closes the live toast and marks it read.
+- `/ack` is idempotent; a duplicate ack no longer skips the next one.
+- Listeners are bounded so a stuck write cannot wedge DSH HTTP, session creation, or other plugins.
+- Startup rebuild expires leftovers whose turn already ended; a live question in a turn that has not ended is left alone.
+- A settle the host did not accept is reported as a failure, not as success.
 
 ## [0.1.0] - 2026-09-14
 
@@ -28,4 +54,5 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.1.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.1
 [0.1.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.0

@@ -22,7 +22,7 @@
 
 > DSH Notify is a DeepSeek Harness community plugin. It sits in the official sidebar action row and settings section, and does not modify DSH source.
 
-When a session finishes a turn, fails, asks a question, or needs approval, a toast appears in the top-right corner of the current page. The bell in the sidebar keeps the history: unread and read tabs, one click to jump back to the session that produced the notification, and — for questions and approvals — answering straight from the toast.
+When a session **really stops**, fails, asks a question, or needs approval, a toast appears in the top-right corner of the current page. Intermediate goal rounds and queued follow-up turns stay silent. The bell in the sidebar keeps the history: pending and history tabs, a badge that counts only work still waiting on you, one click to jump back to the session that produced the notification, and — for questions and approvals — answering straight from the toast.
 
 Everything happens **inside the page you already have open**. There is no service worker, no web push, no host-side OS notification, and no extra app to install: browser and operating-system notification matrices were removed on purpose, because they fail invisibly (submitted, never seen) and cannot be made reliable across platforms.
 
@@ -34,7 +34,7 @@ Everything happens **inside the page you already have open**. There is no servic
 
 - **Toast on the page**: title, body, session name, tone colour per kind, a close button, and a countdown bar. Click the body to jump to the session; click the answers to reply without leaving the page.
 - **Answer in the toast**: a pending question or approval renders the same options as the composer. Answering here and answering in the composer act on the same pending interaction, so the two stay in sync.
-- **Bell with history**: unread/read tabs, session name and relative time per entry, paging, “mark all read”, and batch delete behind a **Select…** trigger (nothing destructive is one click away).
+- **Bell with history**: pending/history tabs, a badge that counts only open questions and approvals, session name and relative time per entry, paging, “mark all read”, a quiet **已处理** action for leftovers, and batch delete behind a **Select…** trigger (nothing destructive is one click away).
 - **Jump to the exact turn**: clicking an entry opens the session and scrolls to (and briefly highlights) the turn the notification came from.
 - **Sound that survives being in the background**: synthesised in-page with WebAudio (no audio files shipped), plus uploadable custom sounds. It plays **even when the page is hidden** — that is the only way to reach you when the browser is behind another app.
 - **Flashing tab title**: while the tab is in the background with something unread, the title gets a 🔔 prefix and the favicon alternates to a red dot. It stops the moment you look at the tab or nothing is unread.
@@ -77,10 +77,10 @@ Restart DSH and refresh the Web UI. The client half registers the bell in `sideb
 
 ## Usage
 
-1. Run a task. When a turn completes, fails, or asks something, a toast appears in the top-right corner and the bell shows a count.
-2. Click the toast to open the session it came from; click an answer button to answer in place; click **×** to dismiss (a settled notification is marked read, an open question is not).
-3. Open the bell for history. Click any row to jump to its session and turn. Use **Select…** to check rows and delete them, or to delete everything.
-4. Switch to another tab and keep working: the title flashes while something is unread and the sound plays when a turn finishes, even though the DSH page is in the background.
+1. Run a task. When the task **stops**, fails, or asks something, a toast appears in the top-right corner. The bell badge only appears if something still waits on you.
+2. Click the toast to open the session it came from; click an answer button to answer in place; click **×** to dismiss (that marks it seen).
+3. Open the bell for history. Pending rows can be marked **已处理** without deleting them. Click any row to jump to its session and turn. Use **Select…** to check rows and delete them, or to delete everything.
+4. Switch to another tab and keep working: the title flashes for pending work or for something that arrived while you were away, and the sound plays even though the DSH page is in the background.
 5. Everything is remembered per profile, so a reload does not lose the history.
 
 ## Settings
@@ -103,10 +103,11 @@ Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory 
 
 ## Compatibility
 
-Current release: plugin **`0.1.0`** is verified against DeepSeek Harness **`0.1.5-rc.1`**.
+Current release: plugin **`0.1.1`** is verified against DeepSeek Harness **`0.1.5-rc.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.1.1` | `0.1.5-rc.1` |
 | `0.1.0` | `0.1.5-rc.1` |
 
 Newer DSH releases are not auto-declared compatible. If a future DSH breaks the plugin, disable or uninstall it — do not patch DSH core.
