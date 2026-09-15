@@ -215,10 +215,20 @@ export async function apply(ctx, config = {}) {
   const deferCompletion = (sessionId, payload) => {
     const existing = deferredCompletions.get(sessionId);
     if (existing?.timer) clearTimeout(existing.timer);
-    const timer = engagedGoals.has(sessionId) || completionGraceMs === 0 ? null : setTimeout(() => { void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; }); }, completionGraceMs);
-    if (typeof timer?.unref === 'function') timer.unref();
+    // An engaged goal holds the payload with no timer: the announcement waits for the goal to end.
+    // Grace 0 is the old "every finished turn" behaviour and flushes immediately.
+    if (engagedGoals.has(sessionId)) {
+      deferredCompletions.set(sessionId, { payload, timer: null });
+      return;
+    }
+    if (completionGraceMs === 0) {
+      deferredCompletions.set(sessionId, { payload, timer: null });
+      void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; });
+      return;
+    }
+    const timer = setTimeout(() => { void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; }); }, completionGraceMs);
+    if (typeof timer.unref === 'function') timer.unref();
     deferredCompletions.set(sessionId, { payload, timer });
-    if (engagedGoals.has(sessionId) || completionGraceMs === 0) void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; });
   };
   /**
    * Never let one of our listeners hold the host's event chain forever. Cordis awaits listener
