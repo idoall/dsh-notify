@@ -51,6 +51,20 @@ export class EventReducer {
     const callId = event.callId || `unlinked:${event.uniqueId || this.makeId()}`;
     return this.upsert({ kind, mergeKey: `question:${event.sessionId}:${callId}`, sessionId: event.sessionId, title: kind === 'plan-review' ? '计划待审' : '需要回复', body: event.title, phase: 'open', turn: event.turn });
   }
+  /**
+   * "This is not waiting on me any more" — the user said so explicitly, or the notification's own
+   * interaction is gone. Distinct from ack (which only means "I saw it"): this ends the pending state
+   * that the sidebar badge counts.
+   */
+  settleRecord(eventId, outcome = 'settled') {
+    for (const record of this.records.values()) {
+      if (record.eventId !== eventId || record.phase !== 'open') continue;
+      record.phase = outcome === 'expired' ? 'expired' : 'settled';
+      record.outcome = outcome;
+      return record;
+    }
+    return null;
+  }
   settleQuestionKey(mergeKey, outcome = 'settled') {
     if (typeof mergeKey !== 'string') return null;
     const record = this.records.get(mergeKey);

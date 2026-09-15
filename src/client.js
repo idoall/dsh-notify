@@ -89,7 +89,10 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-history-notice{color:var(--dsw-alias-state-business-primary,#2563eb);font-size:11px;line-height:1.5;margin:0 0 8px}
 .dsh-notify-history-list{display:grid;gap:6px;list-style:none;margin:0;padding:0}
 [data-chat-turn][data-dsh-notify-turn=highlight]{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px;border-radius:10px;transition:outline-color .2s ease}
-.dsh-notify-history-row{align-items:flex-start;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:grid;gap:8px;grid-template-columns:auto minmax(0,1fr);padding:8px 10px;transition:border-color .12s ease,color .12s ease}
+.dsh-notify-history-row{align-items:flex-start;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:grid;gap:8px;grid-template-columns:auto minmax(0,1fr) auto;padding:8px 10px;transition:border-color .12s ease,color .12s ease}
+.dsh-notify-history-row[data-settling=false]{grid-template-columns:auto minmax(0,1fr)}
+.dsh-notify-history-settle{align-self:center;background:transparent;border:1px solid var(--dsw-alias-border-l3);border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:none;font:inherit;font-size:11px;line-height:1;padding:5px 8px;white-space:nowrap}
+.dsh-notify-history-settle:hover{color:var(--dsw-alias-label-primary)}
 .dsh-notify-history-row[data-read=false]{border-color:var(--dsw-alias-border-l4)}
 .dsh-notify-history-row[data-read=false] .dsh-notify-history-title{color:var(--dsw-alias-label-primary)}
 .dsh-notify-history-row[data-read=true]{border-color:var(--dsw-alias-border-l2)}
@@ -160,6 +163,16 @@ export async function clearNotificationHistory({ confirmed = false, onReset } = 
   if (!result?.ok || !result.reset || !Number.isSafeInteger(result.epoch) || result.cursor !== 0 || !Array.isArray(result.items)) throw new Error('invalid clear response');
   onReset?.(result);
   return { status: 'cleared', ...result };
+}
+/**
+ * Tell the host a notification is no longer waiting on the user. The badge counts pending records, so
+ * this — not "mark read" — is what clears it. Used when the interaction this page was showing is gone,
+ * or when the user says so explicitly.
+ */
+export async function settleNotificationRecord(eventId, { outcome = 'settled' } = {}) {
+  const result = await fetchJson('/settle', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId, outcome }) });
+  emitRecordsRead([eventId]);
+  return result;
 }
 export async function deleteNotificationRecords({ eventIds = [], confirmed = false, onReset } = {}) {
   if (!confirmed) return { status: 'cancelled' };
@@ -607,8 +620,24 @@ function BellAction({ wide, sessions }) {
       const result = await navigateRecord(record, sessions);
       if (result?.status === 'acknowledged-without-session') setNotice('这条通知没有可打开的会话（例如自测记录，或原会话已删除），已直接标记为已读。');
       else if (result?.status === 'navigation-failed') setNotice('打不开对应的会话；这条仍保持未读，可稍后重试或点「全部标记已读」。');
+      // A record that still claims to wait on the user, while this page holds no interaction for it,
+      // is a leftover: settle it so the pending badge cannot get stuck on something nobody can answer.
+      if (record.phase === 'open' && !pendingInteractionFor(pending, record.sessionId) && result?.status !== 'navigation-failed') {
+        await settleNotificationRecord(record.eventId).catch(() => {});
+        setNotice('这条已不在等待你（对应的提问/审批已结束），已标记为已处理。');
+      }
     } catch (error) { setNotice(`标记已读失败：${error?.message || '未知错误'}`); }
   };
+  const settleOne = (record) => runHistory(async () => {
+    const result = await settleNotificationRecord(record.eventId);
+    setNotice(result?.ok ? '这条已不再计入待处理。' : '这条已经处理过了。');
+  });
+  const settleMany = () => runHistory(async () => {
+    const targets = rows.filter((record) => selected.has(record.eventId) && record.phase === 'open');
+    for (const record of targets) await settleNotificationRecord(record.eventId);
+    setSelected(new Set());
+    setNotice(targets.length ? `已把 ${targets.length} 条标记为已处理。` : '选中的里面没有待处理的。');
+  });
   const toggleSelected = (eventId) => setSelected((old) => { if (eventId === undefined) return new Set(); const next = new Set(old); if (next.has(eventId)) next.delete(eventId); else next.add(eventId); return next; });
   const runHistory = async (work) => { if (busy) return; setBusy(true); setNotice(null); try { await work(); } catch (error) { setNotice(error?.message || '操作失败'); } finally { setBusy(false); } };
   const deleteSelected = () => runHistory(async () => {
@@ -667,14 +696,17 @@ function BellAction({ wide, sessions }) {
   }, []);
   const historyRow = (record) => {
     const source = sessionLabel(sessions, record.sessionId);
-    return React.createElement('li', { key: record.eventId, className: 'dsh-notify-history-row', 'data-read': record.unread ? 'false' : 'true', 'data-selecting': selecting ? 'true' : 'false' },
+    return React.createElement('li', { key: record.eventId, className: 'dsh-notify-history-row', 'data-read': record.unread ? 'false' : 'true', 'data-selecting': selecting ? 'true' : 'false', 'data-settling': record.phase === 'open' && !selecting ? 'true' : 'false' },
       selecting ? React.createElement('input', { type: 'checkbox', className: 'dsh-notify-history-check', 'aria-label': `选择通知：${record.title}`, checked: selected.has(record.eventId), onChange: () => toggleSelected(record.eventId) }) : null,
       React.createElement('button', { type: 'button', className: 'dsh-notify-history-open', onClick: () => { if (selecting) { toggleSelected(record.eventId); return; } void navigateThenAck(record); } },
         React.createElement('span', { className: 'dsh-notify-history-meta' },
           React.createElement('span', { className: 'dsh-notify-history-source' }, source || '未知会话'),
           React.createElement('time', null, relativeTimeLabel(record.at))),
         React.createElement('strong', { className: 'dsh-notify-history-title' }, `${record.unread ? '● ' : ''}${record.title}`),
-        record.body ? React.createElement('span', { className: 'dsh-notify-history-body' }, record.body) : null));
+        record.body ? React.createElement('span', { className: 'dsh-notify-history-body' }, record.body) : null),
+      record.phase === 'open' && !selecting
+        ? React.createElement('button', { type: 'button', className: 'dsh-notify-history-settle', disabled: busy, title: '这条不再等你处理（不删除历史）', onClick: (event) => { event.stopPropagation(); void settleOne(record); } }, '已处理')
+        : null);
   };
   const historyPanel = () => React.createElement('section', { id: 'dsh-notify-history', 'aria-label': '通知历史', onClick: (event) => event.stopPropagation(), inert: dialog ? undefined : '', style: panelStyle },
     React.createElement('div', { className: 'dsh-notify-history-head' },
@@ -688,6 +720,7 @@ function BellAction({ wide, sessions }) {
         ? React.createElement(React.Fragment, null,
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || visible.length === 0, onClick: () => setSelected(new Set(rows.map((record) => record.eventId))) }, '全选'),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => toggleSelected() }, '清除选择'),
+          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => void settleMany() }, '标记已处理'),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => setConfirming('delete') }, `删除选中${selectedIds.length ? `（${selectedIds.length}）` : ''}`),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => setConfirming('clear') }, '全部删除'),
           React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => { setSelected(new Set()); setSelecting(false); setConfirming(null); } }, '完成'))
@@ -705,7 +738,7 @@ function BellAction({ wide, sessions }) {
         React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => void clearAll() }, '确认清空'),
         React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => setConfirming(null) }, '取消'))),
     notice ? React.createElement('p', { className: 'dsh-notify-history-notice', role: 'status' }, notice) : null,
-    React.createElement('p', { className: 'dsh-notify-hint' }, selecting ? '点条目或复选框勾选，然后点「删除选中」；这一步不可撤销。' : '点任一条通知即可跳到它的会话；要批量清理时点「选择…」。'),
+    React.createElement('p', { className: 'dsh-notify-hint' }, selecting ? '点条目或复选框勾选，然后点「删除选中」；这一步不可撤销。' : '点任一条通知即可跳到它的会话；还在等你处理的可以点「已处理」或直接回答；要批量清理时点「选择…」。'),
     hiddenByRetention > 0 ? React.createElement('p', { className: 'dsh-notify-hint' }, `按设置已隐藏 ${hiddenByRetention} 条更早的已读历史。`) : null,
     rows.length === 0
       ? React.createElement('p', { className: 'dsh-notify-hint' }, tab === 'pending' ? '没有等你处理的通知' : '还没有历史通知')

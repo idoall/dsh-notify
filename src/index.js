@@ -342,6 +342,16 @@ export async function apply(ctx, config = {}) {
       if (code !== 200 || typeof value.eventId !== 'string') { sendJson(res, 400, { error: 'invalid body' }); return; }
       sendJson(res, 200, { ok: await store.ack(value.eventId) });
     });
+    // Ends the pending state a notification still holds (its interaction is gone, or the user says so).
+    // Distinct from /ack, which only records "seen" and must not clear the badge.
+    registerSensitive(lifecycleCtx, webServer, connection, '/settle', 'POST', async (req, res) => {
+      const { value, size } = await readJson(req);
+      const code = validateRequest({ rejection: undefined, originOK: true, bodyBytes: size, fields: value, allowed: ['eventId', 'outcome'] });
+      if (code !== 200 || typeof value.eventId !== 'string') { sendJson(res, 400, { error: 'invalid body' }); return; }
+      const settled = reducer.settleRecord(value.eventId, value.outcome === 'expired' ? 'expired' : 'settled');
+      if (settled) await dispatch(settled);
+      sendJson(res, 200, { ok: Boolean(settled), phase: settled?.phase ?? null });
+    });
     registerSensitive(lifecycleCtx, webServer, connection, '/clear', 'POST', async (req, res) => {
       const { value, size } = await readJson(req, 1024);
       const code = validateRequest({ rejection: undefined, originOK: true, bodyBytes: size, fields: value, allowed: ['confirm'] });

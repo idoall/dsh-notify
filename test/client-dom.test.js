@@ -169,6 +169,53 @@ test('an unanswered record never starves later toasts, and every record is toast
   assert.match(document.querySelector('aside.dsh-notify-toast').textContent, /任务完成/, 'the same record is not re-toasted by a later poll');
 });
 
+test('a record that still waits on the user can be dismissed without deleting it', async (t) => {
+  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' });
+  let root; let mounted; let pullTimer; let initial = true;
+  const calls = [];
+  let records = [
+    { eventId: 'q-open', mergeKey: 'question:open', kind: 'question', sessionId: 's1', title: '需要回复', body: '还在等你', at: Date.now(), unread: true, phase: 'open' },
+  ];
+  const values = {
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
+    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
+    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
+    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
+    setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
+    fetch: async (url, init) => {
+      if (String(url).includes('/pull?')) { if (initial) { initial = false; return response({ reset: true, epoch: 1, cursor: 0, items: [] }); } return response({ reset: false, epoch: 1, cursor: 9, items: records }); }
+      if (String(url).includes('/settle')) { const id = JSON.parse(init.body).eventId; calls.push(['settle', id]); records = records.map((record) => record.eventId === id ? { ...record, phase: 'settled' } : record); return response({ ok: true, phase: 'settled' }); }
+      if (String(url).includes('/ack')) { calls.push(['ack', JSON.parse(init.body).eventId]); return response({ ok: true }); }
+      return response({});
+    },
+  };
+  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, value: false });
+  const components = new Map();
+  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
+  mounted = mountNotifyClient({ slots, sessions: { binding: () => ({}), open: () => true, list: { getSnapshot: () => ({ current: 's1', byId: { s1: { id: 's1' } } }) } } });
+  root = createRoot(document.getElementById('root'));
+  const Bell = components.get('sidebar.footer.action');
+  await act(async () => { root.render(React.createElement(Bell, { ...components.get('sidebar.footer.action:props'), wide: true })); });
+  await act(async () => { await pullTimer(); });
+  const bell = () => document.querySelector('button[aria-label^="通知"]');
+  assert.match(bell().getAttribute('aria-label'), /1 条待处理/, 'the badge counts the open record');
+  await act(async () => { bell().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  const panel = () => document.querySelector('section[aria-label="通知历史"]');
+  const settle = () => panel().querySelector('.dsh-notify-history-settle');
+  assert.ok(settle(), 'an open record offers 已处理');
+  await act(async () => { settle().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  assert.deepEqual(calls, [['settle', 'q-open']], 'it settles that record on the host instead of just marking it read');
+  assert.match(panel().textContent, /已不再计入待处理/);
+  await act(async () => { await pullTimer(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  assert.equal(bell().getAttribute('aria-label'), '通知', 'and the badge clears');
+  assert.equal(panel().querySelector('.dsh-notify-history-settle'), null, 'the row no longer offers it');
+});
+
 test('the panel splits pending from history, deletes a selection, and clears everything', async (t) => {
   const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true;
   const calls = []; let records = [];
@@ -183,6 +230,7 @@ test('the panel splits pending from history, deletes a selection, and clears eve
       if (String(url).includes('/delete')) { const body = JSON.parse(init.body); calls.push(['delete', body.eventIds]); const drop = new Set(body.eventIds); records = records.filter((record) => !drop.has(record.eventId)); return response({ ok: true, reset: true, epoch: 2, cursor: 0, removed: body.eventIds.length, requested: body.eventIds.length, items: records }); }
       if (String(url).includes('/clear')) { calls.push(['clear']); records = []; return response({ ok: true, reset: true, epoch: 3, cursor: 0, items: [] }); }
       if (String(url).includes('/ack')) { const id = JSON.parse(init.body).eventId; calls.push(['ack', id]); records = records.map((record) => record.eventId === id ? { ...record, unread: false } : record); return response({ ok: true }); }
+      if (String(url).includes('/settle')) { const id = JSON.parse(init.body).eventId; calls.push(['settle', id]); records = records.map((record) => record.eventId === id ? { ...record, phase: 'settled' } : record); return response({ ok: true, phase: 'settled' }); }
       return response({});
     },
   };
@@ -212,7 +260,7 @@ test('the panel splits pending from history, deletes a selection, and clears eve
   assert.match(panel().textContent, /待处理 2/); assert.match(panel().textContent, /历史 1/);
   assert.equal(rows().length, 2, 'the pending tab shows only records still waiting on the user');
   await act(async () => { rows()[0].querySelector('.dsh-notify-history-open').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, [['ack', 'e2']], 'clicking a row outside selection mode marks it seen');
+  assert.deepEqual(calls, [['ack', 'e2'], ['settle', 'e2']], 'clicking marks it seen, and settles a record whose interaction this page no longer holds');
   // It must fade in place instead of jumping out of the list the user is reading.
   assert.equal(rows().length, 2, 'the confirmed row stays where it was until the next fetch');
   assert.equal(rows()[0].getAttribute('data-read'), 'true', 'and it now reads as read: 二级边框 + 二级字色');
@@ -223,12 +271,12 @@ test('the panel splits pending from history, deletes a selection, and clears eve
   // Reopening is the moment the list is allowed to regroup.
   await act(async () => { panel().querySelector('button[aria-label="关闭通知历史"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   await act(async () => { document.querySelector('button[aria-label^="通知"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 2, 'a seen question still waits for an answer, so it stays under 待处理');
+  assert.equal(rows().length, 1, 'after the settle only the untouched question is still pending');
   await act(async () => { tab('历史').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 1, 'only finished work is history'); assert.match(panel().textContent, /第三条/);
+  assert.equal(rows().length, 2, 'the settled question joined the finished task'); assert.match(panel().textContent, /第三条/);
 
   await act(async () => { tab('待处理').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 2, 'both unanswered questions are still waiting');
+  assert.equal(rows().length, 1, 'only the untouched question is still waiting');
   assert.equal(panel().querySelectorAll('input[type="checkbox"]').length, 0, 'no checkboxes until the user asks to select');
   assert.equal(buttonIn('全部删除'), undefined, 'the destructive action is not the default one');
   assert.equal(buttonIn('删除选中'), undefined);
@@ -242,9 +290,9 @@ test('the panel splits pending from history, deletes a selection, and clears eve
   assert.match(panel().textContent, /将删除选中的 1 条通知/);
   await act(async () => { buttonIn('确认删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   const deletes = calls.filter((call) => call[0] === 'delete');
-  assert.equal(deletes.length, 1); assert.deepEqual(deletes[0][1], ['e2'], 'exactly the checked record is deleted by eventId');
+  assert.equal(deletes.length, 1); assert.deepEqual(deletes[0][1], ['e1'], 'exactly the checked record is deleted by eventId');
   assert.match(panel().textContent, /已删除 1 条通知/);
-  assert.equal(rows().length, 1, 'the other question is still waiting');
+  assert.equal(rows().length, 0, 'nothing is waiting any more');
 
   await act(async () => { buttonIn('全部删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   assert.match(panel().textContent, /将清空 Host 上的全部通知历史/);

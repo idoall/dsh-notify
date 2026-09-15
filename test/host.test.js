@@ -411,3 +411,20 @@ test('a stuck write can never wedge the host: our scans and waterfalls are bound
   store.putRecord = original;
   await runtime();
 });
+
+test('/settle ends the pending state that the badge counts, and never touches a settled record', async (t) => {
+  const { routes, runtime } = await fixture(t);
+  const route = routes.get('exact:/plugins/dsh-notify/settle');
+  assert.ok(route, 'the settle route exists');
+  const headers = { origin: 'http://127.0.0.1:3080', host: '127.0.0.1:3080', cookie: 'sid=settle', 'content-type': 'application/json' };
+  const asked = await runtime.reducer.approvalAsked({ id: 'approval-settle', toolName: 'Bash', reason: '需要写入', turn: 3 }, 'session-settle');
+  await runtime.store.putRecord(asked);
+
+  assert.equal((await invoke(route, request({ method: 'POST', headers, body: { eventId: 'nope', extra: 1 } }))).statusCode, 400, 'unknown fields are rejected');
+  const first = await invoke(route, request({ method: 'POST', headers, body: { eventId: asked.eventId } }));
+  assert.equal(first.statusCode, 200); assert.equal(JSON.parse(first.body).ok, true); assert.equal(JSON.parse(first.body).phase, 'settled');
+  assert.equal(runtime.store.getRecords().find((record) => record.eventId === asked.eventId).phase, 'settled');
+  const again = await invoke(route, request({ method: 'POST', headers, body: { eventId: asked.eventId } }));
+  assert.equal(JSON.parse(again.body).ok, false, 'settling twice is a no-op, not an error');
+  assert.equal(runtime.store.getRecords().find((record) => record.eventId === asked.eventId).phase, 'settled');
+});
