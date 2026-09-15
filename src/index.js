@@ -9,6 +9,8 @@ export const name = 'dsh-notify';
 export const inject = [];
 export const Config = z.object({
   dataDir: z.string().description('Absolute path to the profile-owned dsh-notify data directory.'),
+  // 0 restores the old "notify on every finished turn" behaviour.
+  completionGraceMs: z.number().step(1).min(0).max(600_000).default(8_000).description('How long a finished turn must stay quiet before it counts as a finished task (ms).'),
 });
 export { EventReducer, MemoryDedupe, sanitizeBody, validateRequest } from './core.js';
 export { createStore } from './storage.js';
@@ -186,6 +188,39 @@ export async function apply(ctx, config = {}) {
   };
   const safely = (work) => { Promise.resolve().then(work).catch(() => { diagnostics.eventErrors += 1; }); };
   /**
+   * A turn ending is not the task finishing. With goals, queued prompts or an agent that keeps
+   * working, one job produces several turns — and therefore several "任务完成" toasts, which is
+   * exactly the noise the user could not reconcile. So a notifiable turn end is *deferred*: if the
+   * session starts working again inside the grace window (which is what a goal round does), nothing is
+   * recorded at all; if a goal is engaged, nothing is recorded until that goal ends.
+   */
+  const completionGraceMs = Number.isSafeInteger(config.completionGraceMs) ? config.completionGraceMs : 8_000;
+  const deferredCompletions = new Map();   // sessionId -> { payload, timer }
+  const engagedGoals = new Set();          // sessionIds whose goal loop is still running
+  const clearDeferred = (sessionId) => { const entry = deferredCompletions.get(sessionId); if (entry?.timer) clearTimeout(entry.timer); };
+  const flushCompletion = async (sessionId) => {
+    const entry = deferredCompletions.get(sessionId);
+    if (!entry) return;
+    deferredCompletions.delete(sessionId);
+    if (entry.timer) clearTimeout(entry.timer);
+    await dispatch(reducer.turnEnd(entry.payload));
+  };
+  const cancelCompletion = (sessionId) => {
+    const entry = deferredCompletions.get(sessionId);
+    if (!entry) return;
+    clearDeferred(sessionId);
+    deferredCompletions.delete(sessionId);
+    diagnostics.deferredCancelled = (diagnostics.deferredCancelled ?? 0) + 1;
+  };
+  const deferCompletion = (sessionId, payload) => {
+    const existing = deferredCompletions.get(sessionId);
+    if (existing?.timer) clearTimeout(existing.timer);
+    const timer = engagedGoals.has(sessionId) || completionGraceMs === 0 ? null : setTimeout(() => { void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; }); }, completionGraceMs);
+    if (typeof timer?.unref === 'function') timer.unref();
+    deferredCompletions.set(sessionId, { payload, timer });
+    if (engagedGoals.has(sessionId) || completionGraceMs === 0) void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; });
+  };
+  /**
    * Never let one of our listeners hold the host's event chain forever. Cordis awaits listener
    * promises, so a listener that waits on a stuck write would wedge session creation, the HTTP API
    * and every other plugin. This bounds our own work: past the deadline we resolve with the fallback
@@ -238,6 +273,8 @@ export async function apply(ctx, config = {}) {
       return;
     }
     safely(async () => {
+      // Work resumed: whatever turn end is still pending for this session was not the end of the task.
+      if (event?.type === 'turn/start' || event?.type === 'tool/call') cancelCompletion(sessionId);
       if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked(data, sessionId));
       else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome));
       else if (event?.type === 'turn/end') {
@@ -247,7 +284,7 @@ export async function apply(ctx, config = {}) {
         // leftover whose decision event was never observed, and one leftover used to shadow every
         // later toast. Persist the expiry before the completion notification.
         for (const stale of reducer.expireOpenForSession(sessionId)) await dispatch(stale);
-        await dispatch(reducer.turnEnd({ sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) }));
+        deferCompletion(sessionId, { sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) });
       }
     });
   });
@@ -276,6 +313,22 @@ export async function apply(ctx, config = {}) {
     for (const stale of reducer.expireOpenForSession(session.id, endedTurn)) await dispatch(stale, { historical: true });
   })));
   ctx?.on?.('approval/request', (request, next) => { try { /* live reason is non-authoritative */ } catch { diagnostics.eventErrors += 1; } return next(); });
+  // A goal loop keeps starting rounds after each turn ends, so a completion is not news until the goal
+  // itself is done. `goal` is omitted from the payload exactly when there is no goal for the session.
+  ctx?.on?.('goal/activation-changed', (payload) => safely(async () => {
+    const sessionId = sessionIdOf(payload?.sessionId) ?? payload?.sessionId;
+    if (typeof sessionId !== 'string' || sessionId === '') return;
+    if (payload?.goal) {
+      engagedGoals.add(sessionId);
+      // A goal engaging after a turn ended holds that announcement: the loop is still working, so the
+      // pending payload waits for the goal to finish instead of firing on the grace timer.
+      const entry = deferredCompletions.get(sessionId);
+      if (entry?.timer) { clearTimeout(entry.timer); entry.timer = null; }
+      return;
+    }
+    engagedGoals.delete(sessionId);
+    await flushCompletion(sessionId);
+  }));
   ctx?.on?.('user-questions/request', (request, next) => {
     let record; let signal; let opening = Promise.resolve(); let settlement;
     try {

@@ -21,7 +21,7 @@ async function fixture(t, rejection, config = {}) {
     effect(setup) { return setup(); },
     emit() {},
   };
-  const runtime = await apply(ctx, { dataDir: dir, pushAllowedSuffixes: [], webPush: { generateVAPIDKeys() { return { publicKey: 'p', privateKey: 's' }; }, sendNotification() { throw new Error('must not send'); } }, dnsLookup: async () => [], ...config });
+  const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0, pushAllowedSuffixes: [], webPush: { generateVAPIDKeys() { return { publicKey: 'p', privateKey: 's' }; }, sendNotification() { throw new Error('must not send'); } }, dnsLookup: async () => [], ...config });
   assert.equal(typeof runtime, 'function', 'Cordis async plugin must resolve to a disposer');
   return { dir, listeners, routes, runtime };
 }
@@ -427,4 +427,36 @@ test('/settle ends the pending state that the badge counts, and never touches a 
   const again = await invoke(route, request({ method: 'POST', headers, body: { eventId: asked.eventId } }));
   assert.equal(JSON.parse(again.body).ok, false, 'settling twice is a no-op, not an error');
   assert.equal(runtime.store.getRecords().find((record) => record.eventId === asked.eventId).phase, 'settled');
+});
+
+test('a finished turn is only announced once the session really stops', async (t) => {
+  const { listeners, runtime } = await fixture(t, undefined, { completionGraceMs: 40 });
+  const session = { id: 'session-grace', header: {} };
+  const event = (type, data) => listeners.get('session/event')(session, { type, data });
+  const records = () => runtime.store.getRecords();
+
+  // The goal loop keeps working: a new turn starts inside the grace window.
+  event('turn/end', { turn: 7, reason: { kind: 'completed' } });
+  assert.equal(records().some((record) => record.kind === 'completed'), false, 'a finished turn is not announced immediately');
+  event('turn/start', { turn: 8 });
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(records().some((record) => record.kind === 'completed'), false, 'work resuming inside the window cancels the announcement');
+
+  // Nothing follows: the session really stopped, so exactly one announcement appears.
+  event('turn/end', { turn: 8, reason: { kind: 'completed' } });
+  assert.equal(records().some((record) => record.kind === 'completed'), false);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  const completed = records().filter((record) => record.kind === 'completed');
+  assert.equal(completed.length, 1, 'one announcement for the whole task');
+  assert.equal(completed[0].turn, 8);
+
+  // Goals: a turn end while a goal is engaged waits for the goal to finish, and only then announces.
+  event('turn/end', { turn: 9, reason: { kind: 'completed' } });
+  listeners.get('goal/activation-changed')({ sessionId: 'session-grace', goal: { id: 'g1', revision: 1, activation: 'active' } });
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'a running goal holds the announcement back');
+  listeners.get('goal/activation-changed')({ sessionId: 'session-grace' });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 2, 'the goal ending is the real completion');
+  assert.equal(records().filter((record) => record.kind === 'completed').at(-1).turn, 9);
 });
