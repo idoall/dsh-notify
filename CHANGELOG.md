@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - An interrupted approval (“需要审批” whose turn was stopped before any `approval/decided`) came back to the sidebar badge on every session reload and could not be dismissed: 已处理 cleared it, reopening the session put it straight back. DSH’s `approval/asked` payload carries no `turn`, so restart healing — which only expires a record from a turn that already ended — left every approval alone, and the history replay re-applied `phase: 'open'` on top of a record the user had already settled. An approval now records the turn its `tool/call` belonged to (live and during the rebuild), and a replayed ask never reopens a record that is already settled or expired.
+- A pending record inherited from a previous host process is expired at boot, so a leftover in a session that is never reopened can no longer pin the badge across restarts: per-session healing only runs when that session is created again. A cordis re-activation inside a running host is not a boot and never clears a genuinely pending interaction.
 
 ## [0.1.1] - 2026-09-15
 

@@ -188,6 +188,30 @@ export async function apply(ctx, config = {}) {
   };
   const safely = (work) => { Promise.resolve().then(work).catch(() => { diagnostics.eventErrors += 1; }); };
   /**
+   * A fresh host process cannot have an interaction waiting on the user: an approval or a question
+   * only exists inside a live turn, a restart kills every turn, and DSH closes the crash tail with
+   * `turn/end` interrupted — its own approval invariant calls an `approval/asked` that no longer sits
+   * inside an open turn "crash-tail garbage on reload". So every `open` record inherited from the
+   * store is a leftover whose decision event can never arrive, and expiring it is the only honest
+   * reading.
+   *
+   * The per-session rebuild is not enough on its own: it heals a session only when that session is
+   * created again, so a leftover in a session nobody reopens (the reported case) keeps the sidebar
+   * badge pinned at 1 across every restart. This sweeps them all at boot, before any session loads.
+   *
+   * The marker lives on `globalThis` rather than in module state, so a cordis re-activation inside a
+   * running host is not mistaken for a boot and can never clear a genuinely pending interaction.
+   */
+  const BOOT_MARK = Symbol.for('dsh-notify/booted');
+  if (globalThis[BOOT_MARK] !== true) {
+    globalThis[BOOT_MARK] = true;
+    for (const inherited of store.getRecords()) {
+      if (inherited.phase !== 'open') continue;
+      const expired = reducer.settleRecord(inherited.eventId, 'expired');
+      if (expired) await dispatch(expired);
+    }
+  }
+  /**
    * A turn ending is not the task finishing. With goals, queued prompts or an agent that keeps
    * working, one job produces several turns — and therefore several "任务完成" toasts, which is
    * exactly the noise the user could not reconcile. So a notifiable turn end is *deferred*: if the

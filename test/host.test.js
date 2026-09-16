@@ -430,6 +430,42 @@ test('a replayed ask never resurrects an approval that was already settled', asy
   assert.equal(asked().phase, 'settled', 'settling outranks a rebuild replay');
 });
 
+test('a fresh boot expires a leftover whose session is never reopened', async (t) => {
+  const BOOT_MARK = Symbol.for('dsh-notify/booted');
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-boot-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => { globalThis[BOOT_MARK] = true; });
+  const first = await fixture(t, undefined, { dataDir: dir });
+  const asked = first.runtime.reducer.approvalAsked({ id: 'abandoned', toolName: 'Bash', turn: 4 }, 'session-abandoned');
+  await first.runtime.store.putRecord(asked);
+  await first.runtime();
+
+  // The session is never created again, so no rebuild can heal it: only the boot sweep can.
+  delete globalThis[BOOT_MARK];
+  const restarted = await fixture(t, undefined, { dataDir: dir });
+  const healed = restarted.runtime.store.getRecords().find((record) => record.mergeKey === 'approval:abandoned');
+  assert.equal(healed.phase, 'expired', 'a restart cannot leave a record waiting on a dead interaction');
+  assert.equal(healed.outcome, 'expired');
+  assert.equal(restarted.runtime.reducer.records.get('approval:abandoned').phase, 'expired');
+  await restarted.runtime();
+});
+
+test('a re-activation inside a running host is not a boot and keeps a pending interaction', async (t) => {
+  const BOOT_MARK = Symbol.for('dsh-notify/booted');
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-reactivate-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  globalThis[BOOT_MARK] = true;
+  const first = await fixture(t, undefined, { dataDir: dir });
+  const live = first.runtime.reducer.approvalAsked({ id: 'still-live', toolName: 'Bash', turn: 4 }, 'session-live');
+  await first.runtime.store.putRecord(live);
+  await first.runtime();
+
+  // Same process: the approval may still be answerable, so it must survive.
+  const second = await fixture(t, undefined, { dataDir: dir });
+  assert.equal(second.runtime.store.getRecords().find((record) => record.mergeKey === 'approval:still-live').phase, 'open');
+  await second.runtime();
+});
+
 test('a stuck write can never wedge the host: our scans and waterfalls are bounded', async (t) => {
   const listeners = new Map();
   const ctx = { get: () => undefined, on: (name, handler) => { listeners.set(name, handler); return () => {}; }, effect: (fn) => fn?.(), emit() {} };
