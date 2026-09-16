@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
-## [Unreleased]
+## [0.1.2] - 2026-09-16
+
+The sidebar badge could pin itself at 1 and refuse to go away. A notification left pending by an interrupted interaction is now resolved where it is created, when its session is rebuilt, and when the host starts.
 
 ### Fixed
 
@@ -61,5 +63,6 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.1.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.2
 [0.1.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.1
 [0.1.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.0

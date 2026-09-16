@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.1.5--rc.1-4B6BFB" alt="DSH 0.1.5-rc.1">
+  <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
 </p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
@@ -53,7 +53,7 @@
 
 - 带 Web profile 的 DeepSeek Harness
 - Node.js 20 或更新
-- 已验证的 DSH 版本：`0.1.5-rc.1`（插件 `0.1.0`）
+- 已验证的 DSH 版本：`0.1.6-alpha.1`（插件 `0.1.2`）
 
 从 GitHub 装进 Web profile：
 
@@ -103,10 +103,11 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布：插件 **`0.1.1`** 已在 DeepSeek Harness **`0.1.5-rc.1`** 上验证。
+当前发布：插件 **`0.1.2`** 已在 DeepSeek Harness **`0.1.6-alpha.1`** 上验证。
 
 | 插件 | 已验证的 DeepSeek Harness |
 | --- | --- |
+| `0.1.2` | `0.1.6-alpha.1` |
 | `0.1.1` | `0.1.5-rc.1` |
 | `0.1.0` | `0.1.5-rc.1` |
 

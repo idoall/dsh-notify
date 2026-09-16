@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.1.5--rc.1-4B6BFB" alt="DSH 0.1.5-rc.1">
+  <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
 </p>
 
 <p align="center">English | <a href="README.zh.md">中文</a></p>
@@ -53,7 +53,7 @@ Requirements:
 
 - DeepSeek Harness with a Web profile
 - Node.js 20 or newer
-- Verified DSH version: `0.1.5-rc.1` (plugin `0.1.0`)
+- Verified DSH version: `0.1.6-alpha.1` (plugin `0.1.2`)
 
 Install from GitHub into your Web profile:
 
@@ -103,10 +103,11 @@ Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory 
 
 ## Compatibility
 
-Current release: plugin **`0.1.1`** is verified against DeepSeek Harness **`0.1.5-rc.1`**.
+Current release: plugin **`0.1.2`** is verified against DeepSeek Harness **`0.1.6-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.1.2` | `0.1.6-alpha.1` |
 | `0.1.1` | `0.1.5-rc.1` |
 | `0.1.0` | `0.1.5-rc.1` |
 
