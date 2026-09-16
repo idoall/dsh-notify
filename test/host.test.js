@@ -389,6 +389,47 @@ test('a turn that ends expires leftover open records so they cannot shadow later
   assert.equal(settled, open); assert.equal(settled.phase, 'settled', 'a late decision still wins');
 });
 
+test('a rebuild expires an interrupted approval even though approval/asked carries no turn', async (t) => {
+  const { listeners, runtime } = await fixture(t);
+  // Real DSH shape: `tool/call` carries the turn, `approval/asked` does not. An interrupted turn
+  // emits no `approval/decided`, so this is exactly the leftover that pinned the sidebar badge.
+  listeners.get('session/created')({ id: 'session-interrupted', snapshotEvents: () => [
+    { type: 'tool/call', data: { turn: 9, callId: 'call_1', name: 'bash', arguments: '{}' } },
+    { type: 'approval/asked', data: { id: 'zombie', toolName: 'bash', callId: 'call_1', reason: 'escalate' } },
+    { type: 'tool/result', data: { turn: 9, message: { content: [{ type: 'tool-result', toolCallId: 'call_1', isError: true }] } } },
+    { type: 'turn/end', data: { turn: 9, reason: { kind: 'interrupted' } } },
+  ] });
+  const zombie = () => runtime.store.getRecords().find((record) => record.mergeKey === 'approval:zombie');
+  await waitUntil(() => zombie() !== undefined);
+  await waitUntil(() => zombie()?.phase !== 'open');
+  assert.equal(zombie().turn, 9, 'the rebuild attaches the turn the ask belonged to');
+  assert.equal(zombie().phase, 'expired', 'an interrupted approval cannot stay pending');
+});
+
+test('a replayed ask never resurrects an approval that was already settled', async (t) => {
+  const { listeners, runtime } = await fixture(t);
+  const session = { id: 'session-replay', header: {} };
+  const event = (type, data) => listeners.get('session/event')(session, { type, data });
+  event('tool/call', { turn: 4, callId: 'call_9', name: 'bash', arguments: '{}' });
+  event('approval/asked', { id: 'replayed', toolName: 'bash', callId: 'call_9', reason: 'escalate' });
+  const asked = () => runtime.store.getRecords().find((record) => record.mergeKey === 'approval:replayed');
+  await waitUntil(() => asked() !== undefined);
+  assert.equal(asked().turn, 4, 'a live approval inherits the turn of the tool call that asked for it');
+
+  // The user says "已处理": the host settles it.
+  assert.equal(runtime.reducer.settleRecord(asked().eventId, 'settled').phase, 'settled');
+  await runtime.store.putRecord(runtime.reducer.records.get('approval:replayed'));
+
+  // Reopening the session replays the ask; a settled approval must not come back to the badge.
+  listeners.get('session/created')({ id: 'session-replay', snapshotEvents: () => [
+    { type: 'tool/call', data: { turn: 4, callId: 'call_9', name: 'bash', arguments: '{}' } },
+    { type: 'approval/asked', data: { id: 'replayed', toolName: 'bash', callId: 'call_9', reason: 'escalate' } },
+    { type: 'turn/end', data: { turn: 4, reason: { kind: 'interrupted' } } },
+  ] });
+  await waitUntil(() => runtime.reducer.records.get('approval:replayed') !== undefined);
+  assert.equal(asked().phase, 'settled', 'settling outranks a rebuild replay');
+});
+
 test('a stuck write can never wedge the host: our scans and waterfalls are bounded', async (t) => {
   const listeners = new Map();
   const ctx = { get: () => undefined, on: (name, handler) => { listeners.set(name, handler); return () => {}; }, effect: (fn) => fn?.(), emit() {} };

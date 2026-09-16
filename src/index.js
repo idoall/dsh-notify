@@ -263,12 +263,22 @@ export async function apply(ctx, config = {}) {
     } catch { return '有人在等你回复'; }
   };
 
+  /**
+   * `approval/asked` is the one interactive event that carries no `turn` of its own (its payload is
+   * `{id, toolName, callId, reason}`), while every event around it does. Without the turn a record is
+   * indistinguishable from a live question at rebuild time, so `expireOpenForSession` leaves it alone
+   * and an interrupted approval can never be healed. Remember the newest turn per session instead.
+   */
+  const liveTurns = new Map();
+  const turnOf = (sessionId, event) => (Number.isSafeInteger(event?.turn) && event.turn > 0 ? event.turn : liveTurns.get(sessionId));
+
   ctx?.on?.('session/event', (session, event) => {
     const data = event?.data ?? {};
     const sessionId = session?.id;
+    if (Number.isSafeInteger(data.turn) && data.turn > 0) liveTurns.set(sessionId, data.turn);
     if (event?.type === 'tool/call' && data.callId && (data.name === 'ask_user_question' || data.name === 'exit_plan_mode')) {
       pendingFor(sessionId).add(data.callId);
-      const interaction = reducer.question({ sessionId, callId: data.callId, intent: data.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(data.name, data.arguments), turn: data.turn });
+      const interaction = reducer.question({ sessionId, callId: data.callId, intent: data.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(data.name, data.arguments), turn: turnOf(sessionId, data) });
       safely(() => dispatch(interaction));
       return;
     }
@@ -285,7 +295,7 @@ export async function apply(ctx, config = {}) {
     safely(async () => {
       // Work resumed: whatever turn end is still pending for this session was not the end of the task.
       if (event?.type === 'turn/start' || event?.type === 'tool/call') cancelCompletion(sessionId);
-      if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked(data, sessionId));
+      if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked({ ...data, turn: turnOf(sessionId, data) }, sessionId));
       else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome));
       else if (event?.type === 'turn/end') {
         const error = pendingErrors.get(`${sessionId}:${data.turn}`);
@@ -302,13 +312,17 @@ export async function apply(ctx, config = {}) {
     const openCalls = new Map();
     let seen = 0;
     let endedTurn = 0;
+    // The turn the interaction being replayed belonged to; `approval/asked` has none of its own, so it
+    // inherits the newest turn seen so far (its own `tool/call` always precedes it in the snapshot).
+    let askTurn;
     for (const event of session?.snapshotEvents?.() ?? []) {
       seen += 1;
       // Long histories are the normal case here; yield periodically so the host keeps serving.
       if (seen % 400 === 0) await yieldToHost();
       if (event?.type === 'turn/end' && Number.isSafeInteger(event?.data?.turn)) endedTurn = Math.max(endedTurn, event.data.turn);
       const data = event?.data ?? {};
-      if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked(data, session.id), { historical: true });
+      if (Number.isSafeInteger(data.turn) && data.turn > 0) askTurn = data.turn;
+      if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked({ ...data, turn: askTurn }, session.id), { historical: true });
       else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome), { historical: true });
       else if (event?.type === 'tool/call' && (data.name === 'ask_user_question' || data.name === 'exit_plan_mode')) openCalls.set(data.callId, { name: data.name, arguments: data.arguments, turn: data.turn });
       else if (event?.type === 'tool/result') {
@@ -349,7 +363,7 @@ export async function apply(ctx, config = {}) {
       const title = questions.map((item) => String(item.question || item.header || '')).filter(Boolean).join(' · ');
       // This record belongs to this exact waterfall invocation. No FIFO or later
       // tool/result is allowed to guess its authoritative call identity.
-      record = reducer.question({ sessionId, intent: wantsPlan ? { kind: 'plan-review' } : undefined, title });
+      record = reducer.question({ sessionId, intent: wantsPlan ? { kind: 'plan-review' } : undefined, title, turn: liveTurns.get(sessionId) });
       opening = Promise.resolve(dispatch(record)).catch(() => { diagnostics.eventErrors += 1; });
     } catch { diagnostics.eventErrors += 1; }
     const settle = (outcome) => {

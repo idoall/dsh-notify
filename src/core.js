@@ -26,7 +26,15 @@ export class EventReducer {
   upsert(input) {
     if (!USER_KINDS.has(input.kind) || typeof input.mergeKey !== 'string') return null;
     const existing = this.records.get(input.mergeKey);
-    if (existing) return Object.assign(existing, input, { eventId: existing.eventId, unread: existing.unread });
+    if (existing) {
+      // Reopening a session replays its history, and an interrupted turn emits no `approval/decided`:
+      // the ask is replayed while nothing will ever answer it. Re-applying `phase: 'open'` therefore
+      // resurrects a record the user already settled (or the turn already expired) — the badge pins
+      // itself again on every reload and the row cannot be dismissed. A resolved interaction stays
+      // resolved; a replay of it is not news.
+      if (existing.phase !== 'open' && (input.phase ?? 'settled') === 'open') return null;
+      return Object.assign(existing, input, { eventId: existing.eventId, unread: existing.unread });
+    }
     if (input.kind === 'test' && (input.deliveryScope !== 'a-only' || typeof input.testRunId !== 'string')) return null;
     if (input.kind !== 'test' && (input.deliveryScope !== undefined || input.testRunId !== undefined)) return null;
     const record = { eventId: this.makeId(), kind: input.kind, mergeKey: input.mergeKey, sessionId: input.sessionId, title: sanitizeBody(input.title || input.kind), body: sanitizeBody(input.body, input.verbosity), at: this.now(), unread: input.unread ?? true, phase: input.phase || 'settled', outcome: input.outcome, deepLink: input.deepLink, ...(Number.isSafeInteger(input.turn) && input.turn > 0 ? { turn: input.turn } : {}), ...(input.kind === 'test' ? { deliveryScope: 'a-only', testRunId: input.testRunId } : {}) };

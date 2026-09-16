@@ -23,6 +23,23 @@ test('unlinked questions do not use FIFO association and result requires authori
   r.questionResult({ sessionId: 's', callId: 'a' }); assert.equal(a.phase, 'settled'); assert.equal(b.phase, 'open');
   assert.equal(r.questionResult({ sessionId: 's', outcome: 'abort' }), null); assert.equal(r.questionResult({ sessionId: 's', callId: 'b', outcome: 'abort' }).phase, 'expired');
 });
+test('a replayed ask leaves a resolved interaction resolved', () => {
+  const r = new EventReducer(() => 1);
+  const settled = r.approvalAsked({ id: 'a', toolName: 'Bash' }, 's');
+  assert.equal(settled.phase, 'open');
+  r.settleRecord(settled.eventId, 'settled');
+  assert.equal(r.approvalAsked({ id: 'a', toolName: 'Bash' }, 's'), null, 'a settled approval is not resurrected');
+  assert.equal(settled.phase, 'settled');
+  const expired = r.approvalAsked({ id: 'b', toolName: 'Bash' }, 's');
+  r.expireOpenForSession('s');
+  assert.equal(expired.phase, 'expired');
+  assert.equal(r.approvalAsked({ id: 'b', toolName: 'Bash' }, 's'), null, 'an expired approval is not resurrected');
+  assert.equal(expired.phase, 'expired');
+  // A still-open ask keeps its identity and takes the newest payload.
+  const live = r.approvalAsked({ id: 'c', toolName: 'Bash' }, 's');
+  const again = r.approvalAsked({ id: 'c', toolName: 'Read' }, 's');
+  assert.equal(again, live); assert.equal(again.eventId, live.eventId); assert.equal(again.body, 'Read'); assert.equal(again.phase, 'open');
+});
 test('clear dedupe policy is epoch-scoped and reset pulls never deliver historical items', () => {
   assert.equal(CLEAR_DEDUPE_POLICY.scope, 'epoch'); assert.equal(CLEAR_DEDUPE_POLICY.resetPullDelivers, false);
 });
