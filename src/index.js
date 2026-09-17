@@ -364,7 +364,32 @@ export async function apply(ctx, config = {}) {
   // Subtask/background completions are the biggest noise source (one record per subagent run and
   // per background job, often titled with the raw command). They are opt-in via `subtaskNotify`.
   const subtasksWanted = () => ({ ...settings, ...preferences.get() }).subtaskNotify === true;
-  ctx?.on?.('workflow/end', (info, result) => { if (!subtasksWanted()) return; safely(() => dispatch(reducer.upsert({ kind: 'workflow-end', mergeKey: `wf:${info.id}`, title: info.meta?.name || '工作流结束', body: result.error || result.stopReason, phase: 'settled', outcome: result.stopReason }))); });
+  /**
+   * Which session a workflow run belongs to.
+   *
+   * `workflow/end` cannot say. The engine emits it from its own unscoped context and the payload is
+   * `{id, meta}` only, so a 工作流结束 card shipped with no session at all and could never jump anywhere —
+   * the one kind that was not clickable. The session is in the log instead: `dsh-tool-workflow` appends
+   * `tool-workflow/run-start {runId, name}` to the parent Session before the run begins, and every append
+   * reaches `session/event`. So the owner is learned from the log and remembered for the `workflow/end`
+   * that follows. The entry is dropped when it is consumed, and the map is capped so a run that never
+   * ends cannot grow it forever; nothing depends on which of the two events lands first.
+   */
+  const workflowOwners = new Map();
+  const WORKFLOW_OWNER_LIMIT = 50;
+  ctx?.on?.('session/event', (session, event) => {
+    const sessionId = session?.id; const runId = event?.data?.runId;
+    if (event?.type !== 'tool-workflow/run-start' || typeof sessionId !== 'string' || typeof runId !== 'string') return;
+    workflowOwners.delete(runId);
+    workflowOwners.set(runId, sessionId);
+    while (workflowOwners.size > WORKFLOW_OWNER_LIMIT) workflowOwners.delete(workflowOwners.keys().next().value);
+  });
+  ctx?.on?.('workflow/end', (info, result) => {
+    if (!subtasksWanted()) return;
+    const sessionId = workflowOwners.get(info.id);
+    workflowOwners.delete(info.id);
+    safely(() => dispatch(reducer.upsert({ kind: 'workflow-end', mergeKey: `wf:${info.id}`, ...(sessionId ? { sessionId } : {}), title: info.meta?.name || '工作流结束', body: result.error || result.stopReason, phase: 'settled', outcome: result.stopReason })));
+  });
   const onJobDone = (snapshot, owner) => {
     if (!subtasksWanted()) return;
     safely(() => dispatch(reducer.upsert({ kind: 'job-end', mergeKey: `job:${snapshot?.id}`, sessionId: snapshot?.ownerSession ?? sessionIdOf(owner), ...jobNotification(snapshot ?? {}), phase: 'settled', outcome: snapshot?.status })));

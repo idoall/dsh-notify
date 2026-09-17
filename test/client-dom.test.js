@@ -330,7 +330,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
  * Mount only the toast seat against a host whose record list the test drives by hand, so a burst can
  * be delivered one poll at a time. Cards are addressed in DOM order, which is newest first.
  */
-async function mountStackSandbox(t, { host = 'live', cardHeight = 0 } = {}) {
+async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = null } = {}) {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
   let root; let mounted; let pullTimer; let primed = false; let feed = [];
   const listeners = new Set(); let pendingMap = new Map();
@@ -376,7 +376,7 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0 } = {}) {
   }
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, getUiSession: () => ({ pendingInteractions: observable }) });
+  mounted = mountNotifyClient({ slots, ...(sessions ? { sessions } : {}), getUiSession: () => ({ pendingInteractions: observable }) });
   root = createRoot(document.getElementById('root'));
   const wait = async (ms) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); }); };
   await act(async () => { root.render(React.createElement(components.get('shell.overlay'), components.get('shell.overlay:props'))); });
@@ -419,6 +419,19 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0 } = {}) {
 }
 
 const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
+/**
+ * The smallest sessions service a card click can really go through: it lists `ids`, `binding` answers for
+ * them, and `open` selects — which is the whole contract `navigateNotificationRecord` reads. Without one,
+ * a click cannot navigate at all and the card now says so instead of pretending it worked.
+ */
+function fakeSessions(ids = ['s1']) {
+  let current;
+  return {
+    binding: (id) => (ids.includes(id) ? {} : undefined),
+    open: (id) => { current = id; },
+    list: { getSnapshot: () => ({ current, byId: Object.fromEntries(ids.map((id) => [id, {}])) }) },
+  };
+}
 
 test('the corner is a window five cards tall, and the rest wait below the fold', async (t) => {
   const sandbox = await mountStackSandbox(t);
@@ -505,7 +518,7 @@ test('a card closes on click, and an in-flight answer shows loading before it su
 });
 
 test('a toast stays until the user closes it or opens its session', async (t) => {
-  const sandbox = await mountStackSandbox(t);
+  const sandbox = await mountStackSandbox(t, { sessions: fakeSessions() });
   sandbox.push(burstRecord(1));
   await sandbox.tick();
   assert.equal(sandbox.count(), 1);
@@ -675,4 +688,41 @@ test('the settings self-test paints finished too: the corner is measured before 
     'no two cards share a slot, so nothing shows as stacked edges');
   assert.equal(sandbox.windowHeight(), `${cardHeight * 5 + TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`);
   assert.equal(sandbox.badge(), '+8');
+});
+
+test('a card whose session is gone stays put and says why', async (t) => {
+  // The page's list no longer holds this record's session, so the click has nowhere to go.
+  const sandbox = await mountStackSandbox(t, { sessions: fakeSessions(['other-session']) });
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  await sandbox.press(0);
+  await sandbox.wait(40);
+  assert.equal(sandbox.count(), 1, 'the card does not vanish as if the jump had worked');
+  assert.deepEqual(sandbox.statuses(), ['error']);
+  assert.equal(sandbox.nodes()[0].getAttribute('data-tone'), 'error');
+  assert.match(sandbox.nodes()[0].textContent, /这个会话已经不在了，无法打开/);
+  assert.equal(sandbox.answers(0).some((node) => node.textContent === '重试'), false, 'no answer-retry button: nothing was being answered');
+  // It is still an ordinary card: × takes it away.
+  await sandbox.click(sandbox.closer(0));
+  await sandbox.wait(260);
+  assert.equal(sandbox.count(), 0, 'and closing it still works');
+});
+
+test('a click that cannot go anywhere says which way it failed', async (t) => {
+  // No sessions service at all: the host exposes nothing to jump with, which is a transient problem.
+  const sandbox = await mountStackSandbox(t);
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  await sandbox.press(0);
+  await sandbox.wait(40);
+  assert.equal(sandbox.count(), 1, 'the card stays available for another try');
+  assert.match(sandbox.nodes()[0].textContent, /没能打开这个会话，再点一次试试/);
+
+  // A record with no session of its own — the shape a 工作流结束 record used to have — is a different
+  // fact, and says so rather than blaming the navigation.
+  sandbox.push({ ...burstRecord(2), sessionId: undefined });
+  await sandbox.tick();
+  await sandbox.press(0);
+  await sandbox.wait(40);
+  assert.match(sandbox.nodes()[0].textContent, /这条通知没有可以打开的会话/);
 });

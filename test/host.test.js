@@ -7,17 +7,34 @@ import { apply, inject, Config, jobNotification } from '../src/index.js';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 async function waitUntil(predicate) { for (let attempt = 0; attempt < 100; attempt += 1) { if (predicate()) return; await new Promise((resolve) => setTimeout(resolve, 5)); } throw new Error('condition did not settle'); }
+/**
+ * Event bookkeeping for the ctx doubles below. Cordis dispatches an event to every listener, so a plain
+ * `Map<name, handler>` is a lie: the plugin registers two for `session/event` (the turn/grace logic and
+ * the workflow-owner lookup), and a single-slot map silently kept only the last one. `listeners.get(name)`
+ * therefore hands back one callable that runs them in order and yields the last result — which is also
+ * what a test wants when it awaits a waterfall handler.
+ */
+function createListeners() {
+  const handlers = new Map();
+  return {
+    listeners: { get: (name) => (...args) => { let result; for (const handler of [...(handlers.get(name) ?? [])]) result = handler(...args); return result; } },
+    register(name, handler) {
+      const list = handlers.get(name) ?? []; list.push(handler); handlers.set(name, list);
+      return () => { const at = list.indexOf(handler); if (at !== -1) list.splice(at, 1); };
+    },
+  };
+}
 async function fixture(t, rejection, config = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const listeners = new Map();
+  const { listeners, register } = createListeners();
   const routes = new Map();
   const webServer = { register(route) { const key = `${route.kind}:${route.path}`; if (routes.has(key)) throw new Error(`duplicate ${key}`); routes.set(key, route); return () => routes.delete(key); } };
   const connection = { requestRejection: typeof rejection === 'function' ? rejection : () => rejection };
-  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => listeners.delete('job/done'); } };
+  const jobs = { onJobDone(handler) { return register('job/done', handler); } };
   const ctx = {
     get(name) { return { webServer, connection, jobs }[name]; },
-    on(name, handler) { listeners.set(name, handler); return () => listeners.delete(name); },
+    on(name, handler) { return register(name, handler); },
     effect(setup) { return setup(); },
     emit() {},
   };
@@ -171,8 +188,8 @@ test('a restart forgets the notifications and keeps the preferences', async (t) 
   const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-restart-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const build = async () => {
-    const listeners = new Map(); const routes = new Map();
-    const ctx = { get(name) { return { webServer: { register(route) { routes.set(`${route.kind}:${route.path}`, route); return () => {}; } }, connection: { requestRejection: () => undefined }, jobs: undefined }[name]; }, on(name, handler) { listeners.set(name, handler); return () => {}; }, effect(setup) { return setup(); }, emit() {} };
+    const { listeners, register } = createListeners(); const routes = new Map();
+    const ctx = { get(name) { return { webServer: { register(route) { routes.set(`${route.kind}:${route.path}`, route); return () => {}; } }, connection: { requestRejection: () => undefined }, jobs: undefined }[name]; }, on: register, effect(setup) { return setup(); }, emit() {} };
     return { listeners, routes, runtime: await apply(ctx, { dataDir: dir, completionGraceMs: 0 }) };
   };
   const first = await build();
@@ -317,4 +334,39 @@ test('a plain test double still resolves the registry reflectively', async (t) =
   await waitUntil(() => runtime.buffer.size >= 1);
   assert.equal(runtime.buffer.pull().items[0].kind, 'job-end');
   assert.equal(runtime.buffer.pull().items[0].title, '后台任务失败');
+});
+
+test('a finished workflow learns which session it belongs to, so its card can jump', async (t) => {
+  const { listeners, runtime, records } = await fixture(t, undefined);
+  runtime.preferences.set({ subtaskNotify: true });
+  const end = async (id, name) => { listeners.get('workflow/end')({ id, meta: { name } }, { stopReason: 'completed' }); await settle(); };
+  const record = (id) => records().find((item) => item.mergeKey === `wf:${id}`);
+
+  // Nothing is known until the log says so. dsh-tool-workflow appends the run to its parent Session
+  // before the run begins, and that append is the only place the owning session is written down — the
+  // `workflow/end` payload itself is `{id, meta}` and carries no session at all.
+  await end('wf-unowned', '无主运行');
+  assert.equal(record('wf-unowned').sessionId, undefined, 'a run whose session was never recorded is not attributed to anything');
+
+  listeners.get('session/event')({ id: 'session-42' }, { type: 'tool-workflow/run-start', data: { runId: 'wf-1', name: '审计' } });
+  await end('wf-1', '审计');
+  assert.equal(record('wf-1').sessionId, 'session-42', 'the card can jump to the session that ran the workflow');
+  assert.equal(record('wf-1').title, '审计');
+
+  // Two sessions running workflows at the same time keep their own runs.
+  listeners.get('session/event')({ id: 'session-99' }, { type: 'tool-workflow/run-start', data: { runId: 'wf-2', name: '另一个' } });
+  await end('wf-2', '另一个');
+  assert.equal(record('wf-2').sessionId, 'session-99');
+
+  // Every other session record is ignored: only the workflow's own run-start claims a run.
+  listeners.get('session/event')({ id: 'session-1' }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } });
+  listeners.get('session/event')({ id: 'session-1' }, { type: 'tool-workflow/agent-start', data: { runId: 'wf-3', seq: 1, label: 'x', childId: 'child-1' } });
+  await end('wf-3', 'x');
+  assert.equal(record('wf-3').sessionId, undefined, 'an agent-start is not a run-start');
+
+  // The sub-agent records share the runId, so the last run-start for a run id is the one that counts.
+  listeners.get('session/event')({ id: 'session-old' }, { type: 'tool-workflow/run-start', data: { runId: 'wf-4', name: 'old' } });
+  listeners.get('session/event')({ id: 'session-new' }, { type: 'tool-workflow/run-start', data: { runId: 'wf-4', name: 'new' } });
+  await end('wf-4', 'new');
+  assert.equal(record('wf-4').sessionId, 'session-new');
 });

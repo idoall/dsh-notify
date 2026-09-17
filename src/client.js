@@ -663,7 +663,24 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   const narrow = layoutFor({ width: globalThis.innerWidth }).narrow;
   // Contract: clicking a card jumps to the session it is about and retires the card. There is no
   // "seen" flag to write anywhere — the card leaving is the whole record of the interaction.
-  const activate = async (card) => { dismiss(card.record.eventId); await navigateRecord(card.record, sessions); };
+  /**
+   * Clicking a card is a request to go there, and it is only finished once the host has really selected
+   * the session. Dismissing first — which is what this did — made every outcome look the same: the card
+   * slid away and, when the jump could not happen, nothing said so. The four outcomes do differ, and now
+   * so does the screen: `acknowledged` and `local` (a self-test card, which has no session on purpose)
+   * end the card, while the other two leave it in place with a line saying why, so it can be clicked again.
+   */
+  const activate = async (card) => {
+    const eventId = card.record.eventId;
+    const result = await navigateRecord(card.record, sessions);
+    if (result?.status === 'acknowledged' || result?.status === 'local') { dismiss(eventId); return; }
+    const error = !validSessionId(card.record.sessionId) ? '这条通知没有可以打开的会话'
+      : result?.status === 'acknowledged-without-session' ? '这个会话已经不在了，无法打开'
+        : '没能打开这个会话，再点一次试试';
+    // lastLabel is cleared on purpose: it belongs to a failed *answer*, and its 重试 button would be about
+    // something else entirely.
+    patchCard(eventId, { status: 'error', error, lastLabel: null });
+  };
   // Answering here and answering in the composer mutate the same PendingQuestion. The card reports the
   // click as loading until the host confirms, then settles on success (✓, then it retires) or error.
   const submitAnswer = async (card, label) => {
