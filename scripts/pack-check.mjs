@@ -2,7 +2,7 @@ import { access, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
-const required = ['package.json', 'cordis.patch.yml', 'dist/index.js', 'dist/core.js', 'dist/storage.js', 'dist/sound-choices.js', 'dist/sounds.js', 'dist/client.js'];
+const required = ['package.json', 'cordis.patch.yml', 'dist/index.js', 'dist/core.js', 'dist/buffer.js', 'dist/sound-choices.js', 'dist/sounds.js', 'dist/client.js'];
 for (const file of required) await access(file);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 if (manifest.main !== './dist/index.js' || manifest.exports?.['./client'] !== './dist/client.js') throw new Error('package exports do not expose Host and client builds');
@@ -17,7 +17,7 @@ if (!Array.isArray(clientExports.inject) || typeof clientExports.apply !== 'func
 const composition = clientExports.CLIENT_COMPOSITION;
 const modules = manifest.dsh?.client?.inject;
 if (clientExports.inject.join(',') !== 'slots' || !composition || JSON.stringify(modules) !== JSON.stringify(composition.modules)) throw new Error('manifest modules and client slots composition disagree');
-const declaredSeats = new Set(['sidebar.footer.action', 'settings.section', 'shell.overlay']);
+const declaredSeats = new Set(['settings.section', 'shell.overlay']);
 if (JSON.stringify([...declaredSeats]) !== JSON.stringify(composition.seats)) throw new Error('client composition does not name the shipped seats');
 const registrations = [];
 const slots = {
@@ -25,7 +25,7 @@ const slots = {
   register(options) { if (!declaredSeats.has(options.name)) throw new Error(`registration missed declared seat: ${options.name}`); registrations.push(options.name); return () => {}; },
 };
 const mounted = clientExports.apply({ slots });
-if (mounted?.status?.service !== 'available' || Object.values(mounted.status.seats).some((state) => state !== 'active') || registrations.length !== 3) throw new Error('materialized client did not activate all official composition seats');
+if (mounted?.status?.service !== 'available' || Object.values(mounted.status.seats).some((state) => state !== 'active') || registrations.length !== 2) throw new Error('materialized client did not activate all official composition seats');
 mounted.destroy();
 if (clientExports.apply({})?.status?.service !== 'unavailable') throw new Error('materialized client does not degrade without slots service');
 const host = await import(`${pathToFileURL(`${process.cwd()}/dist/index.js`).href}?pack-check=${Date.now()}`);

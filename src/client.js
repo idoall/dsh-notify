@@ -2,12 +2,8 @@ import React from 'react';
 import { BUILTIN_SOUNDS, SOUND_LABELS, SOUND_PRESETS, parseSoundChoice } from './sound-choices.js';
 
 const BASE = '/plugins/dsh-notify';
-const CLEAR_EVENT = 'dsh-notify:cleared';
-const OPEN_EVENT = 'dsh-notify:open-history';
 const LOCAL_TEST_EVENT = 'dsh-notify:self-test-local';
-const READ_EVENT = 'dsh-notify:read';
 export const inject = ['slots'];
-export const BELL_CLASS = 'dsh-notify-bell';
 const HISTORY_PAGE = 20;
 const ACK_ALL_CAP = 50;
 /**
@@ -32,18 +28,6 @@ export function toastAnchor({ document: doc = globalThis.document, innerWidth = 
  * The bell's colour and interaction states live here rather than in inline style so they use the
  * SAME set as the two neighbouring rows: ui-settings-general's `.trigger:hover` and dsh-mobile's
  * `.dsh-mobile-control__trigger:hover/:active/:focus-visible` (inline style would out-rank `:hover`).
- */
-export const SIDEBAR_ACTION_CSS = `[class*="footerActions"]:has(.${BELL_CLASS}){flex-wrap:wrap}
-.${BELL_CLASS}{font-family:inherit;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary,inherit);background:0 0}
-.${BELL_CLASS}:hover{background:var(--dsw-alias-interactive-bg-hover,#f1f3f6)}
-.${BELL_CLASS}:active,.${BELL_CLASS}[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-active,#e8ebf0)}
-.${BELL_CLASS}:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,currentColor);outline-offset:2px}`;
-/**
- * Settings-section presentation. Mirrors the design language of the shipped `dsh-update-status`
- * 「版本与更新」 section (its `.dus-settings*` rules): one heading, bordered cards, full-width
- * labelled fields, secondary hints, and one flat action button style — so our section sits in the
- * same visual system as the app instead of falling back to UA button/checkbox/select defaults.
- * Only `--dsw-*` / `--ds-font-*` tokens are used (03-ui-ux contract), and every class is namespaced.
  */
 export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-width:640px;min-width:0;padding:4px 0;color:var(--dsw-alias-label-primary)}
 .dsh-notify-heading{font-size:16px;font-weight:650;margin:0}
@@ -79,54 +63,33 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-details>summary{cursor:pointer;font-size:12px;font-weight:650;color:var(--dsw-alias-label-secondary)}
 .dsh-notify-details[open]>summary{color:var(--dsw-alias-label-primary);margin-bottom:4px}
 .dsh-notify-confirm{border-left:2px solid var(--dsw-alias-state-warn-primary,#d97706);display:grid;gap:8px;min-width:0;padding-left:10px}
-.dsh-notify-history-head{align-items:center;display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
-.dsh-notify-history-close{align-items:center;background:transparent;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;font-size:16px;height:26px;justify-content:center;line-height:1;padding:0;width:26px}
-.dsh-notify-history-close:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}
-.dsh-notify-history-tabs{display:flex;gap:4px;margin-bottom:8px}
-.dsh-notify-history-tabs button{background:transparent;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:1;font:inherit;font-size:12px;min-height:32px;padding:0 8px}
-.dsh-notify-history-tabs button[data-active=true]{background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-layer-2));border-color:var(--dsw-alias-border-l4);color:var(--dsw-alias-label-primary);font-weight:650}
-.dsh-notify-history-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
-.dsh-notify-history-notice{color:var(--dsw-alias-state-business-primary,#2563eb);font-size:11px;line-height:1.5;margin:0 0 8px}
-.dsh-notify-history-list{display:grid;gap:6px;list-style:none;margin:0;padding:0}
-[data-chat-turn][data-dsh-notify-turn=highlight]{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px;border-radius:10px;transition:outline-color .2s ease}
-.dsh-notify-history-row{align-items:flex-start;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:grid;gap:8px;grid-template-columns:auto minmax(0,1fr) auto;padding:8px 10px;transition:border-color .12s ease,color .12s ease}
-.dsh-notify-history-row[data-settling=false]{grid-template-columns:auto minmax(0,1fr)}
-.dsh-notify-history-settle{align-self:center;background:transparent;border:1px solid var(--dsw-alias-border-l3);border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:none;font:inherit;font-size:11px;line-height:1;padding:5px 8px;white-space:nowrap}
-.dsh-notify-history-settle:hover{color:var(--dsw-alias-label-primary)}
-.dsh-notify-history-row[data-read=false]{border-color:var(--dsw-alias-border-l4)}
-.dsh-notify-history-row[data-read=false] .dsh-notify-history-title{color:var(--dsw-alias-label-primary)}
-.dsh-notify-history-row[data-read=true]{border-color:var(--dsw-alias-border-l2)}
-.dsh-notify-history-row[data-read=true] .dsh-notify-history-title{color:var(--dsw-alias-label-secondary);font-weight:500}
-.dsh-notify-history-row[data-read=true] .dsh-notify-history-body,
-.dsh-notify-history-row[data-read=true] .dsh-notify-history-meta{color:var(--dsw-alias-label-tertiary)}
-.dsh-notify-history-check{accent-color:var(--dsw-alias-label-primary);flex:none;height:16px;margin:2px 0 0;min-height:16px;min-width:16px;width:16px}
-.dsh-notify-history-open{background:transparent;border:0;color:inherit;cursor:pointer;display:grid;font:inherit;gap:2px;min-height:32px;min-width:0;padding:0;text-align:start}
-.dsh-notify-history-meta{align-items:baseline;color:var(--dsw-alias-label-tertiary,#7a8494);display:flex;font-size:11px;gap:6px;justify-content:space-between}
-.dsh-notify-history-source{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-notify-history-title{font-size:13px;font-weight:650;line-height:1.45}
-.dsh-notify-history-body{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
-.dsh-notify-history-more{background:transparent;border:1px dashed var(--dsw-alias-border-l2);border-radius:8px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:12px;margin-top:8px;min-height:34px;width:100%}
-.dsh-notify-history-more:hover{background:var(--dsw-alias-button-floating-hover)}
-.dsh-notify-guide{background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-bg-layer-2));border-left:2px solid var(--dsw-alias-state-warn-primary,#d97706);border-radius:0 8px 8px 0;display:grid;gap:6px;min-width:0;padding:8px 10px}
-.dsh-notify-guide-title{font-size:12px;font-weight:650;margin:0}
-.dsh-notify-guide-steps{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.55;margin:0;padding-inline-start:18px}
-.dsh-notify-guide-steps li+li{margin-top:3px}
-.dsh-notify-guide-notice{color:var(--dsw-alias-state-business-primary,#2563eb);font-size:11px;line-height:1.5;margin:0}
 @media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-toggle input{height:22px;min-height:22px;min-width:22px;width:22px}}`;
 /**
- * Toast presentation, modelled on react-toastify: one row of [tone icon][title + text][close X],
- * a tone colour per kind, and a progress bar that pauses with the hover-pause timer. The toast also
- * sits above the official settings overlay (z-index 1000) so a self-test fired from 设置 is visible
- * and closable instead of dimmed behind the mask.
+ * Toast presentation: a stack anchored in the top-right corner. Each card is one row of
+ * [tone icon][title + text + actions][close X]; the stack container owns the position, and every card
+ * sits in an absolutely positioned slot whose `transform` is computed from the cards above it — that
+ * is what makes a new card push the others down smoothly instead of re-flowing them. Cards enter with
+ * a spring scale + fade and leave by sliding out to the right. The stack is promoted to the browser
+ * top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the settings modal.
  */
-export const TOAST_CSS = `.dsh-notify-toast{align-items:flex-start;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:fixed;width:min(360px,calc(100vw - 32px));z-index:1100}
+export const TOAST_CSS = `.dsh-notify-stack{pointer-events:none;position:fixed;width:min(360px,calc(100vw - 32px));z-index:1100}
+.dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 320ms cubic-bezier(.22,1,.36,1)}
+.dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:relative;width:100%}
+.dsh-notify-toast[data-leaving=true]{animation:dsh-notify-card-out 200ms ease-in forwards;pointer-events:none}
+@keyframes dsh-notify-card-in{0%{opacity:0;transform:translateY(-10px) scale(.9)}62%{opacity:1;transform:translateY(0) scale(1.02)}100%{opacity:1;transform:none}}
+@keyframes dsh-notify-card-out{to{opacity:0;transform:translateX(115%)}}
+@keyframes dsh-notify-spin{to{transform:rotate(360deg)}}
 .dsh-notify-toast-icon{color:var(--dsw-alias-label-tertiary,#7a8494);flex:none;margin-top:1px}
+.dsh-notify-toast-icon[data-spin=true]{animation:dsh-notify-spin .9s linear infinite}
 .dsh-notify-toast[data-tone=success] .dsh-notify-toast-icon{color:var(--dsw-alias-state-success-primary,#16a36a)}
 .dsh-notify-toast[data-tone=error] .dsh-notify-toast-icon{color:var(--dsw-alias-state-error-primary,#dc2626)}
 .dsh-notify-toast[data-tone=warning] .dsh-notify-toast-icon{color:var(--dsw-alias-state-warn-primary,#d97706)}
 .dsh-notify-toast[data-tone=info] .dsh-notify-toast-icon{color:var(--dsw-alias-state-business-primary,#2563eb)}
-.dsh-notify-toast-body{display:grid;gap:2px;min-width:0}
-.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);font-size:11px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-notify-toast-body{display:grid;gap:2px;min-width:0;flex:1 1 auto}
+.dsh-notify-toast-head{align-items:center;display:flex;gap:6px;min-width:0}
+.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-notify-toast-more{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:none;font:inherit;font-size:11px;line-height:18px;margin-inline-start:auto;padding:0 8px}
+.dsh-notify-toast-more:hover{color:var(--dsw-alias-label-primary)}
 .dsh-notify-toast-title{font-size:13px;font-weight:650;line-height:1.45}
 .dsh-notify-toast-text{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .dsh-notify-toast-answers{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
@@ -134,16 +97,15 @@ export const TOAST_CSS = `.dsh-notify-toast{align-items:flex-start;background:va
 .dsh-notify-toast-answer:hover{background:var(--dsw-alias-button-floating-hover)}
 .dsh-notify-toast-answer:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .dsh-notify-toast-answer[data-variant=quiet]{background:transparent;color:var(--dsw-alias-label-secondary)}
+.dsh-notify-toast-answer:disabled{cursor:progress;opacity:.6}
 .dsh-notify-toast-error{color:var(--dsw-alias-state-error-primary,#dc2626);font-size:11px;line-height:1.45}
+.dsh-notify-toast-hint{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.45}
 .dsh-notify-toast-close{align-items:center;background:transparent;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;font-size:15px;height:22px;inset-inline-end:6px;justify-content:center;line-height:1;padding:0;position:absolute;top:6px;width:22px}
 .dsh-notify-toast-close:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}
 .dsh-notify-toast-close:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
-.dsh-notify-toast-progress{animation:dsh-notify-toast-progress linear forwards;background:currentColor;bottom:0;height:2px;inset-inline:0;position:absolute;transform-origin:left}
-.dsh-notify-toast:hover .dsh-notify-toast-progress{animation-play-state:paused}
-@keyframes dsh-notify-toast-progress{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 @media (hover:none) and (pointer:coarse){.dsh-notify-toast{padding:12px 44px 12px 12px}.dsh-notify-toast-close{font-size:17px;height:32px;width:32px}}
-@media (prefers-reduced-motion:reduce){.dsh-notify-toast-progress{animation:none;transform:scaleX(0)}}`;
-export const CLIENT_CSS = `${SIDEBAR_ACTION_CSS}\n${SETTINGS_CSS}\n${TOAST_CSS}`;
+@media (prefers-reduced-motion:reduce){.dsh-notify-toast{animation:none}.dsh-notify-toast[data-leaving=true]{animation:none}.dsh-notify-slot{transition:none}.dsh-notify-toast-icon[data-spin=true]{animation:none}}`;
+export const CLIENT_CSS = `${SETTINGS_CSS}\n${TOAST_CSS}`;
 export function installClientStyles({ document: doc = globalThis.document } = {}) {
   const head = doc?.head;
   if (!head?.append || !doc.createElement) return () => {};
@@ -155,48 +117,7 @@ export function installClientStyles({ document: doc = globalThis.document } = {}
 }
 
 export function layoutFor({ width = 1024, coarse = false } = {}) { return { narrow: width < 760, hitTarget: coarse ? 44 : 32 }; }
-export function toastPolicy(record, { width = 1024 } = {}) { const open = record.phase === 'open'; return { persistent: width < 760 && open, timeoutMs: open ? (width < 760 ? null : 6000) : (width < 760 ? 8000 : 6000) }; }
-export async function syncPull(fetchFn, cursor = 0) { try { const result = await fetchFn(cursor); return { ...result, offline: false }; } catch (error) { return { items: [], cursor, offline: true, error }; } }
-export async function clearNotificationHistory({ confirmed = false, onReset } = {}) {
-  if (!confirmed) return { status: 'cancelled' };
-  const result = await fetchJson('/clear', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true }) });
-  if (!result?.ok || !result.reset || !Number.isSafeInteger(result.epoch) || result.cursor !== 0 || !Array.isArray(result.items)) throw new Error('invalid clear response');
-  onReset?.(result);
-  return { status: 'cleared', ...result };
-}
-/**
- * Tell the host a notification is no longer waiting on the user. The badge counts pending records, so
- * this — not "mark read" — is what clears it. Used when the interaction this page was showing is gone,
- * or when the user says so explicitly.
- */
-export async function settleNotificationRecord(eventId, { outcome = 'settled' } = {}) {
-  const result = await fetchJson('/settle', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId, outcome }) });
-  emitRecordsRead([eventId]);
-  return result;
-}
-export async function deleteNotificationRecords({ eventIds = [], confirmed = false, onReset } = {}) {
-  if (!confirmed) return { status: 'cancelled' };
-  if (!Array.isArray(eventIds) || eventIds.length === 0) return { status: 'empty' };
-  const result = await fetchJson('/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, eventIds }) });
-  if (!result?.ok || !result.reset || !Number.isSafeInteger(result.epoch) || result.cursor !== 0 || !Array.isArray(result.items)) throw new Error('invalid delete response');
-  onReset?.(result);
-  return { status: 'deleted', ...result };
-}
-/** Compact relative time for a history row; never says "in N minutes" for a clock-skewed record. */
-/** 已读 retention: how old an acknowledged record may be before the panel hides it (0 = keep). */
-export function readRetentionCutoff(days, now = Date.now()) {
-  if (!Number.isSafeInteger(days) || days <= 0) return null;
-  return Number(now) - days * 24 * 60 * 60 * 1000;
-}
-export function relativeTimeLabel(at, now = Date.now()) {
-  const delta = Number(now) - Number(at);
-  if (!Number.isFinite(delta) || delta < 60_000) return '刚刚';
-  const minutes = Math.floor(delta / 60_000);
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  return `${Math.floor(hours / 24)} 天前`;
-}
+/** A page-local notification, used by the settings self-test: it never touches the host. */
 export function createLocalSelfTestRecord({ now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
   const testRunId = `self-test:a:${randomUUID()}`;
   return { eventId: testRunId, mergeKey: `test:${testRunId}`, kind: 'test', deliveryScope: 'a-only', testRunId, title: '自测：页面浮层', body: '只显示在当前页面，不会发送系统通知', at: now, unread: false, phase: 'settled', localOnly: true };
@@ -204,13 +125,6 @@ export function createLocalSelfTestRecord({ now = Date.now(), randomUUID = () =>
 export function publishLocalSelfTest(record, dispatch = (event) => globalThis.dispatchEvent(event)) {
   dispatch(typeof CustomEvent === 'function' ? new CustomEvent(LOCAL_TEST_EVENT, { detail: record }) : { type: LOCAL_TEST_EVENT, detail: record });
 }
-const selfTestRunId = (dimension) => `self-test:${dimension}:${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-export async function submitSelfTest(dimension, { confirmed = false, sessionId } = {}) {
-  if (!confirmed) return { status: 'untested', reason: '需要确认' };
-  const testRunId = selfTestRunId(dimension);
-  return fetchJson('/self-test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dimension, confirm: true, testRunId, ...(dimension === 'navigation' ? { sessionId } : {}) }) });
-}
-export async function cleanupSelfTest(testRunId) { return fetchJson('/self-test/cleanup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, testRunId }) }); }
 function validSessionId(value) { return typeof value === 'string' && value.length > 0 && value.length <= 256 && /^[A-Za-z0-9._:-]+$/.test(value); }
 /**
  * Reveal one turn inside the session the user just opened. The chat renders every turn as a flow item
@@ -272,93 +186,71 @@ async function fetchJson(path, init) {
   if (!response.ok) { const error = new Error(`notify request failed: ${response.status}`); error.status = response.status; throw error; }
   return response.json();
 }
+/**
+ * Clicking a card opens the session (and the exact turn) it is about. There is nothing else to write:
+ * the card disappearing is the entire record of the interaction.
+ */
+const navigateRecord = (record, sessions) => (record?.localOnly ? Promise.resolve({ status: 'local' }) : navigateNotificationRecord(record, { sessions }));
 function mergeRecords(previous, items) {
   const merged = new Map(previous.map((record) => [record.eventId, record]));
   for (const record of items) if (record?.eventId) merged.set(record.eventId, record);
-  return [...merged.values()].sort((a, b) => Number(b.at || 0) - Number(a.at || 0));
+  // No history is kept anywhere, so a page only needs the recent tail: what can still be on screen,
+  // plus enough to know that the same record arriving twice is not news.
+  return [...merged.values()].sort((a, b) => Number(b.at || 0) - Number(a.at || 0)).slice(0, RECORD_MEMORY);
 }
-export function browserDeliveryItems(data, previousEpoch) { return !data?.reset && previousEpoch !== undefined && Array.isArray(data.items) ? data.items.filter((record) => record?.deliveryScope !== 'a-only') : []; }
+/** How many delivered records a page keeps: the stack shows five, and a record can be updated in place. */
+const RECORD_MEMORY = 60;
+/**
+ * The whole transport: ask the host for everything after the sequence this page already has. The first
+ * poll is a snapshot of whatever is still buffered, and the toast layer treats that snapshot as
+ * history it was not there for — so loading the page never replays a pile of old notifications.
+ */
 function useNotificationState() {
-  const [state, setState] = React.useState({ records: [], cursor: 0, epoch: undefined, offline: false, reset: false, revision: 0 });
+  const [state, setState] = React.useState({ records: [], seq: 0, primed: false, offline: false, revision: 0 });
+  const warned = React.useRef(false);
   React.useEffect(() => {
-    const cleared = (event) => { const data = event?.detail; if (data?.reset && Number.isSafeInteger(data.epoch)) setState((old) => ({ records: mergeRecords(old.records.filter((record) => record.localOnly), Array.isArray(data.items) ? data.items : []), cursor: 0, epoch: data.epoch, offline: false, reset: true, revision: old.revision + 1 })); };
     const local = (event) => { const record = event?.detail; if (record?.localOnly) setState((old) => ({ ...old, records: mergeRecords(old.records, [record]), revision: old.revision + 1 })); };
-    // Reading only re-colours rows in place; it must not regroup the tabs, or rows jump while the
-    // user is still looking at them. The next fetch (revision) moves them into 已读.
-    const read = (event) => { const ids = new Set(event?.detail?.eventIds ?? []); if (!ids.size) return; setState((old) => ({ ...old, records: old.records.map((record) => ids.has(record.eventId) ? { ...record, unread: false } : record) })); };
-    globalThis.addEventListener?.(CLEAR_EVENT, cleared); globalThis.addEventListener?.(LOCAL_TEST_EVENT, local); globalThis.addEventListener?.(READ_EVENT, read);
-    return () => { globalThis.removeEventListener?.(CLEAR_EVENT, cleared); globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local); globalThis.removeEventListener?.(READ_EVENT, read); };
+    globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
+    return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
   }, []);
   React.useEffect(() => {
     let alive = true;
     const pull = async () => {
       try {
-        const data = await fetchJson(`/pull?cursor=${state.cursor}&epoch=${state.epoch ?? ''}`);
-        if (alive) setState((old) => ({ records: data.reset ? mergeRecords(old.records.filter((record) => record.localOnly), data.items) : mergeRecords(old.records, data.items), cursor: data.cursor, epoch: data.epoch, offline: false, reset: Boolean(data.reset), revision: old.revision + 1 }));
+        const data = await fetchJson(`/pull?since=${state.seq}`);
+        if (!alive) return;
+        // An older host answers the old cursor protocol: it has no sequence to advance, so it re-sends
+        // its whole buffer on every poll. Say so once instead of pretending the page is up to date.
+        if (!Number.isSafeInteger(data?.seq) && !warned.current) {
+          warned.current = true;
+          globalThis.console?.warn?.('[dsh-notify] the host did not report a delivery sequence — restart DSH so the current plugin is loaded; until then this page only sees records it has not seen before.');
+        }
+        const seq = Number.isSafeInteger(data?.seq) ? data.seq : state.seq;
+        setState((old) => ({ records: mergeRecords(old.records, Array.isArray(data?.items) ? data.items : []), seq, primed: true, offline: false, revision: old.revision + 1 }));
       } catch { if (alive) setState((old) => ({ ...old, offline: true })); }
     };
     pull(); const timer = setInterval(pull, 1500);
     return () => { alive = false; clearInterval(timer); };
-  }, [state.cursor, state.epoch]);
+  }, [state.seq]);
   return state;
 }
-export function channelStatus() { return [
-  { id: 'A', label: '页面里', state: 'available', detail: 'Toast + 铃铛历史 + 提示音 + 后台标题闪动' },
-]; }
-/**
- * Full toast order: records waiting on the user come first, then everything else, each group newest
- * first (the store already sorts by `at` descending). A queue — not "the one latest record" — is what
- * keeps a single unanswered record from starving every later notification.
- */
 export function toastOrder(records = []) { return [...records.filter((record) => record?.phase === 'open'), ...records.filter((record) => record?.phase !== 'open')]; }
-export function prioritizedToastRecords(records = []) { const open = records.filter((record) => record?.phase === 'open'); return open.length ? open : records; }
-export function toastQueue(records = [], width = 1024) { return prioritizedToastRecords(records).slice(0, width < 760 ? 2 : 3).map((record) => ({ record, ...toastPolicy(record, { width }), paused: false })); }
-export function pwaGuidance({ ios = false, secure = globalThis.isSecureContext, standalone = false } = {}) {
-  if (!secure) return { state: 'needs-https', detail: '需要 HTTPS 后才能授权通知或后台推送' };
-  if (ios && !standalone) return { state: 'needs-home-screen', detail: '请在 Safari 分享菜单选择“添加到主屏幕”，打开主屏 Web App 后再授权通知/推送（未测）' };
-  if (ios) return { state: 'unverified', detail: '主屏 Web App 可在用户手势后授权；真实 iOS 推送投递未测' };
-  return { state: 'available', detail: '请在用户操作后授权通知或订阅推送' };
-}
-export function createToastTimer({ durationMs, now = () => Date.now(), setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout, onExpire = () => {} } = {}) {
-  let timer = null; let deadline = 0; let remainingMs = durationMs ?? null; let stopped = false;
-  const clear = () => { if (timer !== null) { clearTimeoutFn(timer); timer = null; } };
-  const start = () => { if (stopped || remainingMs === null || remainingMs <= 0) return; deadline = now() + remainingMs; timer = setTimeoutFn(() => { timer = null; remainingMs = 0; onExpire(); }, remainingMs); };
-  const pause = () => { if (timer === null) return remainingMs; remainingMs = Math.max(0, deadline - now()); clear(); return remainingMs; };
-  const resume = () => { if (timer === null && remainingMs !== null && remainingMs > 0) start(); return remainingMs; };
-  const destroy = () => { stopped = true; clear(); };
-  start(); return { pause, resume, destroy, remaining: () => remainingMs };
-}
 const TOAST_TONE_BY_KIND = Object.freeze({ approval: 'warning', question: 'info', 'plan-review': 'info', completed: 'success', failed: 'error', 'job-end': 'neutral', 'workflow-end': 'neutral', test: 'neutral' });
-/** Tone id shared by the toast icon, its accent colour and the progress bar. */
 export function toastTone(kind) { return TOAST_TONE_BY_KIND[kind] ?? 'neutral'; }
 /** 20px line-art icon per tone (react-toastify's per-result icon, drawn in the DSH stroke style). */
-export function toastIcon(tone) {
+export function toastIcon(tone, status = 'idle') {
   const shared = { 'aria-hidden': true, focusable: false, width: 20, height: 20, viewBox: '0 0 20 20', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', className: 'dsh-notify-toast-icon' };
+  // An in-flight action owns the icon: it is the only signal that says "this click is being sent".
+  if (status === 'loading') return React.createElement('svg', { ...shared, 'data-spin': 'true' }, React.createElement('path', { d: 'M10 3.4a6.6 6.6 0 1 1-6.6 6.6', opacity: '.9' }));
+  if (status === 'success') return React.createElement('svg', shared, React.createElement('path', { d: 'M4.5 10.4l3.6 3.6 7.4-8' }));
+  if (status === 'error') return React.createElement('svg', shared, React.createElement('circle', { cx: 10, cy: 10, r: 7 }), React.createElement('path', { d: 'M10 6.4v4.4M10 13.6h.01' }));
   if (tone === 'success') return React.createElement('svg', shared, React.createElement('path', { d: 'M4.5 10.4l3.6 3.6 7.4-8' }));
   if (tone === 'error') return React.createElement('svg', shared, React.createElement('path', { d: 'M5.6 5.6l8.8 8.8M14.4 5.6l-8.8 8.8' }));
   if (tone === 'warning') return React.createElement('svg', shared, React.createElement('path', { d: 'M10 3.6l7 12.4H3z' }), React.createElement('path', { d: 'M10 8.6v3.1M10 14.3h.01' }));
   if (tone === 'info') return React.createElement('svg', shared, React.createElement('circle', { cx: 10, cy: 10, r: 7 }), React.createElement('path', { d: 'M10 9.2v4M10 6.7h.01' }));
   return React.createElement('svg', shared, React.createElement('path', { d: 'M10 3.2a4.3 4.3 0 0 0-4.3 4.3c0 3.2-1.2 4.2-1.2 4.2h11s-1.2-1-1.2-4.2A4.3 4.3 0 0 0 10 3.2z' }), React.createElement('path', { d: 'M8.6 14.4a1.6 1.6 0 0 0 2.8 0' }));
 }
-export function toastStyleForKind(kind) { const token = { approval: ['warning', 'var(--dsw-alias-warning, #b26a00)'], question: ['info', 'var(--dsw-alias-info, #2878b8)'], 'plan-review': ['info', 'var(--dsw-alias-info, #2878b8)'], completed: ['success', 'var(--dsw-alias-success, #287a45)'], failed: ['error', 'var(--dsw-alias-danger, #b23a3a)'], 'job-end': ['neutral', 'var(--dsw-alias-text-3, #666)'], 'workflow-end': ['neutral', 'var(--dsw-alias-text-3, #666)'], test: ['neutral', 'var(--dsw-alias-text-3, #666)'] }[kind] || ['neutral', 'var(--dsw-alias-text-3, #666)']; return { token: token[0], color: token[1], borderInlineStart: `4px solid ${token[1]}` }; }
-/** Bell sizing contract for the two sidebar forms: an own full-width row when wide, an official-sized rail icon otherwise. */
-export function bellActionStyle(wide) {
-  return { flex: wide ? '1 1 100%' : '0 0 auto', ...(wide ? { height: 42, borderRadius: 12 } : { width: 36, height: 36, borderRadius: '50%', position: 'relative' }), minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: wide ? 'flex-start' : 'center', gap: 8, padding: wide ? '0 10px 0 8px' : 0, margin: '4px 0', textAlign: 'start', border: 0, cursor: 'pointer' };
-}
-/** Unread badge: in-flow at the row's end when wide, overlaid on the rail icon so the 36px rail box never widens. */
-export function bellBadgeStyle(wide) {
-  return { minWidth: 18, height: 18, paddingInline: 4, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, lineHeight: 1, background: 'var(--dsw-alias-danger, #c33)', color: 'var(--dsw-alias-on-danger, #fff)', ...(wide ? { marginInlineStart: 'auto' } : { position: 'absolute', top: 2, insetInlineEnd: 2, minWidth: 16, height: 16, paddingInline: 3, borderRadius: 8, fontSize: 10 }) };
-}
-let toastConfig = { toastPosition: 'conversation', toastEnabled: true, soundEnabled: true, sound: 'chime', readRetentionDays: 0 };
-/**
- * Plays notification sounds. Built-ins are synthesised with WebAudio (nothing to fetch); uploads are
- * played through an <audio> element served by the exact Host route. Every factory is injectable so
- * the behaviour is testable without a real audio device.
- *
- * Autoplay policy is the one real constraint: a fresh AudioContext starts `suspended` and only a
- * user gesture can resume it, so `unlock()` runs on the first click/keypress and `play()` reports
- * `locked` instead of pretending it made a sound.
- */
+let toastConfig = { toastPosition: 'conversation', toastEnabled: true, soundEnabled: true, sound: 'chime' };
 export function createSoundPlayer({ audio = globalThis, AudioContextClass, AudioElementClass } = {}) {
   let context = null; let unlocked = false; const elements = new Set();
   // Resolved lazily: the bundle may be evaluated before the page exposes these, and tests inject fakes.
@@ -468,11 +360,64 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
 }
 const attentionIndicator = createAttentionIndicator();
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
+/** How many cards lie flat before the stack collapses, and how many are ever kept on screen. */
+export const TOAST_STACK_VISIBLE = 3;
+export const TOAST_STACK_MAX = 5;
+export const TOAST_DEPTH_OFFSET = 10;
+export const TOAST_DEPTH_SCALE = 0.04;
+export const TOAST_DEPTH_MIN_SCALE = 0.82;
+/** Must match the `dsh-notify-card-out` animation; the card is dropped from the DOM when it ends. */
+export const TOAST_EXIT_MS = 200;
+export const TOAST_SUCCESS_MS = 900;
+const TOAST_HOVER_GRACE_MS = 120;
+/**
+ * Stack geometry, as a pure function: `heights[i]` is the measured height of the i-th card, newest
+ * first. Up to `TOAST_STACK_VISIBLE` cards lie flat, each one pushed down by the heights above it —
+ * that offset is what a new card animates into, so the older ones slide rather than jump. Past that
+ * the stack collapses to the front card plus the others peeking out beneath it at a smaller scale,
+ * and hovering expands it again.
+ */
+export function toastStackPlan({ heights = [], hovering = false, gap = 12 } = {}) {
+  const collapsed = heights.length > TOAST_STACK_VISIBLE && !hovering;
+  let cursor = 0;
+  return heights.map((height, index) => {
+    const depth = collapsed && index > 0 ? index : 0;
+    const plan = depth
+      ? { offsetY: depth * TOAST_DEPTH_OFFSET, scale: Math.max(TOAST_DEPTH_MIN_SCALE, 1 - depth * TOAST_DEPTH_SCALE), depth }
+      : { offsetY: cursor, scale: 1, depth: 0 };
+    cursor += (Number(height) || 0) + gap;
+    return plan;
+  });
+}
 function ToastOverlay({ sessions, pendingInteractions } = {}) {
-  const state = useNotificationState(); const [, refresh] = React.useState(0); const [toast, setToast] = React.useState(null); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [paused, setPaused] = React.useState(false); const [answerError, setAnswerError] = React.useState(null); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
+  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [hovering, setHovering] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
-  const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null); const toastTimer = React.useRef(null); const toastRef = React.useRef(null);
+  const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);
+  // One ref per piece of per-card runtime state: the exit/success timers and each card's measured
+  // height. Nothing here retires a card on a clock — a toast leaves when the user says so.
+  const stackRef = React.useRef(null); const exits = React.useRef(new Map()); const successes = React.useRef(new Map()); const heights = React.useRef(new Map()); const hoverTimer = React.useRef(null); const unseen = React.useRef(new Set()); const sawPending = React.useRef(new Set()); const cardsRef = React.useRef(cards);
+  const anyCard = cards.length > 0; const rerenderNow = () => rerender((value) => value + 1);
+  // The ref mirrors every write so two pushes in the same tick (a self-test and a poll, say) cannot
+  // race each other through a stale render.
+  const commit = (next) => { cardsRef.current = next; setCards(next); };
+  const forget = (eventId) => { heights.current.delete(eventId); };
+  /** Retire a card: the DOM node stays for the slide-out animation and is dropped when it ends. */
+  const dismiss = (eventId, { animate = true } = {}) => {
+    const success = successes.current.get(eventId); if (success) { clearTimeout(success); successes.current.delete(eventId); }
+    if (!animate) { forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); return; }
+    commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, leaving: true } : card)));
+    const previous = exits.current.get(eventId); if (previous) clearTimeout(previous);
+    exits.current.set(eventId, setTimeout(() => { exits.current.delete(eventId); forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); }, TOAST_EXIT_MS));
+  };
+  const patchCard = (eventId, patch) => commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, ...patch } : card)));
+  const measure = (eventId) => (node) => {
+    if (!node) return;
+    const height = Math.ceil(node.offsetHeight || node.getBoundingClientRect?.().height || 0);
+    if (!height || heights.current.get(eventId) === height) return;
+    heights.current.set(eventId, height);
+    rerenderNow();
+  };
   React.useEffect(() => { const onConfig = () => refresh((n) => n + 1); globalThis.addEventListener?.('dsh-notify:toast-config', onConfig); return () => globalThis.removeEventListener?.('dsh-notify:toast-config', onConfig); }, []);
   React.useEffect(() => {
     const update = () => setAnchor(toastAnchor());
@@ -486,280 +431,162 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     }
     return () => { globalThis.removeEventListener?.('resize', update); observer?.disconnect(); };
   }, []);
-  React.useEffect(() => { setAnchor(toastAnchor()); }, [toast]);
+  React.useEffect(() => { setAnchor(toastAnchor()); }, [cards.length]);
+  React.useEffect(() => () => {
+    for (const id of exits.current.values()) clearTimeout(id);
+    for (const id of successes.current.values()) clearTimeout(id);
+    clearTimeout(hoverTimer.current);
+  }, []);
   // The shell.overlay seat lives inside the official overlayLayer (z-index 20), so no z-index of
-  // ours can clear the settings modal (z-index 1000). Promoting the toast to the browser top layer
-  // is what actually keeps a self-test fired from 设置 visible and closable; without Popover
-  // support the element stays a normal fixed toast and simply degrades to the old stacking.
+  // ours can clear the settings modal (z-index 1000). Promoting the whole stack to the browser top
+  // layer is what actually keeps a self-test fired from 设置 visible and closable; without Popover
+  // support the stack stays a normal fixed element and simply degrades to the old stacking.
   React.useEffect(() => {
-    const element = toastRef.current;
-    if (!toast || !element || typeof element.showPopover !== 'function') return;
+    const element = stackRef.current;
+    if (!anyCard || !element || typeof element.showPopover !== 'function') return undefined;
     try {
       if (!element.hasAttribute('popover')) element.setAttribute('popover', 'manual');
       if (!element.matches?.(':popover-open')) element.showPopover();
-    } catch { return; }
+    } catch { return undefined; }
     return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
-  }, [toast]);
+  }, [anyCard]);
+  /** Newest card on top: it takes the first slot and everything already there slides down one. */
   const showToast = (record) => {
+    if (!record?.eventId) return;
+    if (globalThis.document?.hidden) unseen.current.add(record.eventId);
     toasted.current.add(record.eventId);
-    setToast(record); toastTimer.current?.destroy?.();
+    const next = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
+    for (const dropped of next.slice(TOAST_STACK_MAX)) forget(dropped.record.eventId);
+    commit(next.slice(0, TOAST_STACK_MAX));
     void soundPlayer.play();
-    const policy = toastPolicy(record, { width: globalThis.innerWidth });
-    if (policy.timeoutMs) toastTimer.current = createToastTimer({ durationMs: policy.timeoutMs, onExpire: () => setToast(null) });
   };
   React.useEffect(() => {
     const local = (event) => { if (event?.detail?.localOnly) showToast(event.detail); };
     globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
-    // The local path arms a countdown too, so it has to disarm on unmount like the queue does.
-    return () => { globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local); toastTimer.current?.destroy?.(); toastTimer.current = null; };
+    return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
   }, []);
+  // Hovering the stack expands it; leaving waits a beat first, so moving from one card to the next
+  // does not collapse the stack under the pointer.
+  const enterStack = () => {
+    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+    setHovering(true);
+  };
+  const leaveStack = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => { hoverTimer.current = null; setHovering(false); }, TOAST_HOVER_GRACE_MS);
+  };
   // An open toast must not outlive the thing it asks about. The user can answer in the composer, in
   // another browser, or through the official modal, and none of those paths touch this element: the
-  // toast is a snapshot, so it has to watch the two authoritative signals itself.
-  const sawPending = React.useRef(false);
-  React.useEffect(() => { sawPending.current = false; }, [toast?.eventId]);
+  // toast is a snapshot, so it has to watch the two authoritative signals itself. The same watch keeps
+  // a card from becoming a ghost: a record the Host has dropped (cleared, deleted, evicted) takes its
+  // card with it, because nothing else could ever retire it now that toasts do not expire.
   React.useEffect(() => {
-    if (!toast || toast.phase !== 'open') return;
-    const pendingInteraction = pendingInteractionFor(pending, toast.sessionId);
-    if (pendingInteraction) sawPending.current = true;
-    const live = state.records.find((record) => record.eventId === toast.eventId);
-    if (!shouldCloseOpenToast({ toast, pendingInteraction, liveRecord: live, sawPending: sawPending.current })) return;
-    // Resolved elsewhere means handled: stop counting it as unread too, or the bell keeps nagging
-    // about something the user already answered.
-    if (!toast.localOnly) void acknowledgeRecord(toast).catch(() => {});
-    toastTimer.current?.destroy?.(); toastTimer.current = null; setToast(null);
-  }, [pending, state.records, toast]);
+    const open = new Set(cards.map((card) => card.record.eventId));
+    for (const id of sawPending.current) if (!open.has(id)) sawPending.current.delete(id);
+    for (const card of cards) {
+      if (card.leaving || card.record.phase !== 'open') continue;
+      if (pendingInteractionFor(pending, card.record.sessionId)) { sawPending.current.add(card.record.eventId); continue; }
+      if (sawPending.current.has(card.record.eventId)) dismiss(card.record.eventId);
+    }
+  }, [pending, cards]);
   React.useEffect(() => {
+    if (!state.primed) return;   // nothing has been delivered yet, so there is nothing to prime
     const seen = toasted.current;
     const ids = new Set(state.records.map((record) => record.eventId));
     for (const id of seen) if (!ids.has(id)) seen.delete(id);   // keep the set bounded by live records
-    // A reset (clear/delete) and the first pull after mount are history: never toast them.
-    if (state.reset || !primed.current) { primed.current = true; for (const id of ids) seen.add(id); return; }
+    // The first poll of a page is what the host still had buffered: history the user was not there for.
+    // It is never replayed as a stack of old cards — but it is that snapshot which gets marked seen,
+    // not the empty state that precedes it.
+    if (!primed.current) { primed.current = true; for (const id of ids) seen.add(id); return; }
+    // A record that is already on screen can arrive again. Exactly ONE repeat is news: the record was
+    // waiting on the user and the host has now settled it (an approval, asked and then decided), which
+    // retires the card. Every other repeat — a host that re-sends what it has already delivered, a
+    // duplicate delivery — is the same notification, and treating it as an update made the card flash
+    // and vanish the moment it appeared.
+    for (const card of cardsRef.current) {
+      const live = state.records.find((record) => record.eventId === card.record.eventId);
+      if (!live || live === card.record) continue;
+      const wasWaiting = card.record.phase === 'open';
+      patchCard(card.record.eventId, { record: live });
+      if (wasWaiting && live.phase !== 'open') dismiss(card.record.eventId);
+    }
     const next = toastOrder(state.records).find((record) => !seen.has(record.eventId));
     if (!next) return;
     showToast(next);
-    return () => { toastTimer.current?.destroy?.(); toastTimer.current = null; };
-  }, [state.records]);
-  if (!toast || !toastConfig.toastEnabled || toastConfig.toastPosition === 'off') return null;
-  const tone = toastTone(toast.kind);
-  const narrow = layoutFor({ width: globalThis.innerWidth }).narrow;
-  const timeoutMs = toastPolicy(toast, { width: globalThis.innerWidth }).timeoutMs;
-  const dismiss = () => { toastTimer.current?.destroy?.(); toastTimer.current = null; setToast(null); };
-  // Contract: clicking the toast acknowledges and jumps to the session it is about. Opening the
-  // history list here made one click feel like "a pile of notifications" instead of navigation.
-  const openHistory = () => globalThis.dispatchEvent?.(typeof Event === 'function' ? new Event(OPEN_EVENT) : { type: OPEN_EVENT });
-  const activate = async () => { const target = toast; dismiss(); const result = await navigateRecord(target, sessions); if (result?.status === 'navigation-failed' || result?.status === 'failed') openHistory(); };
-  // Answering here and answering in the composer mutate the same PendingQuestion.
-  const source = toast ? sessionLabel(sessions, toast.sessionId) : null;
-  const interaction = toast ? pendingInteractionFor(pending, toast.sessionId) : null;
-  const answer = toast ? toastAnswer(toast, interaction) : null;
-  const submitAnswer = async (label) => { setAnswerError(null); try { await interaction.answer(answerBatch(answer.id, label)); await acknowledgeRecord(toast).catch(() => {}); dismiss(); } catch (error) { setAnswerError(error?.message || '回答失败，请到会话里回答'); } };
-  const answerButtons = () => {
-    // A question/plan-review notification always offers the way into its session, even when this
-    // page holds no pending interaction (already answered elsewhere, or asked in another browser).
-    if (toast?.kind !== 'question' && toast?.kind !== 'plan-review') return null;
-    const buttons = answer ? answer.options.map((option) => React.createElement('button', { key: option.label, type: 'button', className: 'dsh-notify-toast-answer', title: option.description, onClick: (event) => { event.stopPropagation(); void submitAnswer(option.label); } }, option.label)) : [];
-    return React.createElement('div', { className: 'dsh-notify-toast-answers' }, buttons,
-      React.createElement('button', { type: 'button', className: 'dsh-notify-toast-answer', 'data-variant': 'quiet', onClick: (event) => { event.stopPropagation(); void activate(); } }, '去会话里回答'),
-      answerError ? React.createElement('span', { className: 'dsh-notify-toast-error', role: 'status' }, answerError) : null);
-  };
-  const hold = () => { setPaused(true); toastTimer.current?.pause?.(); };
-  const release = () => { setPaused(false); toastTimer.current?.resume?.(); };
-  return React.createElement('aside', { ref: toastRef, popover: 'manual', role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone,
-    onClick: () => { void activate(); },
-    onPointerEnter: hold, onPointerLeave: release, onFocus: hold, onBlur: release,
-    style: { insetBlockStart: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))' } },
-    toastIcon(tone),
-    React.createElement('div', { className: 'dsh-notify-toast-body' },
-      source ? React.createElement('span', { className: 'dsh-notify-toast-source', title: toast.sessionId }, source) : null,
-      React.createElement('strong', { className: 'dsh-notify-toast-title' }, toast.title),
-      toast.body ? React.createElement('p', { className: 'dsh-notify-toast-text' }, toast.body) : null,
-      answerButtons()),
-    React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); void acknowledgeRecord(toast).catch(() => {}); dismiss(); } }, '\u00d7'),
-    timeoutMs ? React.createElement('span', { className: 'dsh-notify-toast-progress', 'aria-hidden': true, style: { animationDuration: `${timeoutMs}ms`, animationPlayState: paused ? 'paused' : 'running' } }) : null);
-}
-function BellAction({ wide, sessions }) {
-  const state = useNotificationState(); const [open, setOpen] = React.useState(false); const [dialog, setDialog] = React.useState(false);
-  const [tab, setTab] = React.useState('pending'); const [selected, setSelected] = React.useState(() => new Set()); const [confirming, setConfirming] = React.useState(null); const [selecting, setSelecting] = React.useState(false);
-  const [page, setPage] = React.useState(1); const [busy, setBusy] = React.useState(false); const [notice, setNotice] = React.useState(null);
-  const buttonRef = React.useRef(null);
-  // Tab membership is snapshotted, while each row's look follows the live record: a row you just
-  // confirmed fades in place (二级边框 + 二级字色) and only moves into 已读 on the next fetch.
-  // Tabs are 待处理 / 历史 so the panel agrees with the badge: 待处理 is the same set the badge counts,
-  // 历史 is everything else (finished work, answered questions, failures).
-  const partition = React.useMemo(() => {
-    const pendingIds = new Set(); const historyIds = new Set();
-    for (const record of state.records) (record.phase === 'open' ? pendingIds : historyIds).add(record.eventId);
-    return { pending: pendingIds, history: historyIds };
-  }, [open, tab]);   // a poll must never re-order the list under the user's cursor
-  const inTab = (record) => {
-    const known = partition.pending.has(record.eventId) ? 'pending' : partition.history.has(record.eventId) ? 'history' : (record.phase === 'open' ? 'pending' : 'history');
-    return tab === known;
-  };
-  const knownIds = (bucket) => state.records.filter((record) => partition[bucket].has(record.eventId));
-  // The badge answers "does anything still wait on me?" — not "how much history is unread". A
-  // finished task is news, not a to-do, and counting both is what made the number impossible to
-  // reconcile with the toasts the user actually saw.
-  const pending = state.records.filter((record) => record.phase === 'open');
-  const pendingTotal = pending.length;
-  const cutoff = tab === 'history' ? readRetentionCutoff(toastConfig.readRetentionDays ?? 0) : null;
-  const rows = state.records.filter(inTab).filter((record) => cutoff === null || Number(record.at || 0) >= cutoff);
-  const hiddenByRetention = tab === 'history' && cutoff !== null ? state.records.filter((record) => partition.history.has(record.eventId) && !record.unread && Number(record.at || 0) < cutoff).length : 0;
-  const visible = rows.slice(0, page * HISTORY_PAGE);
-  const selectedIds = [...selected].filter((id) => rows.some((record) => record.eventId === id));
-  const narrow = layoutFor({ width: globalThis.innerWidth }).narrow;
-  const close = () => { setOpen(false); setDialog(false); setSelected(new Set()); setConfirming(null); setNotice(null); setSelecting(false); buttonRef.current?.focus?.(); };
-  // Explicit size + margin 0: as a popover the UA would otherwise shrink this to fit-content and
-  // auto-centre it, which silently killed the dim layer and the click-outside-to-close target.
-  const backdropStyle = { position: 'fixed', inset: 0, margin: 0, width: '100vw', height: '100dvh', background: 'rgb(0 0 0 / 40%)', zIndex: 999, ...(narrow ? { display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', paddingInline: 12, paddingBlockStart: 'max(12px, env(safe-area-inset-top, 0px))', paddingBlockEnd: 'max(calc(12px + 10dvh), calc(env(safe-area-inset-bottom, 0px) + 10dvh))' } : {}) };
-  // `100%` (not a dvh guess) keeps the narrow panel inside the flex container's content box, which
-  // already excludes the safe-area paddings; a dvh-based cap overflowed the top by ~30px on a phone.
-  const panelStyle = { maxHeight: narrow ? '100%' : '60vh', overflow: 'auto', boxSizing: 'border-box', padding: 12, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', background: 'var(--ds-background-1, Canvas)', color: 'var(--ds-text-1, CanvasText)', border: '1px solid var(--ds-border-1, GrayText)', borderRadius: 8, zIndex: 1000, ...(narrow ? { position: 'relative', width: '100%', minWidth: 0 } : { position: 'fixed', insetInlineEnd: 16, bottom: 72, width: 'min(360px, calc(100vw - 32px))' }) };
-  const navigateThenAck = async (record) => {
-    try {
-      const result = await navigateRecord(record, sessions);
-      if (result?.status === 'acknowledged-without-session') setNotice('这条通知没有可打开的会话（例如自测记录，或原会话已删除），已直接标记为已读。');
-      else if (result?.status === 'navigation-failed') setNotice('打不开对应的会话；这条仍保持未读，可稍后重试或点「全部标记已读」。');
-      // A record that still claims to wait on the user, while this page holds no interaction for it,
-      // is a leftover: settle it so the pending badge cannot get stuck on something nobody can answer.
-      if (record.phase === 'open' && !pendingInteractionFor(pending, record.sessionId) && result?.status !== 'navigation-failed') {
-        try { await settleNotificationRecord(record.eventId); setNotice('这条已不在等待你（对应的提问/审批已结束），已标记为已处理。'); }
-        catch { setNotice('这条仍显示为待处理：没能通知宿主（重启 DSH 后会自动清理）。'); }
-      }
-    } catch (error) { setNotice(`标记已读失败：${error?.message || '未知错误'}`); }
-  };
-  const settleOne = (record) => runHistory(async () => {
-    try {
-      const result = await settleNotificationRecord(record.eventId);
-      setNotice(result?.ok ? '这条已不再计入待处理。' : '这条已经处理过了。');
-    } catch {
-      // Say what actually happened instead of implying the host agreed with us.
-      setNotice('没能通知宿主（旧版宿主需要重启 DSH 才支持此操作）；你也可以用「选择…」删除这一条。');
-    }
-  });
-  const settleMany = () => runHistory(async () => {
-    const targets = rows.filter((record) => selected.has(record.eventId) && record.phase === 'open');
-    if (!targets.length) { setNotice('选中的里面没有待处理的。'); return; }
-    let done = 0;
-    for (const record of targets) { try { await settleNotificationRecord(record.eventId); done += 1; } catch { break; } }
-    setSelected(new Set());
-    setNotice(done === targets.length ? `已把 ${done} 条标记为已处理。` : `只成功 ${done}/${targets.length} 条（旧版宿主需要重启 DSH 才支持此操作）。`);
-  });
-  const toggleSelected = (eventId) => setSelected((old) => { if (eventId === undefined) return new Set(); const next = new Set(old); if (next.has(eventId)) next.delete(eventId); else next.add(eventId); return next; });
-  const runHistory = async (work) => { if (busy) return; setBusy(true); setNotice(null); try { await work(); } catch (error) { setNotice(error?.message || '操作失败'); } finally { setBusy(false); } };
-  const deleteSelected = () => runHistory(async () => {
-    const result = await deleteNotificationRecords({ eventIds: selectedIds, confirmed: true, onReset: emitClearReset });
-    setSelected(new Set()); setConfirming(null); setPage(1);
-    setNotice(`已删除 ${result.removed} 条通知${result.removed < result.requested ? `（另外 ${result.requested - result.removed} 条已不在 Host 上）` : ''}`);
-  });
-  const clearAll = () => runHistory(async () => {
-    await clearNotificationHistory({ confirmed: true, onReset: emitClearReset });
-    setSelected(new Set()); setConfirming(null); setPage(1); setNotice('通知历史已清空');
-  });
-  const ackAll = () => runHistory(async () => {
-    const targets = unreadRecords.slice(0, ACK_ALL_CAP);
-    let failed = 0;
-    for (const record of targets) { try { await acknowledgeRecord(record); } catch { failed += 1; } }
-    emitRecordsRead(targets.map((record) => record.eventId));
-    setNotice(failed ? `已读 ${targets.length - failed} 条，${failed} 条失败` : `已把 ${targets.length} 条标为已读`);
-  });
-  const dialogRef = React.useRef(null);
-  // dsh-mobile renders its right sidebar as a fixed drawer above the official overlay layer our seat
-  // lives in, which covered this panel on remote access. The top layer is the only stacking position
-  // that always wins, so the dialog is promoted exactly like the toast.
-  React.useEffect(() => {
-    const element = dialogRef.current;
-    if (!open || !element || typeof element.showPopover !== 'function') return;
-    try {
-      if (!element.hasAttribute('popover')) element.setAttribute('popover', 'manual');
-      if (!element.matches?.(':popover-open')) element.showPopover();
-    } catch { return; }
-    return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
-  }, [open]);
-  React.useEffect(() => { if (open) setPage(1); }, [open, tab]);
-  React.useEffect(() => { if (!open) setSelecting(false); }, [open]);
-  // The flash means "something wants your attention", so it fires for work still waiting on you and
-  // for anything unread that arrived while this tab was hidden — never for a stale backlog, which is
-  // what used to make it flash every time the user switched away.
-  const seenWhenVisible = React.useRef(new Set());
+  }, [state.records, state.primed]);
+  // The tab flash is the only signal left for something that arrived while the page was in the
+  // background: the cards wait for the user, and the title says so until the tab is looked at.
   React.useEffect(() => {
     const sync = () => {
-      const visible = !globalThis.document?.hidden;
-      const unreadIds = state.records.filter((record) => record.unread).map((record) => record.eventId);
-      if (visible) seenWhenVisible.current = new Set(unreadIds);
-      const fresh = unreadIds.filter((id) => !seenWhenVisible.current.has(id)).length;
-      const signal = pendingTotal > 0 || fresh > 0 ? 1 : 0;
-      attentionIndicator.update({ unread: toastConfig.toastPosition === 'off' ? 0 : signal, visible });
+      const hidden = Boolean(globalThis.document?.hidden);
+      if (!hidden) unseen.current.clear();
+      attentionIndicator.update({ unread: hidden && toastConfig.toastPosition !== 'off' ? unseen.current.size : 0, visible: !hidden });
     };
     sync();
     globalThis.document?.addEventListener?.('visibilitychange', sync);
     return () => globalThis.document?.removeEventListener?.('visibilitychange', sync);
-  }, [state.records, pendingTotal]);
-  React.useEffect(() => {
-    const onKey = (event) => { if (event.key === 'Escape') close(); };
-    const showHistory = () => { setOpen(true); setDialog(true); };
-    globalThis.addEventListener?.('keydown', onKey); globalThis.addEventListener?.(OPEN_EVENT, showHistory);
-    return () => { globalThis.removeEventListener?.('keydown', onKey); globalThis.removeEventListener?.(OPEN_EVENT, showHistory); };
-  }, []);
-  const historyRow = (record) => {
-    const source = sessionLabel(sessions, record.sessionId);
-    return React.createElement('li', { key: record.eventId, className: 'dsh-notify-history-row', 'data-read': record.unread ? 'false' : 'true', 'data-selecting': selecting ? 'true' : 'false', 'data-settling': record.phase === 'open' && !selecting ? 'true' : 'false' },
-      selecting ? React.createElement('input', { type: 'checkbox', className: 'dsh-notify-history-check', 'aria-label': `选择通知：${record.title}`, checked: selected.has(record.eventId), onChange: () => toggleSelected(record.eventId) }) : null,
-      React.createElement('button', { type: 'button', className: 'dsh-notify-history-open', onClick: () => { if (selecting) { toggleSelected(record.eventId); return; } void navigateThenAck(record); } },
-        React.createElement('span', { className: 'dsh-notify-history-meta' },
-          React.createElement('span', { className: 'dsh-notify-history-source' }, source || '未知会话'),
-          React.createElement('time', null, relativeTimeLabel(record.at))),
-        React.createElement('strong', { className: 'dsh-notify-history-title' }, `${record.unread ? '● ' : ''}${record.title}`),
-        record.body ? React.createElement('span', { className: 'dsh-notify-history-body' }, record.body) : null),
-      record.phase === 'open' && !selecting
-        ? React.createElement('button', { type: 'button', className: 'dsh-notify-history-settle', disabled: busy, title: '这条不再等你处理（不删除历史）', onClick: (event) => { event.stopPropagation(); void settleOne(record); } }, '已处理')
-        : null);
+  }, [cards.length, state.records]);
+  if (!anyCard || !toastConfig.toastEnabled || toastConfig.toastPosition === 'off') return null;
+  const narrow = layoutFor({ width: globalThis.innerWidth }).narrow;
+  // Contract: clicking a card jumps to the session it is about and retires the card. There is no
+  // "seen" flag to write anywhere — the card leaving is the whole record of the interaction.
+  const activate = async (card) => { dismiss(card.record.eventId); await navigateRecord(card.record, sessions); };
+  // Answering here and answering in the composer mutate the same PendingQuestion. The card reports the
+  // click as loading until the host confirms, then settles on success (✓, then it retires) or error.
+  const submitAnswer = async (card, label) => {
+    const interaction = pendingInteractionFor(pending, card.record.sessionId);
+    const answer = toastAnswer(card.record, interaction);
+    if (!answer) { patchCard(card.record.eventId, { status: 'error', error: '这条已经不能在这里回答了，请到会话里处理', lastLabel: label }); return; }
+    patchCard(card.record.eventId, { status: 'loading', error: null, lastLabel: label });
+    try {
+      await interaction.answer(answerBatch(answer.id, label));
+      patchCard(card.record.eventId, { status: 'success', error: null });
+      const previous = successes.current.get(card.record.eventId); if (previous) clearTimeout(previous);
+      successes.current.set(card.record.eventId, setTimeout(() => { successes.current.delete(card.record.eventId); dismiss(card.record.eventId); }, TOAST_SUCCESS_MS));
+    } catch (error) {
+      patchCard(card.record.eventId, { status: 'error', error: error?.message || '回答失败，请到会话里回答', lastLabel: label });
+    }
   };
-  const historyPanel = () => React.createElement('section', { id: 'dsh-notify-history', 'aria-label': '通知历史', onClick: (event) => event.stopPropagation(), inert: dialog ? undefined : '', style: panelStyle },
-    React.createElement('div', { className: 'dsh-notify-history-head' },
-      React.createElement('strong', null, state.offline ? '通知历史（同步离线）' : '通知历史'),
-      React.createElement('button', { type: 'button', className: 'dsh-notify-history-close', 'aria-label': '关闭通知历史', onClick: close }, '\u00d7')),
-    React.createElement('div', { className: 'dsh-notify-history-tabs', role: 'tablist' },
-      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'pending', 'data-active': tab === 'pending', onClick: () => setTab('pending') }, `待处理 ${pendingTotal}`),
-      React.createElement('button', { type: 'button', role: 'tab', 'aria-selected': tab === 'history', 'data-active': tab === 'history', onClick: () => setTab('history') }, `历史 ${knownIds('history').length}`)),
-    React.createElement('div', { className: 'dsh-notify-history-actions' },
-      selecting
-        ? React.createElement(React.Fragment, null,
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || visible.length === 0, onClick: () => setSelected(new Set(rows.map((record) => record.eventId))) }, '全选'),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => toggleSelected() }, '清除选择'),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => void settleMany() }, '标记已处理'),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || selectedIds.length === 0, onClick: () => setConfirming('delete') }, `删除选中${selectedIds.length ? `（${selectedIds.length}）` : ''}`),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => setConfirming('clear') }, '全部删除'),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => { setSelected(new Set()); setSelecting(false); setConfirming(null); } }, '完成'))
-        : React.createElement(React.Fragment, null,
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || state.records.every((record) => !record.unread), onClick: () => void ackAll() }, '全部标记已读'),
-          React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: busy || rows.length === 0, onClick: () => setSelecting(true) }, '选择…'))),
-    confirming === 'delete' && React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认删除选中通知' },
-      hint(`将删除选中的 ${selectedIds.length} 条通知；这一步不可撤销。`),
-      React.createElement('div', { className: 'dsh-notify-actions' },
-        React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => void deleteSelected() }, '确认删除'),
-        React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => setConfirming(null) }, '取消'))),
-    confirming === 'clear' && React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认清空通知历史' },
-      hint('将清空 Host 上的全部通知历史与未读；这一步不可撤销。'),
-      React.createElement('div', { className: 'dsh-notify-actions' },
-        React.createElement('button', { type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', disabled: busy, onClick: () => void clearAll() }, '确认清空'),
-        React.createElement('button', { type: 'button', className: 'dsh-notify-action', onClick: () => setConfirming(null) }, '取消'))),
-    notice ? React.createElement('p', { className: 'dsh-notify-history-notice', role: 'status' }, notice) : null,
-    React.createElement('p', { className: 'dsh-notify-hint' }, selecting ? '点条目或复选框勾选，然后点「删除选中」；这一步不可撤销。' : '点任一条通知即可跳到它的会话；还在等你处理的可以点「已处理」或直接回答；要批量清理时点「选择…」。'),
-    hiddenByRetention > 0 ? React.createElement('p', { className: 'dsh-notify-hint' }, `按设置已隐藏 ${hiddenByRetention} 条更早的已读历史。`) : null,
-    rows.length === 0
-      ? React.createElement('p', { className: 'dsh-notify-hint' }, tab === 'pending' ? '没有等你处理的通知' : '还没有历史通知')
-      : React.createElement('ul', { className: 'dsh-notify-history-list' }, visible.map(historyRow)),
-    rows.length > visible.length ? React.createElement('button', { type: 'button', className: 'dsh-notify-history-more', onClick: () => setPage((value) => value + 1) }, `加载更多（还有 ${rows.length - visible.length} 条）`) : null);
-  return React.createElement(React.Fragment, null,
-    React.createElement('button', { ref: buttonRef, className: BELL_CLASS, type: 'button', onClick: () => { setOpen((value) => !value); setDialog(true); }, 'aria-expanded': open, 'aria-label': `通知${pendingTotal ? `，${pendingTotal} 条待处理` : ''}`, title: state.offline ? '通知同步离线' : '通知', style: bellActionStyle(wide) }, React.createElement('span', { 'aria-hidden': true, style: { width: wide ? 18 : 20, flex: '0 0 auto', display: 'inline-flex', justifyContent: 'center', fontSize: wide ? 16 : 18, lineHeight: 1 } }, '♧'), wide && React.createElement('span', { style: { minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, '通知'), pendingTotal > 0 && React.createElement('span', { 'aria-label': `${pendingTotal} 条待处理`, style: bellBadgeStyle(wide) }, pendingTotal > 99 ? '99+' : String(pendingTotal))),
-    open && React.createElement('div', { ref: dialogRef, popover: 'manual', role: 'dialog', 'aria-modal': true, 'aria-label': '通知历史', style: backdropStyle, onClick: close }, historyPanel()));
+  const actionRow = (card) => {
+    const record = card.record; const busy = card.status === 'loading'; const buttons = [];
+    // A question/plan-review notification always offers the way into its session, even when this page
+    // holds no pending interaction (already answered elsewhere, or asked in another browser).
+    if (record.kind === 'question' || record.kind === 'plan-review') {
+      const answer = toastAnswer(record, pendingInteractionFor(pending, record.sessionId));
+      if (answer) for (const option of answer.options) buttons.push(React.createElement('button', { key: option.label, type: 'button', className: 'dsh-notify-toast-answer', title: option.description, disabled: busy, onClick: (event) => { event.stopPropagation(); void submitAnswer(card, option.label); } }, option.label));
+      buttons.push(React.createElement('button', { key: 'session', type: 'button', className: 'dsh-notify-toast-answer', 'data-variant': 'quiet', disabled: busy, onClick: (event) => { event.stopPropagation(); void activate(card); } }, '去会话里回答'));
+    }
+    if (card.status === 'error' && card.lastLabel) buttons.push(React.createElement('button', { key: 'retry', type: 'button', className: 'dsh-notify-toast-answer', onClick: (event) => { event.stopPropagation(); void submitAnswer(card, card.lastLabel); } }, '重试'));
+    const note = card.status === 'error' ? React.createElement('span', { className: 'dsh-notify-toast-error', role: 'status' }, card.error || '操作失败')
+      : card.status === 'loading' ? React.createElement('span', { className: 'dsh-notify-toast-hint', role: 'status' }, '正在提交…')
+        : card.status === 'success' ? React.createElement('span', { className: 'dsh-notify-toast-hint', role: 'status' }, '已完成') : null;
+    if (!buttons.length && !note) return null;
+    return React.createElement('div', { className: 'dsh-notify-toast-answers' }, buttons, note);
+  };
+  const cardView = (card, index, plan) => {
+    const record = card.record; const status = card.status;
+    const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
+    const source = sessionLabel(sessions, record.sessionId);
+    const more = !hovering && cards.length > TOAST_STACK_VISIBLE && index === 0 ? cards.length - 1 : 0;
+    return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: { transform: `translateY(${plan.offsetY}px) scale(${plan.scale})`, zIndex: cards.length - index } },
+      React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
+        onClick: () => { if (!card.leaving) void activate(card); },
+        onPointerEnter: enterStack, onPointerLeave: leaveStack, onFocus: enterStack, onBlur: leaveStack },
+        toastIcon(tone, status),
+        React.createElement('div', { className: 'dsh-notify-toast-body' },
+          React.createElement('span', { className: 'dsh-notify-toast-head' },
+            source ? React.createElement('span', { className: 'dsh-notify-toast-source', title: record.sessionId }, source) : null,
+            more > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-toast-more', 'aria-label': `展开其余 ${more} 条通知`, onClick: (event) => { event.stopPropagation(); enterStack(); } }, `+${more}`) : null),
+          React.createElement('strong', { className: 'dsh-notify-toast-title' }, record.title),
+          record.body ? React.createElement('p', { className: 'dsh-notify-toast-text' }, record.body) : null,
+          actionRow(card)),
+        React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); dismiss(record.eventId); } }, '\u00d7')));
+  };
+  const plans = toastStackPlan({ heights: cards.map((card) => heights.current.get(card.record.eventId) ?? 0), hovering });
+  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack',
+    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
+    cards.map((card, index) => cardView(card, index, plans[index] ?? { offsetY: 0, scale: 1, depth: 0 })));
 }
-/**
- * Human name for a session, resolved from the very summary the sidebar row renders
- * (`sessions.list.getSnapshot().byId[id].displayTitle`; blank rows have no title yet).
- * Falls back to a short id so a notification is never anonymous.
- */
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;
   try {
@@ -782,12 +609,6 @@ export function sessionLabel(sessions, sessionId) {
  * pending interaction is gone (answered in the composer, another browser or the official modal).
  * Never on an empty pending map alone — before the interaction arrives that means "not yet".
  */
-export function shouldCloseOpenToast({ toast, pendingInteraction, liveRecord, sawPending = false } = {}) {
-  if (!toast || toast.phase !== 'open') return false;
-  if (pendingInteraction) return false;
-  if (liveRecord && liveRecord.phase !== 'open') return true;
-  return Boolean(sawPending);
-}
 export function pendingInteractionFor(pending, sessionId) {
   if (!pending || typeof pending.get !== 'function' || typeof sessionId !== 'string') return null;
   return pending.get(sessionId) ?? null;
@@ -813,31 +634,6 @@ export function toastAnswer(record, interaction) {
 export function answerBatch(questionId, label) { return { answers: [{ id: questionId, selected: [label] }] }; }
 // Answering in the toast acknowledges, and the auto-close that follows would acknowledge again: one
 // record is acknowledged at most once per page session.
-const acknowledged = new Set();
-const acknowledgeRecord = async (record) => {
-  if (acknowledged.has(record.eventId)) { emitRecordsRead([record.eventId]); return; }
-  acknowledged.add(record.eventId);
-  const result = await fetchJson('/ack', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ eventId: record.eventId }) });
-  if (result?.ok !== true) { acknowledged.delete(record.eventId); throw new Error('ack failed'); }
-  // The Host appends a change for the ack, but waiting for the next poll left the bell showing an
-  // already-confirmed record as unread. Update the local copy the moment the Host confirms.
-  emitRecordsRead([record.eventId]);
-};
-const navigateRecord = (record, sessions) => {
-  if (!record?.localOnly) return navigateNotificationRecord(record, { sessions, acknowledge: acknowledgeRecord });
-  emitRecordsRead([record.eventId]);
-  return Promise.resolve({ status: 'acknowledged-local' });
-};
-function emitClearReset(result) {
-  const event = typeof CustomEvent === 'function' ? new CustomEvent(CLEAR_EVENT, { detail: result }) : { type: CLEAR_EVENT, detail: result };
-  globalThis.dispatchEvent?.(event);
-}
-/** Mark records read locally so the bell and the rows update without waiting for the next pull. */
-export function emitRecordsRead(eventIds) {
-  const detail = { eventIds };
-  globalThis.dispatchEvent?.(typeof CustomEvent === 'function' ? new CustomEvent(READ_EVENT, { detail }) : { type: READ_EVENT, detail });
-}
-/** Status-line tone for the settings dot: failures read red, degraded states amber, healthy green. */
 export function statusTone(text = '') {
   const value = String(text);
   if (/失败|错误/.test(value)) return 'error';
@@ -854,27 +650,18 @@ export function resultTone(status) {
 }
 const action = (label, onClick, extra = {}) => React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick, ...extra }, label);
 const hint = (children) => React.createElement('p', { className: 'dsh-notify-hint' }, children);
-export function NotificationSelfTests({ config = {}, preflight = {}, sessions, request = submitSelfTest } = {}) {
-  const [states, setStates] = React.useState({}); const [confirming, setConfirming] = React.useState(null);
-  const run = async (dimension, options = {}) => { setStates((old) => ({ ...old, [dimension]: { status: 'running' } })); try { const result = await request(dimension, { confirmed: true, ...options }); setStates((old) => ({ ...old, [dimension]: result })); } catch (error) { setStates((old) => ({ ...old, [dimension]: { status: 'failed', reason: error?.message || '自测失败' } })); } };
-  const resultView = (dimension) => { const value = states[dimension]; if (!value) return null; const observe = value.status === 'submitted' ? [action('我看到了', () => setStates((old) => ({ ...old, [dimension]: { ...old[dimension], humanObservation: 'seen' } }))), action('没有看到', () => setStates((old) => ({ ...old, [dimension]: { ...old[dimension], humanObservation: 'not-seen' } })))] : null; const cleanup = value.testRunId && ['a-history', 'navigation'].includes(dimension) ? action('清理此自测记录', async () => { try { await cleanupSelfTest(value.testRunId); setStates((old) => ({ ...old, [dimension]: { status: 'passed', reason: '仅此自测记录已清理' } })); } catch { setStates((old) => ({ ...old, [dimension]: { ...old[dimension], status: 'failed', reason: '自测记录清理失败' } })); } }) : null; return React.createElement('div', { className: 'dsh-notify-result-block' }, React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(value.status) }, `${value.status}: ${value.reason || ''}${value.humanObservation ? `；人工：${value.humanObservation}` : ''}`), (observe || cleanup) && React.createElement('div', { className: 'dsh-notify-actions' }, observe, cleanup)); };
-  const testCard = (id, title, target, button, onClick, disabled = false) => { const dimension = id.toLowerCase(); return React.createElement('article', { className: 'dsh-notify-test', 'aria-label': `${id} ${title}` }, React.createElement('div', { className: 'dsh-notify-test-head' }, React.createElement('span', { className: 'dsh-notify-test-badge', 'aria-hidden': true }, id), React.createElement('strong', { className: 'dsh-notify-test-title' }, title)), hint(target), React.createElement('div', { className: 'dsh-notify-actions' }, action(button, onClick, { disabled: disabled || states[dimension]?.status === 'running', 'aria-busy': states[dimension]?.status === 'running' })), resultView(dimension)); };
-  const confirm = (dimension, label, ready, options) => confirming === dimension
-    ? React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': `确认${label}` }, hint(`${label}会产生真实外发，submitted 不代表 seen。`), React.createElement('div', { className: 'dsh-notify-actions' }, action('确认发送', () => { setConfirming(null); void run(dimension, options); }), action('取消', () => setConfirming(null))))
-    : action(label, () => setConfirming(dimension), { disabled: !ready });
-  const current = sessions?.list?.getSnapshot?.().current;
-  return React.createElement('section', { className: 'dsh-notify-card', 'aria-label': '通知自测' }, React.createElement('h3', { className: 'dsh-notify-card-title' }, '自测'), hint('只剩页面里这一条通道。测试结果区分 submitted 与人工 seen，页面加载不会自动发送。'), React.createElement('div', { className: 'dsh-notify-tests' },
-    testCard('A', '页面里', '当前页面；无系统外发（会响提示音，窗口不在最前也响）', '测试页面浮层', () => { const record = createLocalSelfTestRecord(); publishLocalSelfTest(record); setStates((old) => ({ ...old, a: { status: 'passed', reason: '页面浮层已渲染；不代表真实事件 producer' } })); })),
-    React.createElement('details', { className: 'dsh-notify-details' }, React.createElement('summary', null, '高级自测'),
-      hint('A 持久历史只验证 Host→存储→当前页拉取；记录明确标为 a-only test，不代表真实事件 producer，且不会外发系统通知。'),
-      React.createElement('div', { className: 'dsh-notify-actions' }, action('添加页内自测记录', () => setConfirming('a-history')), action('开始导航与未读测试', () => void run('navigation', { sessionId: current }), { disabled: !validSessionId(current) }), action('检查历史存储', () => setConfirming('persistence-roundtrip'))),
-      confirming === 'a-history' && React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认添加页内自测记录' }, hint('将写入一条可单独清理的 A-only 自测历史。'), React.createElement('div', { className: 'dsh-notify-actions' }, action('确认写入自测历史', () => { setConfirming(null); void run('a-history'); }), action('取消', () => setConfirming(null)))),
-      confirming === 'persistence-roundtrip' && React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认检查历史存储' }, hint('将在专用命名空间写入、读回并删除随机值。'), React.createElement('div', { className: 'dsh-notify-actions' }, action('确认检查', () => { setConfirming(null); void run('persistence-roundtrip'); }), action('取消', () => setConfirming(null)))),
-      resultView('a-history'), resultView('navigation'), resultView('persistence-roundtrip'),
-      ));
+/** The one self-test that still means something: does a page-level toast actually appear here? */
+export function NotificationSelfTests() {
+  const [state, setState] = React.useState(null);
+  return React.createElement('section', { className: 'dsh-notify-card', 'aria-label': '通知自测' },
+    React.createElement('h3', { className: 'dsh-notify-card-title' }, '自测'),
+    hint('现在只有页面里这一条通道：右上角浮层 + 提示音 + 后台标签页闪动。按下按钮会立刻弹一张卡，不会外发任何系统通知。'),
+    React.createElement('div', { className: 'dsh-notify-actions' },
+      action('测试页面浮层', () => { publishLocalSelfTest(createLocalSelfTestRecord()); setState({ status: 'passed', reason: '页面浮层已渲染' }); })),
+    state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, `${state.status}: ${state.reason}`) : null);
 }
-function SettingsSection({ sessions }) {
-  const [config, setConfig] = React.useState(null); const [preflight, setPreflight] = React.useState({}); const [status, setStatus] = React.useState('正在加载…'); const [confirmClear, setConfirmClear] = React.useState(false);
+function SettingsSection() {
+  const [config, setConfig] = React.useState(null); const [status, setStatus] = React.useState('正在加载…');
   const [customSounds, setCustomSounds] = React.useState([]); const [soundNotice, setSoundNotice] = React.useState(null);
   const loadSounds = () => fetchJson('/sounds').then((value) => setCustomSounds(Array.isArray(value?.custom) ? value.custom : [])).catch(() => setCustomSounds([]));
   const uploadSound = async (file) => {
@@ -891,27 +678,26 @@ function SettingsSection({ sessions }) {
     await loadSounds();
   };
   // Every button in this card must answer in the card itself: the section-level status line sits far
-  // above the buttons, so clicking used to look like nothing happened at all.
-  React.useEffect(() => { Promise.all([fetchJson('/config'), fetchJson('/self-test/preflight')]).then(([value, checks]) => { setConfig(value); setPreflight(checks); setToastConfig(value ?? {}); setStatus(value.persist?.persist === 'disabled' ? '持久化未配置' : '通知已连接'); }).catch(() => setStatus('通知同步不可用')); void loadSounds(); }, []);
+  // above them, so a click used to look like nothing happened at all.
+  React.useEffect(() => {
+    fetchJson('/config').then((value) => {
+      setConfig(value); setToastConfig(value ?? {});
+      setStatus(value?.storage?.preferences === 'session' ? '通知已连接（设置不落盘）' : '通知已连接');
+    }).catch(() => setStatus('通知同步不可用'));
+    void loadSounds();
+  }, []);
   const update = async (patch) => { setToastConfig(patch); try { const next = await fetchJson('/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }); setConfig(next); setStatus('设置已保存'); } catch { setStatus('设置保存失败'); } };
-  const clear = async () => { try { const result = await clearNotificationHistory({ confirmed: true, onReset: emitClearReset }); setConfirmClear(false); setStatus(result.status === 'cleared' ? '通知历史已清空' : status); } catch { setStatus('清空失败，历史记录保持不变'); } };
   return React.createElement('section', { className: 'dsh-notify-settings', 'aria-label': '通知设置' },
     React.createElement('h2', { className: 'dsh-notify-heading' }, '通知'),
     React.createElement('p', { className: 'dsh-notify-status', role: 'status', 'data-tone': statusTone(status) }, status),
     config && React.createElement('div', { className: 'dsh-notify-card' },
       React.createElement('h3', { className: 'dsh-notify-card-title' }, '提示通道'),
-      React.createElement('label', { className: 'dsh-notify-field' }, React.createElement('span', null, '已读通知保留'),
-        React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '已读通知保留', value: String(config.readRetentionDays ?? 0), onChange: (event) => update({ readRetentionDays: Number(event.target.value) }) },
-          React.createElement('option', { value: '0' }, '一直保留（默认）'),
-          React.createElement('option', { value: '1' }, '已读 1 天后隐藏'),
-          React.createElement('option', { value: '7' }, '已读 7 天后隐藏'),
-          React.createElement('option', { value: '30' }, '已读 30 天后隐藏'))),
-      hint('只影响「已读」列表的显示；主机侧仍按容量上限自动淘汰最早的已读记录。'),
-      React.createElement('label', { className: 'dsh-notify-field' }, React.createElement('span', null, 'Toast位置'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': 'Toast位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（默认）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭（保留铃铛历史）'))),
-      hint('Toast 只是页内提示；关闭后铃铛未读与历史照常。'),
+      React.createElement('label', { className: 'dsh-notify-field' }, React.createElement('span', null, 'Toast位置'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': 'Toast位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（默认）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭（什么都不提示）'))),
+      hint('浮层只是页内提示。关掉之后不再弹卡、也不再闪动标签页——「任务完成时告诉我」这件事就没有别的通道了。'),
       React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked: Boolean(config.subtaskNotify), onChange: (event) => update({ subtaskNotify: event.target.checked }) }), React.createElement('span', null, '子任务 / 后台任务完成时通知')),
-      hint('默认关闭：每个子代理、后台任务结束都会各记一条（标题常常是命令原文），开久了会很乱。需要时再打开。')),
-    config && React.createElement(NotificationSelfTests, { config, preflight, sessions }),
+      hint('默认关闭：每个子代理、后台任务结束都会各弹一条（标题常常是命令原文），开久了会很乱。需要时再打开。'),
+      hint('不保存历史：卡片就是你看到的那一条，关掉即结束。页面没打开时发生的通知不会补发——这是去掉存储换来的简化。')),
+    config && React.createElement(NotificationSelfTests),
     config && React.createElement('div', { className: 'dsh-notify-card' },
       React.createElement('h3', { className: 'dsh-notify-card-title' }, '提示音'),
       React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked: config.soundEnabled !== false, onChange: (event) => update({ soundEnabled: event.target.checked }) }), React.createElement('span', null, '页内提示音（窗口不在最前也会响）')),
@@ -920,17 +706,13 @@ function SettingsSection({ sessions }) {
           BUILTIN_SOUNDS.map((id) => React.createElement('option', { key: id, value: id }, SOUND_LABELS[id] ?? id)),
           ...customSounds.map((sound) => React.createElement('option', { key: `custom:${sound.name}`, value: `custom:${sound.name}` }, `自定义：${sound.name}`)))),
       React.createElement('div', { className: 'dsh-notify-actions' },
-        React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick: () => { void soundPlayer.unlock().then((ok) => soundPlayer.play(config.sound || 'chime', { enabled: true })).then((result) => setSoundNotice(result?.reason === 'locked' ? '浏览器要求先点一下页面才能出声：请再点一次「试听」' : result?.played ? '已试听' : `没出声（${result?.reason || 'unknown'}）`)); } }, '试听'),
+        React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick: () => { void soundPlayer.unlock().then(() => soundPlayer.play(config.sound || 'chime', { enabled: true })).then((result) => setSoundNotice(result?.reason === 'locked' ? '浏览器要求先点一下页面才能出声：请再点一次「试听」' : result?.played ? '已试听' : `没出声（${result?.reason || 'unknown'}）`)); } }, '试听'),
         React.createElement('label', { className: 'dsh-notify-action', style: { cursor: 'pointer' } }, '上传声音…', React.createElement('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.wav,.ogg,.flac', style: { display: 'none' }, onChange: (event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSound(file); } }))),
       hint('窗口不在最前、标签在后台时也会响——这是「浏览器被别的应用挡住」时唯一能提醒你的方式。内置音由浏览器合成（不下载任何文件）；自定义音上传到本 profile 的数据目录，重装插件不会丢。上传上限 1 MB，仅支持 mp3 / m4a / aac / wav / ogg / flac。'),
       soundNotice ? React.createElement('p', { className: 'dsh-notify-result', role: 'status' }, soundNotice) : null,
-      customSounds.length > 0 && React.createElement('div', { className: 'dsh-notify-actions' }, customSounds.map((sound) => React.createElement('button', { key: sound.name, type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', onClick: () => void removeSound(sound.name) }, `删除 ${sound.name}`)))),
-    React.createElement('div', { className: 'dsh-notify-card' },
-      React.createElement('h3', { className: 'dsh-notify-card-title' }, '历史'),
-      hint('清空只删除 Host 历史与未读，不改变浏览器授权与推送订阅。'),
-      !confirmClear ? React.createElement('div', { className: 'dsh-notify-actions' }, action('清空通知历史', () => setConfirmClear(true), { 'data-variant': 'danger' })) : React.createElement('div', { className: 'dsh-notify-confirm', role: 'group', 'aria-label': '确认清空通知历史' }, hint('确认清空？'), React.createElement('div', { className: 'dsh-notify-actions' }, action('确认清空', clear), action('取消', () => setConfirmClear(false))))));
+      customSounds.length > 0 && React.createElement('div', { className: 'dsh-notify-actions' }, customSounds.map((sound) => React.createElement('button', { key: sound.name, type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', onClick: () => void removeSound(sound.name) }, `删除 ${sound.name}`)))));
 }
-export const CLIENT_COMPOSITION = Object.freeze({ service: 'slots', modules: Object.freeze(['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-sidebar', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general']), seats: Object.freeze(['sidebar.footer.action', 'settings.section', 'shell.overlay']) });
+export const CLIENT_COMPOSITION = Object.freeze({ service: 'slots', modules: Object.freeze(['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general']), seats: Object.freeze(['settings.section', 'shell.overlay']) });
 export function mountNotifyClient({ slots, sessions, getSessions, getUiSession } = {}) {
   const status = { service: slots?.inject && slots?.register ? 'available' : 'unavailable', seats: {} };
   if (status.service === 'unavailable') return { status, destroy() {} };
@@ -939,8 +721,6 @@ export function mountNotifyClient({ slots, sessions, getSessions, getUiSession }
   const pendingInteractions = () => getUiSession?.()?.pendingInteractions;
   const disposers = [installClientStyles(), installAudioUnlock()];
   const activate = (name, options, Component) => { status.seats[name] = 'active'; const dispose = slots.register({ name, ...options }, Component); return () => { status.seats[name] = 'waiting'; dispose?.(); }; };
-  status.seats['sidebar.footer.action'] = 'waiting';
-  try { disposers.push(slots.inject('sidebar.footer.action', () => activate('sidebar.footer.action', { id: 'dsh-notify-bell', order: 100, inject: () => ({ sessions: sessions ?? getSessions?.() }) }, BellAction))); } catch { status.seats['sidebar.footer.action'] = 'unavailable'; }
   status.seats['settings.section'] = 'waiting';
   try { disposers.push(slots.inject('settings.section', () => activate('settings.section', { id: 'dsh-notify', order: 100, label: '通知', inject: () => ({ sessions: sessions ?? getSessions?.() }) }, SettingsSection))); } catch { status.seats['settings.section'] = 'unavailable'; }
   status.seats['shell.overlay'] = 'waiting';

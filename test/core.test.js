@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CLEAR_DEDUPE_POLICY, EventReducer, MemoryDedupe, sanitizeBody, validateRequest } from '../src/core.js';
-import { layoutFor, toastPolicy } from '../src/client.js';
+import { EventReducer, RECORD_MEMORY, sanitizeBody, validateRequest } from '../src/core.js';
 
 test('approval merge uses asked id and request always advances waterfall', () => {
   const r = new EventReducer(() => 1); const a = r.approvalAsked({ id: 'a', title: 'x' }); const b = r.approvalAsked({ id: 'a', title: 'y' }); let next = 0;
@@ -27,21 +26,26 @@ test('a replayed ask leaves a resolved interaction resolved', () => {
   const r = new EventReducer(() => 1);
   const settled = r.approvalAsked({ id: 'a', toolName: 'Bash' }, 's');
   assert.equal(settled.phase, 'open');
-  r.settleRecord(settled.eventId, 'settled');
+  r.approvalDecided('a', 'allowed-once');
   assert.equal(r.approvalAsked({ id: 'a', toolName: 'Bash' }, 's'), null, 'a settled approval is not resurrected');
   assert.equal(settled.phase, 'settled');
   const expired = r.approvalAsked({ id: 'b', toolName: 'Bash' }, 's');
   r.expireOpenForSession('s');
   assert.equal(expired.phase, 'expired');
   assert.equal(r.approvalAsked({ id: 'b', toolName: 'Bash' }, 's'), null, 'an expired approval is not resurrected');
-  assert.equal(expired.phase, 'expired');
   // A still-open ask keeps its identity and takes the newest payload.
   const live = r.approvalAsked({ id: 'c', toolName: 'Bash' }, 's');
   const again = r.approvalAsked({ id: 'c', toolName: 'Read' }, 's');
   assert.equal(again, live); assert.equal(again.eventId, live.eventId); assert.equal(again.body, 'Read'); assert.equal(again.phase, 'open');
 });
-test('clear dedupe policy is epoch-scoped and reset pulls never deliver historical items', () => {
-  assert.equal(CLEAR_DEDUPE_POLICY.scope, 'epoch'); assert.equal(CLEAR_DEDUPE_POLICY.resetPullDelivers, false);
+test('the in-memory record map is bounded and never drops something that still waits on the user', () => {
+  let clock = 0;
+  const r = new EventReducer(() => (clock += 1));
+  const pending = r.question({ sessionId: 's', callId: 'keep-me', title: 'still asking' });
+  for (let n = 0; n < RECORD_MEMORY + 20; n += 1) r.turnEnd({ sessionId: 's', turn: n + 1, reason: 'completed' });
+  assert.ok(r.records.size <= RECORD_MEMORY + 1, `bounded: ${r.records.size}`);
+  assert.equal(r.records.get(pending.mergeKey), pending, 'an open interaction is never the one dropped');
+  assert.ok(r.records.size <= RECORD_MEMORY + 1);
 });
 test('auth csrf schema and endpoint SSRF safeguards reject unsafe input', () => {
   assert.equal(validateRequest({ authenticated: false, originOK: true }), 401); assert.equal(validateRequest({ authenticated: true, originOK: false }), 403); assert.equal(validateRequest({ authenticated: true, originOK: true, fields: { bad: 1 }, allowed: [] }), 400);

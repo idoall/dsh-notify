@@ -29,7 +29,7 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
         const live = { eventId: 'live', mergeKey: 'turn:live', kind: 'completed', sessionId: 's1', title: '任务完成', body: '新事件', at: 2, unread: true, phase: 'settled' };
         pulls += 1;
         // The store may pull more than once while mounting; every mount pull stays a silent reset.
-        return response(releaseLive ? { reset: false, epoch: 1, cursor: 2, items: [prime, live] } : { reset: true, epoch: 1, cursor: 1, items: [prime] });
+        return response(releaseLive ? { seq: 2, items: [prime, live] } : { seq: 1, items: [prime] });
       }
       return response({});
     },
@@ -82,8 +82,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
     // the page visible so the attention indicator never registers one of its own.
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
     fetch: async (url, init) => {
-      if (String(url).includes('/pull?')) return response(cursor === 1 ? { reset: true, epoch: 1, cursor, items: [earlier] } : { reset: false, epoch: 1, cursor, items: [earlier, record] });
-      if (String(url).includes('/ack')) { calls.push(`ack:${JSON.parse(init.body).eventId}`); return response({ ok: true }); }
+      if (String(url).includes('/pull?')) return response(cursor === 1 ? { seq: 1, items: [earlier] } : { seq: 2, items: [earlier, record] });
       return response({});
     },
   };
@@ -105,7 +104,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ pendingInteractions: observable }) });
   root = createRoot(document.getElementById('root'));
   const Overlay = components.get('shell.overlay');
-  const settle = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); }); };
+  const settle = async (ms = 30) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); }); };
   const toastNode = () => document.querySelector('aside[role="status"]');
   const answerCount = () => toastNode()?.querySelectorAll('.dsh-notify-toast-answer').length ?? 0;
   await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
@@ -120,8 +119,11 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   await act(async () => { publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q1', options: [{ label: '继续' }] }], answer: async () => {} }]])); });
   assert.equal(answerCount(), 2, 'answering from the toast is offered while it is pending');
   await act(async () => { publish(new Map()); }); await settle();
-  assert.equal(toastNode(), null, 'an answer given in the composer closes the toast');
-  assert.deepEqual(calls.filter((call) => call.startsWith('ack:')), ['ack:question:s1:call-9'], 'and it stops counting as unread, because it was handled');
+  assert.equal(Boolean(toastNode()), true, 'a card that is answered elsewhere first leaves its slot');
+  assert.equal(toastNode()?.getAttribute('data-leaving'), 'true', 'it slides out instead of vanishing');
+  await settle(260);
+  assert.equal(Boolean(toastNode()), false, 'an answer given in the composer closes the toast');
+  assert.deepEqual(calls, [], 'nothing is written and nothing navigates: the answer happened in the composer');
 
 });
 
@@ -140,7 +142,7 @@ test('an unanswered record never starves later toasts, and every record is toast
     addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url) => String(url).includes('/pull?') ? response({ reset: release ? false : true, epoch: 1, cursor: 1, items }) : response({}),
+    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: release ? 2 : 1, items: release ? items : [] }) : response({}),
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -169,139 +171,6 @@ test('an unanswered record never starves later toasts, and every record is toast
   assert.match(document.querySelector('aside.dsh-notify-toast').textContent, /任务完成/, 'the same record is not re-toasted by a later poll');
 });
 
-test('a record that still waits on the user can be dismissed without deleting it', async (t) => {
-  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' });
-  let root; let mounted; let pullTimer; let initial = true;
-  const calls = [];
-  let records = [
-    { eventId: 'q-open', mergeKey: 'question:open', kind: 'question', sessionId: 's1', title: '需要回复', body: '还在等你', at: Date.now(), unread: true, phase: 'open' },
-  ];
-  const values = {
-    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
-    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
-    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
-    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
-    setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url, init) => {
-      if (String(url).includes('/pull?')) { if (initial) { initial = false; return response({ reset: true, epoch: 1, cursor: 0, items: [] }); } return response({ reset: false, epoch: 1, cursor: 9, items: records }); }
-      if (String(url).includes('/settle')) { const id = JSON.parse(init.body).eventId; calls.push(['settle', id]); records = records.map((record) => record.eventId === id ? { ...record, phase: 'settled' } : record); return response({ ok: true, phase: 'settled' }); }
-      if (String(url).includes('/ack')) { calls.push(['ack', JSON.parse(init.body).eventId]); return response({ ok: true }); }
-      return response({});
-    },
-  };
-  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
-  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, value: false });
-  const components = new Map();
-  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, sessions: { binding: () => ({}), open: () => true, list: { getSnapshot: () => ({ current: 's1', byId: { s1: { id: 's1' } } }) } } });
-  root = createRoot(document.getElementById('root'));
-  const Bell = components.get('sidebar.footer.action');
-  await act(async () => { root.render(React.createElement(Bell, { ...components.get('sidebar.footer.action:props'), wide: true })); });
-  await act(async () => { await pullTimer(); });
-  const bell = () => document.querySelector('button[aria-label^="通知"]');
-  assert.match(bell().getAttribute('aria-label'), /1 条待处理/, 'the badge counts the open record');
-  await act(async () => { bell().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  const panel = () => document.querySelector('section[aria-label="通知历史"]');
-  const settle = () => panel().querySelector('.dsh-notify-history-settle');
-  assert.ok(settle(), 'an open record offers 已处理');
-  await act(async () => { settle().dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
-  assert.deepEqual(calls, [['settle', 'q-open']], 'it settles that record on the host instead of just marking it read');
-  assert.match(panel().textContent, /已不再计入待处理/);
-  await act(async () => { await pullTimer(); });
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
-  assert.equal(bell().getAttribute('aria-label'), '通知', 'and the badge clears');
-  assert.equal(panel().querySelector('.dsh-notify-history-settle'), null, 'the row no longer offers it');
-});
-
-test('the panel splits pending from history, deletes a selection, and clears everything', async (t) => {
-  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true;
-  const calls = []; let records = [];
-  const values = {
-    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
-    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
-    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
-    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
-    setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url, init) => {
-      if (String(url).includes('/pull?')) { if (initial) { initial = false; return response({ reset: true, epoch: 1, cursor: 0, items: [] }); } return response({ reset: false, epoch: 1, cursor: 4, items: records }); }
-      if (String(url).includes('/delete')) { const body = JSON.parse(init.body); calls.push(['delete', body.eventIds]); const drop = new Set(body.eventIds); records = records.filter((record) => !drop.has(record.eventId)); return response({ ok: true, reset: true, epoch: 2, cursor: 0, removed: body.eventIds.length, requested: body.eventIds.length, items: records }); }
-      if (String(url).includes('/clear')) { calls.push(['clear']); records = []; return response({ ok: true, reset: true, epoch: 3, cursor: 0, items: [] }); }
-      if (String(url).includes('/ack')) { const id = JSON.parse(init.body).eventId; calls.push(['ack', id]); records = records.map((record) => record.eventId === id ? { ...record, unread: false } : record); return response({ ok: true }); }
-      if (String(url).includes('/settle')) { const id = JSON.parse(init.body).eventId; calls.push(['settle', id]); records = records.map((record) => record.eventId === id ? { ...record, phase: 'settled' } : record); return response({ ok: true, phase: 'settled' }); }
-      return response({});
-    },
-  };
-  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
-
-  const components = new Map();
-  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, sessions: { binding: () => ({}), open: () => true, list: { getSnapshot: () => ({ current: 's1' }) } } });
-  root = createRoot(document.getElementById('root'));
-  const Bell = components.get('sidebar.footer.action');
-  await act(async () => { root.render(React.createElement(Bell, { ...components.get('sidebar.footer.action:props'), wide: true })); });
-  records = [
-    { eventId: 'e1', mergeKey: 'question:1', kind: 'question', sessionId: 's1', title: '需要回复', body: '第一条', at: Date.now() - 120000, unread: true, phase: 'open' },
-    { eventId: 'e2', mergeKey: 'question:2', kind: 'question', sessionId: 's1', title: '需要回复', body: '第二条', at: Date.now() - 60000, unread: true, phase: 'open' },
-    { eventId: 'e3', mergeKey: 'turn:3', kind: 'completed', sessionId: 's1', title: '任务完成', body: '第三条', at: Date.now(), unread: false, phase: 'settled' },
-  ];
-  await act(async () => { await pullTimer(); });
-  const bell = document.querySelector('button[aria-label^="通知"]');
-  await act(async () => { bell.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  const panel = () => document.querySelector('section[aria-label="通知历史"]');
-  const buttonIn = (text) => [...panel().querySelectorAll('button')].find((node) => node.textContent.includes(text));
-  const rows = () => [...panel().querySelectorAll('.dsh-notify-history-row')];
-  const tab = (name) => [...panel().querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith(name));
-
-  assert.match(panel().textContent, /待处理 2/); assert.match(panel().textContent, /历史 1/);
-  assert.equal(rows().length, 2, 'the pending tab shows only records still waiting on the user');
-  await act(async () => { rows()[0].querySelector('.dsh-notify-history-open').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, [['ack', 'e2'], ['settle', 'e2']], 'clicking marks it seen, and settles a record whose interaction this page no longer holds');
-  // It must fade in place instead of jumping out of the list the user is reading.
-  assert.equal(rows().length, 2, 'the confirmed row stays where it was until the next fetch');
-  assert.equal(rows()[0].getAttribute('data-read'), 'true', 'and it now reads as read: 二级边框 + 二级字色');
-  assert.equal(rows()[1].getAttribute('data-read'), 'false', 'the untouched row keeps the strong unread border');
-  await act(async () => { await pullTimer(); });   // a background poll must not re-order the list
-  await act(async () => { await pullTimer(); });
-  assert.equal(rows().length, 2, 'even after several polls the handled row stays put until the user reopens the list');
-  // Reopening is the moment the list is allowed to regroup.
-  await act(async () => { panel().querySelector('button[aria-label="关闭通知历史"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  await act(async () => { document.querySelector('button[aria-label^="通知"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 1, 'after the settle only the untouched question is still pending');
-  await act(async () => { tab('历史').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 2, 'the settled question joined the finished task'); assert.match(panel().textContent, /第三条/);
-
-  await act(async () => { tab('待处理').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(rows().length, 1, 'only the untouched question is still waiting');
-  assert.equal(panel().querySelectorAll('input[type="checkbox"]').length, 0, 'no checkboxes until the user asks to select');
-  assert.equal(buttonIn('全部删除'), undefined, 'the destructive action is not the default one');
-  assert.equal(buttonIn('删除选中'), undefined);
-  assert.ok(buttonIn('选择…'));
-  await act(async () => { buttonIn('选择…').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  const boxes = () => [...panel().querySelectorAll('input[type="checkbox"]')];
-  assert.equal(buttonIn('删除选中').disabled, true, 'nothing selected means nothing to delete');
-  await act(async () => { boxes()[0].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(buttonIn('删除选中（1）').disabled, false);
-  await act(async () => { buttonIn('删除选中（1）').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.match(panel().textContent, /将删除选中的 1 条通知/);
-  await act(async () => { buttonIn('确认删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  const deletes = calls.filter((call) => call[0] === 'delete');
-  assert.equal(deletes.length, 1); assert.deepEqual(deletes[0][1], ['e1'], 'exactly the checked record is deleted by eventId');
-  assert.match(panel().textContent, /已删除 1 条通知/);
-  assert.equal(rows().length, 0, 'nothing is waiting any more');
-
-  await act(async () => { buttonIn('全部删除').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.match(panel().textContent, /将清空 Host 上的全部通知历史/);
-  await act(async () => { buttonIn('确认清空').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls.at(-1), ['clear']);
-  assert.match(panel().textContent, /通知历史已清空/);
-  assert.equal(document.querySelector('aside[role="status"]'), null, 'a reset must not re-toast a surviving record');
-});
-
 test('a pending question can be answered straight from the toast and stays in sync with the composer', async (t) => {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true; let pulls = 0;
   const answered = []; const calls = [];
@@ -318,8 +187,7 @@ test('a pending question can be answered straight from the toast and stays in sy
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
     fetch: async (url) => {
-      if (String(url).includes('/pull?')) { if (initial) { initial = false; return response({ reset: true, epoch: 1, cursor: 0, items: [] }); } pulls += 1; return response({ reset: false, epoch: 1, cursor: 9, items: pulls === 1 ? [earlier] : [earlier, questionRecord] }); }
-      if (String(url).includes('/ack')) { calls.push('ack'); return response({ ok: true }); }
+      if (String(url).includes('/pull?')) { if (initial) { initial = false; return response({ seq: 0, items: [] }); } pulls += 1; return response({ seq: 9, items: pulls === 1 ? [earlier] : [earlier, questionRecord] }); }
       return response({});
     },
   };
@@ -333,8 +201,8 @@ test('a pending question can be answered straight from the toast and stays in sy
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
   mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ pendingInteractions: observable }) });
   root = createRoot(document.getElementById('root'));
-  const Overlay = components.get('shell.overlay'); const Bell = components.get('sidebar.footer.action');
-  await act(async () => { root.render(React.createElement(React.Fragment, null, React.createElement(Bell, { ...components.get('sidebar.footer.action:props'), wide: true }), React.createElement(Overlay, components.get('shell.overlay:props')))); });
+  const Overlay = components.get('shell.overlay');
+  await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
   await act(async () => { await pullTimer(); }); await act(async () => { await pullTimer(); });
   let toast = document.querySelector('aside[role="status"]'); assert.ok(toast); assert.match(toast.textContent, /需要回复/);
   assert.equal(toast.querySelector('.dsh-notify-toast-source')?.textContent, '通知插件改造', 'the toast says which session it came from');
@@ -351,23 +219,22 @@ test('a pending question can be answered straight from the toast and stays in sy
 
   await act(async () => { [...toast.querySelectorAll('.dsh-notify-toast-answer')].find((node) => node.textContent === '批准').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
   assert.deepEqual(answered, [{ answers: [{ id: 'q1', selected: ['批准'] }] }], 'answering resolves the same PendingQuestion the composer renders');
-  assert.deepEqual(calls, ['ack'], 'the record is acknowledged, and answering never navigates away');
-  assert.equal(document.querySelector('aside[role="status"]'), null, 'the toast closes once answered');
+  assert.deepEqual(calls, [], 'answering happens in the page: it never navigates away');
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1200)); });
+  const remaining = [...document.querySelectorAll('aside[role="status"]')].map((node) => node.textContent);
+  assert.equal(remaining.length, 1, 'the answered card leaves its slot');
+  assert.match(remaining[0], /任务完成/, 'the stack keeps the other notification: the question card is the one that went');
 
-  // A response published by the composer (not by us) leaves nothing to answer here.
+  // A multi-question batch is never half-answered from a 360px card: the session keeps it.
   await act(async () => { publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q2', options: [{ label: 'ok' }] }, { id: 'q3', options: [{ label: 'ok' }] }], answer: async () => {} }]])); });
-  await act(async () => { globalThis.dispatchEvent(new dom.window.Event('dsh-notify:open-history')); });
-  const list = document.querySelector('[role="dialog"][aria-label="通知历史"]'); assert.ok(list);
-  await act(async () => { globalThis.dispatchEvent(new dom.window.Event('dsh-notify:open-history')); });
-  const still = document.querySelector('[role="dialog"][aria-label="通知历史"]');
-  assert.ok(still, 'two questions cannot be answered from a toast; the session keeps them');
+  assert.equal(document.querySelectorAll('.dsh-notify-toast-answer').length, 0, 'a card that cannot be answered from here offers no fake options');
 });
 
-test('clicking a toast jumps to its session; only a failed jump falls back to the history list', async (t) => {
+test('clicking a card opens its session and retires the card, with no history list to fall back to', async (t) => {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer; let initial = true; let pulls = 0;
   const calls = []; let bound = true; let current = 'other-session';
-  const earlier = { eventId: 'turn:real:8', mergeKey: 'turn:real:8', kind: 'completed', sessionId: 'other-session', title: '任务完成', body: '更早的一条', at: 8, unread: true, phase: 'settled' };
-  const record = { eventId: 'turn:real:9', mergeKey: 'turn:real:9', kind: 'completed', sessionId: 'target-session', title: '任务完成', body: '在别的会话里', at: 9, unread: true, phase: 'settled' };
+  const earlier = { eventId: 'turn:real:8', mergeKey: 'turn:real:8', kind: 'completed', sessionId: 'other-session', title: '任务完成', body: '更早的一条', at: 8, phase: 'settled' };
+  const record = { eventId: 'turn:real:9', mergeKey: 'turn:real:9', kind: 'completed', sessionId: 'target-session', title: '任务完成', body: '在别的会话里', at: 9, phase: 'settled' };
   const values = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
     Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
@@ -375,13 +242,10 @@ test('clicking a toast jumps to its session; only a failed jump falls back to th
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
     fetch: async (url) => {
-      if (String(url).includes('/pull?')) {
-        if (initial) { initial = false; return response({ reset: true, epoch: 1, cursor: 0, items: [] }); }
-        pulls += 1;
-        return response({ reset: false, epoch: 1, cursor: 9, items: pulls === 1 ? [earlier] : [earlier, record] });
-      }
-      if (String(url).includes('/ack')) { calls.push('ack'); return response({ ok: true }); }
-      return response({});
+      if (!String(url).includes('/pull?')) return response({});
+      if (initial) { initial = false; return response({ seq: 0, items: [] }); }
+      pulls += 1;
+      return response({ seq: 9, items: pulls === 1 ? [earlier] : [earlier, record] });
     },
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -390,67 +254,28 @@ test('clicking a toast jumps to its session; only a failed jump falls back to th
 
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
   const sessions = { binding: (id) => bound && id === 'target-session' ? {} : undefined, open: (id) => { calls.push(`open:${id}`); current = id; return true; }, list: { getSnapshot: () => ({ current }) } };
-  const components = new Map(); let overlayProps; let bellProps;
+  const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
   mounted = mountNotifyClient({ slots, sessions });
   root = createRoot(document.getElementById('root'));
-  overlayProps = components.get('shell.overlay:props'); bellProps = components.get('sidebar.footer.action:props');
   const Overlay = components.get('shell.overlay');
-  const Bell = components.get('sidebar.footer.action');
-  await act(async () => { root.render(React.createElement(React.Fragment, null, React.createElement(Bell, { ...bellProps, wide: true }), React.createElement(Overlay, overlayProps))); });
-  await act(async () => { await pullTimer(); });   // the first non-local record only primes lastEvent
-  await act(async () => { await pullTimer(); });   // the next one is a live event and must toast
+  await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
+  await act(async () => { await pullTimer(); });   // the first delivered batch is history: it primes silently
+  await act(async () => { await pullTimer(); });   // the next one is live and must be presented
   const toast = document.querySelector('aside[role="status"]');
-  assert.ok(toast, 'a record arriving after load is presented as a toast');
+  assert.ok(toast, 'a record arriving after load is presented as a card');
   await act(async () => { toast.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, ['open:target-session', 'ack'], 'the toast jumps straight to its session and acknowledges it');
-  assert.equal(document.querySelector('[role="dialog"][aria-label="通知历史"]'), null, 'a successful jump must not dump the user into the notification list');
+  assert.deepEqual(calls, ['open:target-session'], 'the card jumps straight to its session and writes nothing');
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 260)); });
+  const left = [...document.querySelectorAll('aside[role="status"]')].map((node) => node.querySelector('.dsh-notify-toast-source')?.textContent);
+  assert.equal(left.includes('target-session'), false, 'the card that was clicked retires, and the other one stays');
+  assert.equal(document.querySelector('[role="dialog"]'), null, 'nothing opens a panel: there is no history list any more');
 
   bound = false; calls.length = 0;
   await act(async () => { globalThis.dispatchEvent(new dom.window.Event('dsh-notify:open-history')); });
-  const list = document.querySelector('[role="dialog"][aria-label="通知历史"]');
-  assert.ok(list, 'the bell remains the way into the list');
-  await act(async () => { [...list.querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith('历史')).dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  const item = [...list.querySelectorAll('button')].find((node) => node.textContent.includes('任务完成'));
-  await act(async () => { item.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, [], 'an unbound session cannot be navigated to, and nothing is acknowledged by guesswork');
-  assert.ok(document.querySelector('[role="dialog"][aria-label="通知历史"]'), 'the list stays open so the user is never dropped nowhere');
+  assert.equal(document.querySelector('[role="dialog"]'), null, 'the old history event is inert');
 });
 
-test('the browser channel is gone: no permission prompt, no test banner, no second self-test card', async (t) => {
-  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted;
-  const asked = [];
-  class FakeNotification { constructor() { asked.push('banner'); } }
-  Object.defineProperty(FakeNotification, 'permission', { configurable: true, get: () => 'default' });
-  FakeNotification.requestPermission = async () => { asked.push('permission'); return 'granted'; };
-  const values = {
-    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
-    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
-    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
-    innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true, isSecureContext: true, Notification: FakeNotification,
-    fetch: async (url) => String(url).includes('/self-test/preflight') ? response({ persist: {} }) : String(url).includes('/sounds') ? response({ custom: [] }) : response({ toastPosition: 'conversation', toastEnabled: true, subtaskNotify: false, soundEnabled: true, sound: 'chime', readRetentionDays: 0 }),
-  };
-  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
-
-  const components = new Map();
-  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots });
-  root = createRoot(document.getElementById('root'));
-  await act(async () => { root.render(React.createElement(components.get('settings.section'), { sessions: {} })); });
-  for (let i = 0; i < 60 && !document.querySelector('.dsh-notify-card'); i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
-
-  const titles = [...document.querySelectorAll('.dsh-notify-card-title')].map((node) => node.textContent);
-  assert.deepEqual(titles, ['提示通道', '自测', '提示音', '历史'], 'only the in-page channel remains');
-  assert.equal([...document.querySelectorAll('.dsh-notify-test')].map((node) => node.getAttribute('aria-label')).join('|'), 'A 页面里', 'the self-test has a single card now');
-  const buttons = [...document.querySelectorAll('button')].map((node) => node.textContent);
-  assert.equal(buttons.some((text) => text.includes('授权此浏览器系统通知')), false);
-  assert.equal(buttons.some((text) => text.includes('发送一条测试通知')), false);
-  assert.deepEqual(asked, [], 'nothing asks for the Notification permission any more');
-  assert.equal(document.body.textContent.includes('浏览器系统通知'), false);
-  assert.match(document.querySelector('.dsh-notify-card').textContent, /已读通知保留/, 'the surviving settings card keeps its own rows');
-});
 test('in-page toast anchors to the conversation column and the 关闭 option removes it without touching history', async (t) => {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted;
   const values = {
@@ -458,7 +283,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
     Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
     addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
-    fetch: async (url) => String(url).includes('/pull?') ? response({ reset: false, epoch: 1, cursor: 0, items: [] }) : response({}),
+    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: 0, items: [] }) : response({}),
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -473,125 +298,229 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   await act(async () => { root.render(React.createElement(components.get('shell.overlay'))); });
 
   const fire = async (eventId) => { await act(async () => { publishLocalSelfTest({ eventId, localOnly: true, kind: 'completed', title: '任务完成', body: '自检' }); }); };
+  const stack = () => document.querySelector('.dsh-notify-stack');
   await fire('anchor-check'); const toast = document.querySelector('aside[role="status"]');
-  assert.ok(toast); assert.equal(toast.style.insetInlineEnd, '340px'); assert.match(toast.textContent, /任务完成/);
+  assert.ok(toast); assert.equal(stack().style.insetInlineEnd, '340px', 'the stack container carries the anchor');
+  assert.match(toast.textContent, /任务完成/);
   assert.equal(toast.dataset.tone, 'success', 'a completed toast carries its tone for the icon/accent colour');
   assert.ok(toast.querySelector('.dsh-notify-toast-icon'), 'react-toastify-style per-result icon');
-  const progress = toast.querySelector('.dsh-notify-toast-progress');
-  assert.ok(progress, 'timed toasts expose a progress bar'); assert.equal(progress.style.animationDuration, '6000ms');
-  assert.equal(progress.style.animationPlayState, 'running');
+  assert.equal(toast.querySelector('.dsh-notify-toast-progress'), null, 'a toast carries no countdown: nothing expires on a clock');
   await act(async () => { toast.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true })); });
-  assert.equal(document.querySelector('.dsh-notify-toast-progress').style.animationPlayState, 'paused', 'hovering pauses both the timer and the bar');
+  assert.equal(document.querySelector('aside[role="status"]'), toast, 'hovering keeps the card where it is');
   const closer = toast.querySelector('button[aria-label="关闭通知"]');
   assert.ok(closer, 'the toast must be closable from its own top-right corner');
   await act(async () => { closer.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); });
-  assert.equal(document.querySelector('aside[role="status"]'), null, 'closing dismisses the toast');
+  assert.equal(document.querySelector('aside[role="status"]')?.getAttribute('data-leaving'), 'true', 'closing starts the slide-out');
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 260)); });
+  assert.equal(Boolean(document.querySelector('aside[role="status"]')), false, 'closing dismisses the toast');
   assert.equal(document.querySelector('[role="dialog"]'), null, 'closing must not open the history panel');
 
   setToastConfig({ toastPosition: 'off' }); await fire('off-check');
-  assert.equal(document.querySelector('aside[role="status"]'), null, '关闭（保留铃铛历史）must stop the in-page toast');
+  assert.equal(Boolean(document.querySelector('aside[role="status"]')), false, '关闭（保留铃铛历史）must stop the in-page toast');
   setToastConfig({ toastPosition: 'viewport' }); await fire('viewport-check');
   const viewportToast = document.querySelector('aside[role="status"]');
-  assert.ok(viewportToast, 'the off switch must not latch'); assert.equal(viewportToast.style.insetInlineEnd, '16px');
+  assert.ok(viewportToast, 'the off switch must not latch'); assert.equal(stack().style.insetInlineEnd, '16px');
 });
 
-test('official slot component contract mounts a real clickable bell and accessible history dialog', async (t) => {
-  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted;
+/**
+ * Mount only the toast seat against a host whose record list the test drives by hand, so a burst can
+ * be delivered one poll at a time. Cards are addressed in DOM order, which is newest first.
+ */
+async function mountStackSandbox(t, { host = 'live' } = {}) {
+  const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
+  let root; let mounted; let pullTimer; let primed = false; let feed = [];
+  const listeners = new Set(); let pendingMap = new Map();
+  const observable = { getSnapshot: () => pendingMap, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); } };
   const values = {
-    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent, KeyboardEvent: dom.window.KeyboardEvent,
+    window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
+    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
     addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
-    fetch: async (url) => String(url).includes('/pull?') ? response({ reset: false, epoch: 1, cursor: 0, items: [] }) : response({}),
-  };
-  const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
-
-  const components = new Map();
-  const slots = {
-    inject(_name, callback) { const dispose = callback(); return () => dispose?.(); },
-    register(options, Component) { components.set(options.name, Component); return () => components.delete(options.name); },
-  };
-  mounted = mountNotifyClient({ slots });
-  const Bell = components.get('sidebar.footer.action');
-  assert.equal(typeof Bell, 'function');
-  root = createRoot(document.getElementById('root'));
-  await act(async () => { root.render(React.createElement(Bell, { wide: true })); });
-
-  const button = document.querySelector('button[aria-label="通知"]');
-  assert.ok(button); assert.equal(button.getAttribute('aria-expanded'), 'false');
-  assert.equal(button.style.flex, '1 1 100%', 'a full-line basis makes the bell wrap onto its own row instead of sharing dsh-mobile 移动访问');
-  assert.equal(button.style.width, '', 'a 100% basis collapses the bell to zero width in the shared action row');
-  assert.match(button.style.margin, /^4px 0(px)?$/); assert.equal(button.style.borderRadius, '12px'); assert.equal(button.style.justifyContent, 'flex-start');
-  assert.ok(button.classList.contains('dsh-notify-bell'), 'the :has() row override needs a stable hook class');
-  const rowStyle = document.head.querySelector('style[data-plugin="dsh-notify"]');
-  assert.ok(rowStyle, 'the shared footer row must be allowed to wrap'); assert.match(rowStyle.textContent, /footerActions/); assert.match(rowStyle.textContent, /:has\(\.dsh-notify-bell\)/); assert.match(rowStyle.textContent, /flex-wrap:\s*wrap/);
-  await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.equal(button.getAttribute('aria-expanded'), 'true');
-  const dialog = document.querySelector('[role="dialog"][aria-label="通知历史"]');
-  const panel = dialog?.querySelector('section[aria-label="通知历史"]');
-  assert.ok(dialog); assert.equal(dialog.getAttribute('aria-modal'), 'true'); assert.ok(panel); assert.equal(panel.parentElement, dialog); assert.equal(panel.style.position, 'fixed'); assert.equal(panel.style.insetInlineEnd, '16px'); assert.equal(panel.style.bottom, '72px'); assert.match(panel.style.width, /360px/); assert.match(panel.style.width, /100vw - 32px/); assert.equal(panel.style.boxSizing, 'border-box'); assert.match(panel.textContent, /通知历史/); assert.match(panel.textContent, /没有等你处理的通知/);
-  assert.equal([...dialog.childNodes].filter((node) => node.nodeType === 1).length, 1, 'dialog content belongs inside its styled panel');
-
-  await act(async () => { dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
-  assert.equal(document.querySelector('[role="dialog"]'), null); assert.equal(document.activeElement, button);
-
-  globalThis.innerWidth = 390;
-  await act(async () => { dispatchEvent(new Event('dsh-notify:open-history')); });
-  const narrowDialog = document.querySelector('[role="dialog"][aria-label="通知历史"]');
-  const narrowPanel = narrowDialog?.querySelector('section[aria-label="通知历史"]');
-  assert.ok(narrowDialog, 'cross-seat toast event opens the same history state'); assert.ok(narrowPanel);
-  assert.equal(narrowDialog.style.display, 'flex'); assert.equal(narrowDialog.style.alignItems, 'center'); assert.equal(narrowDialog.style.justifyContent, 'center'); assert.equal(narrowDialog.style.boxSizing, 'border-box'); assert.equal(narrowDialog.style.paddingInline, '12px'); assert.match(narrowDialog.style.paddingBlockEnd, /10dvh/);
-  assert.equal(narrowPanel.style.position, 'relative'); assert.equal(narrowPanel.style.insetInlineEnd, ''); assert.equal(narrowPanel.style.bottom, ''); assert.equal(narrowPanel.style.width, '100%'); assert.equal(narrowPanel.style.minWidth, '0'); assert.equal(narrowPanel.style.boxSizing, 'border-box'); assert.equal(narrowPanel.style.maxHeight, '100%', 'the panel is capped by its flex container, which already excludes the safe-area paddings (a dvh guess overflowed the top on a phone)'); assert.equal(narrowPanel.style.overflow, 'auto'); assert.match(narrowPanel.textContent, /没有等你处理的通知/);
-});
-
-test('invalid navigation and ack failure preserve unread until authoritative ack pull', async (t) => {
-  const dom = new JSDOM('<!doctype html><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted; let pullTimer;
-  let current; let initial = true; let cursor = 3; const pending = [];
-  const records = [
-    { eventId: 'missing', sessionId: 'missing-session', title: '无效目标', body: '保留未读', at: 3, unread: true, phase: 'settled' },
-    { eventId: 'ack-fail', sessionId: 'session-fail', title: '确认失败', body: '保留未读', at: 2, unread: true, phase: 'settled' },
-    { eventId: 'success', sessionId: 'session-ok', title: '有效目标', body: '确认已读', at: 1, unread: true, phase: 'settled' },
-  ];
-  const calls = []; const values = {
-    window: dom.window, document: dom.window.document, navigator: dom.window.navigator,
-    Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent, KeyboardEvent: dom.window.KeyboardEvent,
-    addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window), innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url, init) => {
-      if (String(url).includes('/pull?')) { const items = initial ? records : pending.splice(0); const reset = initial; initial = false; return response({ reset, epoch: 1, cursor, items }); }
-      const eventId = JSON.parse(init.body).eventId; calls.push(eventId);
-      if (eventId === 'ack-fail') return { ok: false, status: 500 };
-      const record = records.find((item) => item.eventId === eventId); record.unread = false; cursor += 1; pending.push({ ...record }); return response({ ok: true });
+    fetch: async (url) => {
+      if (!String(url).includes('/pull?')) return response({ ok: true });
+      if (!primed) { primed = true; return response(host === 'legacy' ? { epoch: 1, cursor: 0, reset: true, items: [] } : { seq: 0, items: [] }); }
+      // 'legacy': the pre-buffer host answers the old cursor protocol and re-sends everything, with no
+      // sequence to advance. 'duplicate': a host whose sequence never moves, so it repeats itself too.
+      // Either way the records come back as FRESH objects, exactly as a JSON round trip delivers them:
+      // a shared reference would hide the difference between "the same notification again" and "the
+      // host settled it", which is the whole point of these two tests.
+      const items = feed.map((record) => JSON.parse(JSON.stringify(record)));
+      if (host === 'legacy') return response({ epoch: 1, cursor: 9, reset: true, items });
+      return response({ seq: host === 'duplicate' ? 0 : feed.length, items });
     },
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  const hidden = { value: false };
+  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, get: () => hidden.value });
+  const title = { value: 'DeepSeek Harness' };
+  Object.defineProperty(dom.window.document, 'title', { configurable: true, get: () => title.value, set: (next) => { title.value = next; } });
+  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  const components = new Map();
+  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
+  mounted = mountNotifyClient({ slots, getUiSession: () => ({ pendingInteractions: observable }) });
+  root = createRoot(document.getElementById('root'));
+  const wait = async (ms) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); }); };
+  await act(async () => { root.render(React.createElement(components.get('shell.overlay'), components.get('shell.overlay:props'))); });
+  await wait(30);
+  const nodes = () => [...document.querySelectorAll('aside[role="status"]')];
+  const slotsOf = () => [...document.querySelectorAll('.dsh-notify-slot')];
+  return {
+    push: (record) => { feed = [...feed, record]; },
+    setHidden: async (value) => { hidden.value = value; await act(async () => { document.dispatchEvent(new dom.window.Event('visibilitychange')); }); },
+    publish: (next) => { pendingMap = next; for (const listener of listeners) listener(); },
+    tick: async () => { await act(async () => { await pullTimer(); }); await wait(20); },
+    wait,
+    nodes,
+    count: () => nodes().length,
+    titles: () => nodes().map((node) => node.querySelector('.dsh-notify-toast-title')?.textContent),
+    transforms: () => slotsOf().map((node) => node.style.transform),
+    statuses: () => nodes().map((node) => node.getAttribute('data-status')),
+    answers: (index = 0) => [...nodes()[index].querySelectorAll('.dsh-notify-toast-answer')],
+    closer: (index = 0) => nodes()[index].querySelector('button[aria-label="关闭通知"]'),
+    click: async (target) => { await act(async () => { target.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); }); },
+    press: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); }); },
+    hover: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.Event('pointerover', { bubbles: true })); }); },
+    leave: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.Event('pointerout', { bubbles: true })); }); },
+    tabTitle: () => title.value,
+  };
+}
 
-  const sessions = { binding: (id) => id === 'session-fail' || id === 'session-ok' ? {} : undefined, open(id) { current = id; }, list: { getSnapshot: () => ({ current }) } };
-  let Bell; let bellProps;
-  const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.name === 'sidebar.footer.action') { Bell = Component; bellProps = options.inject(); } return () => {}; } };
-  mounted = mountNotifyClient({ slots, sessions }); root = createRoot(document.getElementById('root'));
-  await act(async () => { root.render(React.createElement(Bell, { ...bellProps, wide: true })); });
-  const bell = document.querySelector('button[aria-label^="通知"]'); assert.equal(bell.getAttribute('aria-label'), '通知', 'finished work never inflates the badge');
-  await act(async () => { bell.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  const historyTab = () => [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.startsWith('历史'));
-  await act(async () => { historyTab().dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  const item = (title) => [...document.querySelectorAll('section[aria-label="通知历史"] button')].find((node) => node.textContent.includes(title));
+const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
 
-  await act(async () => { item('无效目标').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, []); assert.equal(current, undefined); assert.equal(bell.getAttribute('aria-label'), '通知');
-  await act(async () => { item('确认失败').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, ['ack-fail']); assert.equal(current, 'session-fail'); assert.equal(bell.getAttribute('aria-label'), '通知');
-  await act(async () => { item('有效目标').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.deepEqual(calls, ['ack-fail', 'success']); assert.equal(current, 'session-ok');
-  assert.equal(bell.getAttribute('aria-label'), '通知', 'the badge never counts finished work');
-  await act(async () => { await pullTimer(); });
-  assert.equal(bell.getAttribute('aria-label'), '通知');
-  const historyTabButton = [...document.querySelectorAll('section[aria-label="通知历史"] [role="tab"]')].find((node) => node.textContent.includes('历史'));
-  await act(async () => { historyTabButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  assert.doesNotMatch(item('有效目标').textContent, /^●/, 'the acked record lost its unread marker');
-  assert.match(item('有效目标').textContent, /有效目标/);
+test('notifications stack newest-first, push the older ones down, and collapse past three', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  for (const n of [1, 2, 3]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
+  assert.equal(sandbox.count(), 3, 'three notifications lie flat');
+  assert.deepEqual(sandbox.titles(), ['任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)'], 'each card is pushed down by the ones above it');
+  assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'nothing is hidden yet');
+
+  sandbox.push(burstRecord(4));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 4, 'a fourth card is kept');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)', 'translateY(30px) scale(0.88)'], 'past three the stack collapses into a deck behind the front card');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'the front card says how many sit behind it');
+
+  await sandbox.hover();
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)', 'translateY(36px) scale(1)'], 'hovering expands the whole stack');
+  assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'and the count chip belongs to the collapsed state only');
+  await sandbox.leave();
+  await sandbox.wait(200);
+  assert.equal(sandbox.transforms()[1], 'translateY(10px) scale(0.96)', 'leaving the stack collapses it again');
+});
+
+test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  const question = (n) => ({ eventId: `question:s1:call-${n}`, mergeKey: `question:s1:call-${n}`, kind: 'question', sessionId: 's1', title: '需要回复', body: '通道范围？', at: 10 + n, unread: true, phase: 'open' });
+  sandbox.push(question(1));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1);
+
+  // The host has not answered yet: the click has to look like work, not like a dead button.
+  let release; const gate = new Promise((resolve) => { release = resolve; });
+  sandbox.publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q1', options: [{ label: '批准' }] }], answer: () => gate }]]));
+  await sandbox.wait(20);
+  await sandbox.click(sandbox.answers(0).find((node) => node.textContent === '批准'));
+  assert.deepEqual(sandbox.statuses(), ['loading'], 'the card reports the answer as in flight');
+  assert.equal(sandbox.nodes()[0].querySelector('.dsh-notify-toast-icon').getAttribute('data-spin'), 'true', 'the icon spins while it waits');
+  assert.match(sandbox.nodes()[0].textContent, /正在提交/);
+  assert.equal(sandbox.answers(0).every((node) => node.disabled), true, 'and no second click can fire');
+
+  release();
+  await sandbox.wait(40);
+  assert.deepEqual(sandbox.statuses(), ['success'], 'the host confirmed: the card settles on success');
+  assert.match(sandbox.nodes()[0].textContent, /已完成/);
+  await sandbox.wait(1200);
+  assert.equal(sandbox.count(), 0, 'a succeeded card retires on its own');
+
+  // A refusal is reported in place, with a way to try again.
+  sandbox.push(question(2));
+  await sandbox.tick();
+  sandbox.publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q2', options: [{ label: '拒绝' }] }], answer: async () => { throw new Error('宿主拒绝了这次回答'); } }]]));
+  await sandbox.wait(20);
+  await sandbox.click(sandbox.answers(0).find((node) => node.textContent === '拒绝'));
+  await sandbox.wait(40);
+  assert.deepEqual(sandbox.statuses(), ['error'], 'a failed answer is not silently swallowed');
+  assert.equal(sandbox.nodes()[0].getAttribute('data-tone'), 'error');
+  assert.match(sandbox.nodes()[0].textContent, /宿主拒绝了这次回答/);
+  assert.ok(sandbox.answers(0).some((node) => node.textContent === '重试'), 'and the card offers a retry');
+});
+
+test('a toast stays until the user closes it or opens its session', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1);
+
+  // Nothing here runs on a clock: the card has to outlive the 6s countdown this used to carry.
+  await sandbox.wait(1200);
+  assert.equal(sandbox.count(), 1, 'a notification does not expire on its own');
+  assert.equal(sandbox.nodes()[0].querySelector('.dsh-notify-toast-progress'), null, 'and it carries no countdown bar');
+  for (let poll = 0; poll < 3; poll += 1) await sandbox.tick();
+  assert.equal(sandbox.count(), 1, 'refreshing the record list leaves it alone too');
+
+  await sandbox.click(sandbox.closer(0));
+  assert.equal(sandbox.nodes()[0].getAttribute('data-leaving'), 'true', 'the × starts the slide-out');
+  await sandbox.wait(260);
+  assert.equal(sandbox.count(), 0, 'and then the card is gone');
+
+  // Clicking the body is the other way out: it opens the session and retires the card with it.
+  sandbox.push(burstRecord(2));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1);
+  await sandbox.press(0);
+  await sandbox.wait(260);
+  assert.equal(sandbox.count(), 0, 'opening the session retires its card');
+});
+
+test('a notification that arrived in a background tab is still waiting when the user comes back', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  await sandbox.setHidden(true);
+  sandbox.push(burstRecord(7));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1, 'the background notification is toasted');
+  await sandbox.wait(1200);
+  assert.equal(sandbox.count(), 1, 'and it is still there while nobody can see it');
+
+  await sandbox.setHidden(false);
+  assert.equal(sandbox.count(), 1, 'coming back to the tab finds it waiting');
+  await sandbox.wait(1200);
+  assert.equal(sandbox.count(), 1, 'and looking at it is not a dismissal either');
+});
+
+test('a legacy host that re-sends its whole buffer cannot make a card flash and vanish', async (t) => {
+  const sandbox = await mountStackSandbox(t, { host: 'legacy' });
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1, 'the notification appears');
+  for (let poll = 0; poll < 3; poll += 1) await sandbox.tick();
+  await sandbox.wait(300);   // long enough for a slide-out to have finished, had the card been retired
+  assert.equal(sandbox.count(), 1, 'and it is still there: a repeat of the same record is not a reason to close it');
+  assert.equal(sandbox.nodes()[0].getAttribute('data-leaving'), 'false');
+});
+
+test('a host whose sequence never advances cannot make a card flash and vanish', async (t) => {
+  const sandbox = await mountStackSandbox(t, { host: 'duplicate' });
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1);
+  for (let poll = 0; poll < 3; poll += 1) await sandbox.tick();
+  await sandbox.wait(300);
+  assert.equal(sandbox.count(), 1, 'every poll re-delivers the same record; none of them is news');
+  assert.equal(sandbox.nodes()[0].getAttribute('data-leaving'), 'false');
+});
+
+test('an approval the host settles does retire its card', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  const approval = { eventId: 'approval:1', mergeKey: 'approval:1', kind: 'approval', sessionId: 's1', title: '需要审批', body: 'bash', at: 1, phase: 'open' };
+  sandbox.push(approval);
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1, 'the approval is on screen, waiting');
+  sandbox.push({ ...approval, phase: 'settled', outcome: 'allowed-once' });
+  await sandbox.tick();
+  await sandbox.wait(260);
+  assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
