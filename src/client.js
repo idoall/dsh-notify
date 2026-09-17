@@ -483,7 +483,7 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);
   // One ref per piece of per-card runtime state: the exit/success timers and each card's measured
   // height. Nothing here retires a card on a clock — a toast leaves when the user says so.
-  const frameRef = React.useRef(null); const stackRef = React.useRef(null); const exits = React.useRef(new Map()); const successes = React.useRef(new Map()); const heights = React.useRef(new Map()); const slots = React.useRef(new Map()); const unseen = React.useRef(new Set()); const sawPending = React.useRef(new Set()); const cardsRef = React.useRef(cards);
+  const frameRef = React.useRef(null); const stackRef = React.useRef(null); const exits = React.useRef(new Map()); const successes = React.useRef(new Map()); const heights = React.useRef(new Map()); const nodes = React.useRef(new Map()); const slots = React.useRef(new Map()); const unseen = React.useRef(new Set()); const sawPending = React.useRef(new Set()); const cardsRef = React.useRef(cards);
   const anyCard = cards.length > 0; const rerenderNow = () => rerender((value) => value + 1);
   // The ref mirrors every write so two pushes in the same tick (a self-test and a poll, say) cannot
   // race each other through a stale render.
@@ -502,12 +502,32 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     retire(eventId);
   };
   const patchCard = (eventId, patch) => commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, ...patch } : card)));
-  const measure = (eventId) => (node) => {
-    if (!node) return;
+  const measureOne = (eventId, node) => {
     const height = Math.ceil(node.offsetHeight || node.getBoundingClientRect?.().height || 0);
-    if (!height || heights.current.get(eventId) === height) return;
+    if (!height || heights.current.get(eventId) === height) return false;
     heights.current.set(eventId, height);
-    rerenderNow();
+    return true;
+  };
+  const measure = (eventId) => (node) => {
+    if (!node) { nodes.current.delete(eventId); return; }
+    nodes.current.set(eventId, node);
+    if (measureOne(eventId, node)) rerenderNow();
+  };
+  /**
+   * Measure every mounted card again — the fix for a batch that arrives before the corner is on screen.
+   *
+   * The first measurement of a batch happens in the ref callback, during the commit that creates the
+   * cards. At that moment the frame is still `display:none`, because a `popover` that has not been
+   * shown yet is not laid out: every card reports a height of 0, and the window is built out of those
+   * zeros — five slots twelve pixels apart, a single card-tall sliver of overlapping edges on screen.
+   * It then stays that way until some unrelated re-render (the next poll, a resize) measures it again.
+   * Reading the heights once the frame is really on screen is what makes the first painted frame the
+   * finished one; a layout effect applies that re-render before the browser paints.
+   */
+  const measureAll = () => {
+    let changed = false;
+    for (const [eventId, node] of nodes.current) if (measureOne(eventId, node)) changed = true;
+    if (changed) rerenderNow();
   };
   React.useEffect(() => { const onConfig = () => refresh((n) => n + 1); globalThis.addEventListener?.('dsh-notify:toast-config', onConfig); return () => globalThis.removeEventListener?.('dsh-notify:toast-config', onConfig); }, []);
   React.useEffect(() => {
@@ -531,13 +551,21 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   // ours can clear the settings modal (z-index 1000). Promoting the whole stack to the browser top
   // layer is what actually keeps a self-test fired from 设置 visible and closable; without Popover
   // support the stack stays a normal fixed element and simply degrades to the old stacking.
-  React.useEffect(() => {
+  //
+  // A layout effect, not a passive one, and it re-measures after showing: the cards were measured
+  // while this frame was still hidden, so their heights all came back 0 and the window was built out
+  // of zeros. Both the promotion and the reading of the real heights have to happen before the first
+  // paint, or the user sees a sliver of overlapping card edges until something else re-renders.
+  React.useLayoutEffect(() => {
     const element = frameRef.current;
-    if (!anyCard || !element || typeof element.showPopover !== 'function') return undefined;
-    try {
-      if (!element.hasAttribute('popover')) element.setAttribute('popover', 'manual');
-      if (!element.matches?.(':popover-open')) element.showPopover();
-    } catch { return undefined; }
+    if (!anyCard || !element) return undefined;
+    if (typeof element.showPopover === 'function') {
+      try {
+        if (!element.hasAttribute('popover')) element.setAttribute('popover', 'manual');
+        if (!element.matches?.(':popover-open')) element.showPopover();
+      } catch { /* a browser without the Popover API keeps the plain fixed element below */ }
+    }
+    measureAll();
     return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
   }, [anyCard]);
   /** A new card takes its place in the queue: waiting work first, then newest first. Nothing is dropped. */
@@ -601,9 +629,13 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
       patchCard(card.record.eventId, { record: live });
       if (wasWaiting && live.phase !== 'open') dismiss(card.record.eventId);
     }
-    const next = toastOrder(state.records).find((record) => !seen.has(record.eventId));
-    if (!next) return;
-    showToast(next);
+    // Everything the host delivered since the last poll is news, and it is presented in one pass. This
+    // used to take only the *next* unseen record, which was right when a poll carried a single event;
+    // now that a poll returns everything after a sequence, that shape made a burst of parallel tasks
+    // trickle in one card per poll — and it is the batch, not the single event, that is worth seeing all
+    // at once. Oldest first, because showing a card puts it on top: the newest still ends up highest.
+    const fresh = toastOrder(state.records).filter((record) => !seen.has(record.eventId));
+    for (const record of fresh.reverse()) showToast(record);
   }, [state.records, state.primed]);
   // The tab flash is the only signal left for something that arrived while the page was in the
   // background: the cards wait for the user, and the title says so until the tab is looked at.

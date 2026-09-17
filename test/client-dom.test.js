@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
-import { mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor, TOAST_STACK_GAP, TOAST_STACK_PEEK } from '../src/client.js';
+import { createLocalSelfTestBatch, mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor, TOAST_STACK_GAP, TOAST_STACK_PEEK } from '../src/client.js';
 
 function response(value) { return { ok: true, json: async () => value }; }
 
@@ -330,7 +330,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
  * Mount only the toast seat against a host whose record list the test drives by hand, so a burst can
  * be delivered one poll at a time. Cards are addressed in DOM order, which is newest first.
  */
-async function mountStackSandbox(t, { host = 'live' } = {}) {
+async function mountStackSandbox(t, { host = 'live', cardHeight = 0 } = {}) {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
   let root; let mounted; let pullTimer; let primed = false; let feed = [];
   const listeners = new Set(); let pendingMap = new Map();
@@ -362,6 +362,18 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
   const title = { value: 'DeepSeek Harness' };
   Object.defineProperty(dom.window.document, 'title', { configurable: true, get: () => title.value, set: (next) => { title.value = next; } });
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  // jsdom lays nothing out, so a card height has to be faked. When a test asks for one it is faked as
+  // "zero until this frame is in the top layer", which is exactly what a real browser reports for a
+  // `popover` that has not been shown yet — the condition that used to make a whole batch measure as 0.
+  if (cardHeight > 0) {
+    let topLayer = false;
+    const isFrame = (node) => Boolean(node?.classList?.contains?.('dsh-notify-frame'));
+    dom.window.HTMLElement.prototype.showPopover = function showPopover() { if (isFrame(this)) topLayer = true; };
+    dom.window.HTMLElement.prototype.hidePopover = function hidePopover() { if (isFrame(this)) topLayer = false; };
+    const matches = dom.window.Element.prototype.matches;
+    dom.window.Element.prototype.matches = function matchesPatched(selector) { return selector === ':popover-open' ? isFrame(this) && topLayer : matches.call(this, selector); };
+    Object.defineProperty(dom.window.HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return topLayer && this.classList?.contains?.('dsh-notify-toast') ? cardHeight : 0; } });
+  }
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
   mounted = mountNotifyClient({ slots, getUiSession: () => ({ pendingInteractions: observable }) });
@@ -373,6 +385,8 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
   const slotsOf = () => [...document.querySelectorAll('.dsh-notify-slot')];
   return {
     push: (record) => { feed = [...feed, record]; },
+    // The settings self-test goes through the page-local event, not the poll: same corner, same commit.
+    local: async (records) => { await act(async () => { for (const record of records) publishLocalSelfTest(record); }); },
     setHidden: async (value) => { hidden.value = value; await act(async () => { document.dispatchEvent(new dom.window.Event('visibilitychange')); }); },
     publish: (next) => { pendingMap = next; for (const listener of listeners) listener(); },
     tick: async () => { await act(async () => { await pullTimer(); }); await wait(20); },
@@ -630,4 +644,35 @@ test('every card says when it happened, on the line the session name already use
   await sandbox.tick();
   assert.deepEqual(sandbox.times(), [null, '09:05:03'], 'the undated card simply has no clock');
   assert.equal(sandbox.headParts(0).length, 1, 'and its row holds only the session name');
+});
+
+test('a batch delivered by one poll arrives whole, measured before it is ever visible', async (t) => {
+  // The real numbers, as the browser reported them: a card is 114px tall and the window is five of them.
+  const cardHeight = 114; const step = cardHeight + TOAST_STACK_GAP;
+  const sandbox = await mountStackSandbox(t, { cardHeight });
+  // Eight records delivered by ONE poll, so the whole batch is created in a single commit — while the
+  // frame is still hidden and every card honestly reports a height of 0.
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) sandbox.push(burstRecord(n));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 8, 'the whole batch is on screen, not one card per poll');
+  assert.deepEqual(sandbox.titles(), ['任务完成 8', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'],
+    'with the newest still on top');
+  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * step}px)`),
+    'every card got its measured slot, so none of them overlap');
+  assert.equal(sandbox.windowHeight(), `${cardHeight * 5 + TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`, 'the window is five real cards plus the peek');
+  assert.equal(sandbox.contentHeight(), `${cardHeight * 8 + TOAST_STACK_GAP * 7}px`, 'and the content behind it is all eight');
+  assert.equal(sandbox.badge(), '+8', 'the count still belongs to the whole queue');
+});
+
+test('the settings self-test paints finished too: the corner is measured before it is shown', async (t) => {
+  const cardHeight = 114; const step = cardHeight + TOAST_STACK_GAP;
+  const sandbox = await mountStackSandbox(t, { cardHeight });
+  // 设置 → 通知 → 测试 8 条: eight records published in one tick, into a corner that is still empty and
+  // therefore still a hidden popover. This is the click the user reported the flash from.
+  await sandbox.local(createLocalSelfTestBatch({ count: 8, randomUUID: () => 'self-test' }));
+  assert.equal(sandbox.count(), 8, 'eight cards from one self-test');
+  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * step}px)`),
+    'no two cards share a slot, so nothing shows as stacked edges');
+  assert.equal(sandbox.windowHeight(), `${cardHeight * 5 + TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`);
+  assert.equal(sandbox.badge(), '+8');
 });
