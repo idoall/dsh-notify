@@ -31,10 +31,21 @@ export function toastAnchor({ document: doc = globalThis.document, innerWidth = 
  */
 export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-width:640px;min-width:0;padding:4px 0;color:var(--dsw-alias-label-primary)}
 .dsh-notify-heading{font-size:16px;font-weight:650;margin:0}
-.dsh-notify-card{border:1px solid var(--dsw-alias-border-l2);border-radius:10px;min-width:0;padding:12px;background:var(--dsw-alias-bg-layer-2)}
-.dsh-notify-card>*+*{margin-top:10px}
+.dsh-notify-card{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;min-width:0;padding:16px 18px}
+/* The rhythm inside a card. It has to be scoped to the settings section, because as a bare
+   .dsh-notify-card>*+* selector it had the same specificity as the .dsh-notify-hint{margin:0} reset
+   further down and lost to it — the reset comes later — so every paragraph in a card sat flush against
+   the control above it. The gaps inside 提示通道 measured 10, 0, 10, 0, 0: only text was affected, which
+   is exactly what made the card look crammed. */
+.dsh-notify-settings .dsh-notify-card>*+*{margin-top:10px}
+/* A note belongs to the control it explains rather than to the next block, so it sits closer to that
+   control. Written out per case instead of as one class-equals-hint rule, so the lead sentence of a card
+   — the hint that follows the title — and the gap between two separate notes both keep the full 10px. */
+.dsh-notify-settings .dsh-notify-card>.dsh-notify-field+.dsh-notify-hint,
+.dsh-notify-settings .dsh-notify-card>.dsh-notify-toggle+.dsh-notify-hint,
+.dsh-notify-settings .dsh-notify-card>.dsh-notify-actions+.dsh-notify-hint{margin-top:6px}
 .dsh-notify-card-title{font-size:13px;font-weight:650;margin:0}
-.dsh-notify-hint{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;margin:0}
+.dsh-notify-hint{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.6;margin:0}
 .dsh-notify-status{align-items:center;display:flex;gap:8px;font-size:12px;line-height:1.45;margin:0;color:var(--dsw-alias-label-secondary)}
 .dsh-notify-status::before{background:var(--dsw-alias-label-tertiary,#98a1ad);border-radius:50%;content:"";flex:none;height:8px;width:8px}
 .dsh-notify-status[data-tone=ok]::before{background:var(--dsw-alias-state-success-primary,#16a36a)}
@@ -43,26 +54,17 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-toggle{align-items:flex-start;cursor:pointer;display:flex;font-size:13px;gap:10px;line-height:1.45}
 .dsh-notify-toggle input{accent-color:var(--dsw-alias-state-business-primary);flex:none;height:18px;margin:1px 0 0;min-height:18px;min-width:18px;width:18px}
 .dsh-notify-field{display:grid;font-size:13px;font-weight:600;gap:8px;min-width:0}
-.dsh-notify-select{background:var(--dsw-specific-input-major,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;font:inherit;font-weight:400;max-width:100%;min-height:40px;min-width:0;padding:0 10px;width:100%}
+.dsh-notify-select{background:var(--dsw-specific-input-major,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;font:inherit;font-weight:400;max-width:100%;min-height:36px;min-width:0;padding:0 10px;width:100%}
 .dsh-notify-actions{align-items:center;display:flex;flex-wrap:wrap;gap:8px;min-width:0}
 .dsh-notify-action{background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;cursor:pointer;font:inherit;font-size:12px;line-height:30px;max-width:100%;min-height:32px;padding:0 10px;touch-action:manipulation}
 .dsh-notify-action:hover:not(:disabled){background:var(--dsw-alias-button-floating-hover)}
 .dsh-notify-action:disabled{cursor:not-allowed;opacity:.55}
 .dsh-notify-action[data-variant=danger]{background:transparent;border-color:var(--dsw-alias-state-error-primary,#dc2626);color:var(--dsw-alias-state-error-primary,#dc2626)}
-.dsh-notify-action:focus-visible,.dsh-notify-select:focus-visible,.dsh-notify-toggle input:focus-visible,.dsh-notify-details>summary:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
-.dsh-notify-tests{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
-.dsh-notify-test{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px}
-.dsh-notify-test-head{align-items:center;display:flex;gap:8px;min-width:0}
-.dsh-notify-test-badge{align-items:center;background:var(--dsw-alias-label-primary,#111);border-radius:5px;color:var(--dsw-alias-label-primary-inverted,#fff);display:inline-flex;flex:none;font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:10px;font-weight:650;height:18px;justify-content:center;line-height:1;min-width:18px;padding:0 5px}
-.dsh-notify-test-title{font-size:13px;font-weight:650;line-height:1.4;min-width:0}
-.dsh-notify-result{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.5;margin:0;overflow-wrap:anywhere}
+.dsh-notify-action:focus-visible,.dsh-notify-select:focus-visible,.dsh-notify-toggle input:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
+.dsh-notify-result{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.6;margin:0;overflow-wrap:anywhere}
 .dsh-notify-result[data-tone=passed]{color:var(--dsw-alias-state-success-primary,#16a36a)}
 .dsh-notify-result[data-tone=failed]{color:var(--dsw-alias-state-error-primary,#dc2626)}
 .dsh-notify-result[data-tone=active]{color:var(--dsw-alias-state-business-primary)}
-.dsh-notify-details{border-top:1px solid var(--dsw-alias-border-l2);padding-top:10px}
-.dsh-notify-details>summary{cursor:pointer;font-size:12px;font-weight:650;color:var(--dsw-alias-label-secondary)}
-.dsh-notify-details[open]>summary{color:var(--dsw-alias-label-primary);margin-bottom:4px}
-.dsh-notify-confirm{border-left:2px solid var(--dsw-alias-state-warn-primary,#d97706);display:grid;gap:8px;min-width:0;padding-left:10px}
 @media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-toggle input{height:22px;min-height:22px;min-width:22px;width:22px}}`;
 /**
  * Toast presentation: a window anchored in the top-right corner. Each card is one row of
