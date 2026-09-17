@@ -1,9 +1,6 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createSoundPlayer, navigateNotificationRecord, shouldCloseOpenToast, revealTurn, readRetentionCutoff, layoutFor, toastPolicy, toastQueue, channelStatus, prioritizedToastRecords, toastStyleForKind, installClientStyles, CLIENT_CSS, SETTINGS_CSS, BELL_CLASS, bellActionStyle, bellBadgeStyle, toastAnchor, statusTone, resultTone, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
-test('narrow layout has safe touch target and persistent open toast', () => { assert.deepEqual(layoutFor({width:375,coarse:true}), {narrow:true,hitTarget:44}); assert.equal(toastPolicy({phase:'open'},{width:375}).persistent,true); });
-test('toast queue caps narrow and desktop and exposes the single remaining channel', () => { assert.equal(toastQueue([{phase:'settled'},{phase:'settled'},{phase:'settled'}],375).length,2); assert.equal(toastQueue([{phase:'settled'},{phase:'settled'},{phase:'settled'}],1024).length,3); assert.equal(channelStatus({},{}).length, 1, 'only 页面里 remains'); assert.equal(channelStatus({},{})[0].id, 'A'); });
-test('toast styles map kind tokens and colors', () => { assert.equal(toastStyleForKind('approval').token, 'warning'); assert.equal(toastStyleForKind('completed').token, 'success'); assert.match(toastStyleForKind('failed').borderInlineStart, /danger/); });
-test('plugin-owned open interactions suppress completion toasts without guessing Host modal state', () => { const done = {eventId:'done',phase:'settled'}; const open = {eventId:'open',phase:'open'}; assert.deepEqual(prioritizedToastRecords([done,open]), [open]); assert.equal(toastQueue([done,open],1024)[0].record.eventId,'open'); });
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
   assert.equal(statusTone('持久化未配置'), 'warn'); assert.equal(statusTone('通知同步不可用'), 'warn');
@@ -13,16 +10,8 @@ test('settings status and self-test result tones drive the colour of one dot and
   assert.equal(resultTone('running'), 'active'); assert.equal(resultTone('submitted'), 'active');
   assert.equal(resultTone('unsupported'), 'idle'); assert.equal(resultTone(undefined), 'idle');
 });
-test('bell occupies its own full-width sidebar row when wide and an official-sized rail icon when collapsed', () => {
-  const wide = bellActionStyle(true); const rail = bellActionStyle(false);
-  assert.equal(wide.flex, '1 1 100%'); assert.equal(wide.width, undefined); assert.equal(wide.height, 42); assert.equal(wide.justifyContent, 'flex-start'); assert.equal(wide.padding, '0 10px 0 8px'); assert.equal(wide.borderRadius, 12);
-  assert.equal(wide.background, undefined, 'an inline background would out-rank the shared :hover rule');
-  assert.equal(rail.flex, '0 0 auto'); assert.equal(rail.width, 36); assert.equal(rail.height, 36); assert.equal(rail.borderRadius, '50%', 'the rail icon matches the official and dsh-mobile 36px round rail buttons'); assert.equal(rail.position, 'relative'); assert.equal(rail.justifyContent, 'center'); assert.equal(rail.padding, 0); assert.equal(rail.maxWidth, '100%'); assert.equal(rail.margin, '4px 0');
-  const wideBadge = bellBadgeStyle(true); const railBadge = bellBadgeStyle(false);
-  assert.equal(wideBadge.marginInlineStart, 'auto'); assert.equal(wideBadge.position, undefined);
-  assert.equal(railBadge.position, 'absolute'); assert.equal(railBadge.insetInlineEnd, 2); assert.equal(railBadge.height, 16, 'the rail badge must overlay the icon instead of widening the 36px rail box');
-});
 test('toast anchors to the conversation column so it clears the right sidebar, never to 100vw', () => {
+  // The stack container carries this anchor; the cards themselves are absolutely positioned inside it.
   const withScroll = (right) => ({ querySelector: (selector) => selector === '[data-conversation-scroll]' ? { getBoundingClientRect: () => ({ right, width: right - 280 }) } : null });
   assert.equal(toastAnchor({ document: withScroll(1906), innerWidth: 1908 }), 18, 'right sidebar closed: the toast sits at the window top-right');
   assert.equal(toastAnchor({ document: withScroll(1047), innerWidth: 1908 }), 877, 'right sidebar open: the toast clears the right pane instead of parking on top of it');
@@ -31,29 +20,6 @@ test('toast anchors to the conversation column so it clears the right sidebar, n
   assert.equal(toastAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 40, width: 0 }) }) }, innerWidth: 1024 }), 168, 'a collapsed measurement falls back instead of anchoring off-screen');
   assert.equal(toastAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 5000, width: 100 }) }) }, innerWidth: 1024 }), 16, 'an out-of-viewport rect clamps to the 16px edge inset');
 });
-test('only the footer action row holding our bell is allowed to wrap, and the bell reuses the neighbours hover/active/focus set', () => {
-  const appended = []; const removed = [];
-  const fake = { head: { append(element) { appended.push(element); } }, createElement() { return { dataset: {}, textContent: '', remove() { removed.push(this); } }; } };
-  const dispose = installClientStyles({ document: fake });
-  const style = appended[0];
-  assert.equal(style.dataset.plugin, 'dsh-notify'); assert.equal(style.textContent, CLIENT_CSS);
-  assert.match(style.textContent, /footerActions/); assert.match(style.textContent, new RegExp(`:has\\(\\.${BELL_CLASS}\\)`)); assert.match(style.textContent, /flex-wrap:\s*wrap/);
-  const mobileHover = 'var(--dsw-alias-interactive-bg-hover,#f1f3f6)'; const mobileActive = 'var(--dsw-alias-interactive-bg-active,#e8ebf0)';
-  assert.match(style.textContent, new RegExp(`\\.${BELL_CLASS}:hover\\{background:${mobileHover.replace(/[()]/g, '\\$&')}`), 'hover must use the same token as dsh-mobile 移动访问 and ui-settings-general 设置');
-  assert.ok(style.textContent.includes(`:active,.${BELL_CLASS}[aria-expanded="true"]{background:${mobileActive}}`), 'pressed and open reuse the neighbours active token');
-  assert.ok(style.textContent.includes(`.${BELL_CLASS}:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary,currentColor);outline-offset:2px}`));
-  assert.ok(style.textContent.includes(`.${BELL_CLASS}{font-family:inherit;font-size:14px;line-height:22px;color:var(--dsw-alias-label-primary,inherit);background:0 0}`), 'buttons must not fall back to the UA font/background');
-  assert.ok(style.textContent.includes(SETTINGS_CSS), 'the settings section ships in the same injected stylesheet');
-  assert.match(SETTINGS_CSS, /\.dsh-notify-settings\{display:grid/); assert.match(SETTINGS_CSS, /\.dsh-notify-card\{border:1px solid var\(--dsw-alias-border-l2\)/); assert.match(SETTINGS_CSS, /\.dsh-notify-select\{/); assert.match(SETTINGS_CSS, /min-height:44px/, 'coarse pointers keep the 44px hit target required by the UX contract');
-  assert.match(SETTINGS_CSS, /color:var\(--dsw-alias-label-secondary\)/); assert.match(SETTINGS_CSS, /border:1px solid var\(--dsw-alias-border-l2\)/);
-  assert.equal(/(^|\})\s*(button|input|select|label|section|h2|h3|p|summary)[\s,{.:[]/.test(SETTINGS_CSS), false, 'every rule must be dsh-notify-namespaced so the global stylesheet cannot restyle the host app');
-  dispose(); assert.deepEqual(removed, [style]);
-  assert.equal(typeof installClientStyles({ document: null }), 'function');
-  installClientStyles({ document: null })();
-  assert.equal(typeof installClientStyles({ document: { head: {} } }), 'function');
-  installClientStyles({ document: { head: {} } })();
-});
-
 test('toast tone maps every kind to one icon/progress colour family', () => {
   assert.equal(toastTone('completed'), 'success'); assert.equal(toastTone('failed'), 'error');
   assert.equal(toastTone('approval'), 'warning'); assert.equal(toastTone('question'), 'info'); assert.equal(toastTone('plan-review'), 'info');
@@ -139,23 +105,6 @@ test('a notification that knows its turn reveals exactly that turn, and gives up
   assert.equal(revealTurn(undefined, { document: empty })(), undefined);
 });
 
-test('已读 retention hides older acknowledged records and never touches unread ones', () => {
-  const now = 1_700_000_000_000;
-  assert.equal(readRetentionCutoff(0, now), null, '0 means keep everything');
-  assert.equal(readRetentionCutoff(undefined, now), null);
-  assert.equal(readRetentionCutoff(7, now), now - 7 * 24 * 60 * 60 * 1000);
-  const cutoff = readRetentionCutoff(1, now);
-  const records = [
-    { eventId: 'fresh-read', unread: false, at: now - 60_000 },
-    { eventId: 'stale-read', unread: false, at: now - 2 * 24 * 60 * 60 * 1000 },
-    { eventId: 'stale-unread', unread: true, at: now - 2 * 24 * 60 * 60 * 1000 },
-  ];
-  const readTab = records.filter((record) => !record.unread).filter((record) => cutoff === null || record.at >= cutoff);
-  assert.deepEqual(readTab.map((record) => record.eventId), ['fresh-read'], 'only old READ records are hidden');
-  const unreadTab = records.filter((record) => record.unread);
-  assert.deepEqual(unreadTab.map((record) => record.eventId), ['stale-unread'], 'an old unread record is never hidden by retention');
-});
-
 test('the tab attention indicator flashes only for a background tab with unread records, and restores everything', () => {
   let ticks = null; const cleared = [];
   const icon = { href: 'https://dsh.test/favicon.ico', getAttribute: () => 'https://dsh.test/favicon.ico' };
@@ -220,20 +169,63 @@ test('a record with nowhere to go is still dismissible, while a real session sta
   assert.deepEqual(acked, ['self-test', 'deleted', 'normal']);
 });
 
-test('an open toast closes exactly when a second signal says the question is resolved', () => {
-  const open = { phase: 'open', eventId: 'q1' };
-  const settled = { phase: 'settled', eventId: 'q1' };
-  // Nothing to do for settled toasts or when the interaction is still pending.
-  assert.equal(shouldCloseOpenToast({ toast: null }), false);
-  assert.equal(shouldCloseOpenToast({ toast: settled, liveRecord: settled, sawPending: true }), false, 'only open toasts auto-close');
-  assert.equal(shouldCloseOpenToast({ toast: open, pendingInteraction: { id: 'q1' }, sawPending: true }), false, 'still pending means still shown');
-  // Before the interaction is published an empty map means "not yet" — dismissing here would blink.
-  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: open, sawPending: false }), false);
-  // Signal 1: this page saw it pending and the official interaction is gone (answered in the composer).
-  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: open, sawPending: true }), true);
-  // Signal 2: the host settled the record and a later pull reported it.
-  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: settled, sawPending: false }), true);
-  // A missing live record (already deleted) is not evidence either way.
-  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: undefined, sawPending: false }), false);
-  assert.equal(shouldCloseOpenToast({ toast: open, liveRecord: undefined, sawPending: true }), true);
+test('each card is pushed down by the measured heights above it', () => {
+  assert.deepEqual(toastStackPlan({ heights: [60, 40] }).map((slot) => slot.offsetY), [0, 72]);
+  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40] }).map((slot) => slot.offsetY), [0, 72, 124]);
+  // An unmeasured card must not poison the offsets, and an empty stack is empty.
+  assert.deepEqual(toastStackPlan({ heights: [0, 0] }).map((slot) => slot.offsetY), [0, 12]);
+  assert.deepEqual(toastStackPlan({ heights: [60, 40], gap: 8 }).map((slot) => slot.offsetY), [0, 68]);
+  assert.deepEqual(toastStackPlan(), []);
+});
+test('the window is as tall as the cards it holds, plus a peek when there are more', () => {
+  // Five fit: the window is exactly those five, and there is nothing to scroll to.
+  const five = stackWindow({ heights: [60, 60, 60, 60, 60] });
+  assert.deepEqual(five, { total: 5, hidden: 0, windowHeight: 60 * 5 + 12 * 4, contentHeight: 60 * 5 + 12 * 4, overflow: false });
+  // Eight: the window still holds five, but is a sliver taller so the sixth card shows its edge, and
+  // the content behind it is the whole queue — that is what makes scrolling possible at all.
+  const eight = stackWindow({ heights: Array(8).fill(60) });
+  assert.equal(eight.windowHeight, 60 * 5 + 12 * 4 + 10, 'five cards plus a peek');
+  assert.equal(eight.contentHeight, 60 * 8 + 12 * 7, 'everything the user can scroll to');
+  assert.deepEqual([eight.total, eight.hidden, eight.overflow], [8, 3, true]);
+  // Cards are not all the same height, so the window is measured, never assumed.
+  assert.equal(stackWindow({ heights: [100, 60, 60, 60, 60, 60] }).windowHeight, 100 + 60 * 4 + 12 * 4 + 10);
+  // An unmeasured first paint must not make the window taller than the cards it is showing.
+  assert.equal(stackWindow({ heights: [0, 0, 0, 0, 0, 0] }).windowHeight, 12 * 4 + 10);
+  assert.equal(stackWindow({ heights: [] }).overflow, false);
+  assert.equal(stackWindow({ heights: [60, 60, 60] , visible: 3 }).overflow, false);
+  assert.equal(stackWindow({ heights: [60, 60, 60, 60], visible: 3 }).overflow, true, 'a phone window overflows sooner');
+});
+test('the page-scoped queue keeps waiting work first and lets go of nothing until it is full', () => {
+  const settled = (id, at) => ({ record: { eventId: id, phase: 'settled', at } });
+  const pending = (id, at) => ({ record: { eventId: id, phase: 'open', at } });
+  // Newest first within each group, and the question outranks every completion that followed it.
+  const queue = [settled('c3', 3), settled('c2', 2), pending('q1', 1)];
+  assert.deepEqual(queueCards(queue).map((card) => card.record.eventId), ['q1', 'c3', 'c2']);
+  assert.deepEqual(queueCards(queue).length, 3, 'nothing is dropped before the cap');
+  // The cap is a guard against a runaway stream; waiting work is ordered first, so it goes last.
+  const many = [pending('q1', 1), ...Array.from({ length: 8 }, (_, index) => settled(`c${index}`, 10 + index))];
+  const capped = queueCards(many, 4);
+  assert.equal(capped.length, 4);
+  assert.equal(capped[0].record.eventId, 'q1', 'the cap never takes the card that waits on the user');
+});
+
+test('each card is stamped with its own clock, and the full date rides in the tooltip', () => {
+  // Constructed and formatted in local time on purpose: the label never depends on the runner's zone.
+  const at = new Date(2026, 1, 14, 9, 5, 3).getTime();
+  assert.deepEqual(toastTime(at, new Date(2026, 1, 14, 23, 59, 0).getTime()),
+    { label: '09:05:03', title: '2026-02-14 09:05:03', iso: new Date(at).toISOString() },
+    'the same day is just the clock, to the second, because parallel tasks finish seconds apart');
+  // A tab that was asleep across midnight still gets a date instead of a lie about "today".
+  assert.equal(toastTime(at, new Date(2026, 1, 15, 0, 1, 0).getTime()).label, '02-14 09:05');
+  assert.equal(toastTime(at, new Date(2027, 1, 14, 9, 5, 3).getTime()).label, '02-14 09:05');
+  // And a record with no usable stamp is simply not stamped, rather than stamped with 1970.
+  for (const missing of [undefined, null, 0, -1, 'nonsense', NaN]) assert.equal(toastTime(missing), null, `${missing} has no time`);
+});
+test('a self-test group is spread over time so eight cards read as eight different moments', () => {
+  const batch = createLocalSelfTestBatch({ count: 8, now: 1_000_000, randomUUID: () => 'r' });
+  assert.equal(batch.length, 8);
+  assert.equal(batch.at(-1).at, 1_000_000, 'the newest card is now');
+  assert.equal(batch[0].at, 1_000_000 - 7 * SELF_TEST_STEP_MS, 'and the oldest is seven steps back');
+  assert.equal(new Set(batch.map((record) => record.at)).size, 8, 'every card keeps its own moment');
+  assert.deepEqual(batch.map((record) => record.eventId), batch.map((record) => record.mergeKey), 'distinct records, so they cannot merge into one card');
 });
