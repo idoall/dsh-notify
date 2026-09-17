@@ -72,8 +72,11 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
  * a spring scale + fade and leave by sliding out to the right. The stack is promoted to the browser
  * top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the settings modal.
  */
-export const TOAST_CSS = `.dsh-notify-stack{pointer-events:none;position:fixed;width:min(360px,calc(100vw - 32px));z-index:1100}
+export const TOAST_CSS = `.dsh-notify-stack{overflow:visible;pointer-events:none;position:fixed;width:min(360px,calc(100vw - 32px));z-index:1100}
 .dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 320ms cubic-bezier(.22,1,.36,1)}
+.dsh-notify-stack[data-expanded=true]{display:flex;flex-direction:column;gap:12px;max-height:min(70vh,calc(100vh - 88px));overflow-y:auto;overscroll-behavior:contain;pointer-events:auto;padding:0 2px 2px;scrollbar-width:thin}
+.dsh-notify-stack[data-expanded=true]>.dsh-notify-slot{inset-inline:auto;pointer-events:auto;position:static;transform:none}
+.dsh-notify-stack[data-expanded=true]>.dsh-notify-slot>.dsh-notify-toast{box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%))}
 .dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:relative;width:100%}
 .dsh-notify-toast[data-leaving=true]{animation:dsh-notify-card-out 200ms ease-in forwards;pointer-events:none}
 @keyframes dsh-notify-card-in{0%{opacity:0;transform:translateY(-10px) scale(.9)}62%{opacity:1;transform:translateY(0) scale(1.02)}100%{opacity:1;transform:none}}
@@ -378,9 +381,9 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
 }
 const attentionIndicator = createAttentionIndicator();
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
-/** How many cards lie flat before the stack collapses, and how many are ever kept on screen. */
+/** How many cards the corner shows at once, and how long the page-scoped queue behind them may grow. */
 export const TOAST_STACK_VISIBLE = 3;
-export const TOAST_STACK_MAX = 5;
+export const TOAST_QUEUE_MAX = 50;
 export const TOAST_DEPTH_OFFSET = 10;
 export const TOAST_DEPTH_SCALE = 0.04;
 export const TOAST_DEPTH_MIN_SCALE = 0.82;
@@ -389,31 +392,37 @@ export const TOAST_EXIT_MS = 200;
 export const TOAST_SUCCESS_MS = 900;
 const TOAST_HOVER_GRACE_MS = 120;
 /**
- * Which cards survive a burst that overflows the stack. The oldest SETTLED cards go first: a question
- * or an approval pushed out by a run of completions would be gone for good (there is no history to
- * find it in) and it is the only kind of notification that is actually waiting on the user. Only when
- * everything on screen is pending does the oldest of those go, because the stack has to stay bounded.
+ * The order the page keeps its notifications in: anything still waiting on the user first (newest
+ * first), then everything else (newest first), capped so a runaway stream cannot grow without bound.
+ *
+ * Nothing is dropped to make room. A page holds on to what happened while it was open — a refresh
+ * loses the lot, which is the deal this plugin makes — and the cap only exists so a stuck producer
+ * cannot fill memory. Because pending cards are ordered first, they are the last thing that could
+ * ever fall off it.
  */
-export function stackOverflow(cards = [], cap = TOAST_STACK_MAX) {
-  if (!(cards.length > cap)) return { kept: cards, dropped: [] };
-  const excess = cards.length - cap;
-  const doomed = new Set();
-  for (let index = cards.length - 1; index >= 0 && doomed.size < excess; index -= 1) if (cards[index]?.record?.phase !== 'open') doomed.add(index);
-  for (let index = cards.length - 1; index >= 0 && doomed.size < excess; index -= 1) doomed.add(index);
-  return { kept: cards.filter((_, index) => !doomed.has(index)), dropped: [...doomed].sort((a, b) => a - b).map((index) => cards[index]) };
+export function queueCards(cards = [], max = TOAST_QUEUE_MAX) {
+  const pending = cards.filter((card) => card?.record?.phase === 'open');
+  const finished = cards.filter((card) => card?.record?.phase !== 'open');
+  return [...pending, ...finished].slice(0, Math.max(1, max));
 }
 /**
- * Stack geometry, as a pure function: `heights[i]` is the measured height of the i-th card, newest
- * first. Up to `TOAST_STACK_VISIBLE` cards lie flat, each one pushed down by the heights above it —
- * that offset is what a new card animates into, so the older ones slide rather than jump. Past that
- * the stack collapses to the front card plus the others peeking out beneath it at a smaller scale,
- * and hovering expands it again.
+ * The cards the corner renders while it is collapsed: everything waiting on the user, plus finished
+ * cards filling the remaining slots. A second question hidden behind a `+N` count would defeat the
+ * point of the stack, so the window grows past `visible` rather than hiding one.
  */
-export function toastStackPlan({ heights = [], hovering = false, gap = 12 } = {}) {
-  const collapsed = heights.length > TOAST_STACK_VISIBLE && !hovering;
+export function visibleCards(cards = [], { expanded = false, visible = TOAST_STACK_VISIBLE } = {}) {
+  if (expanded) return cards;
+  return cards.filter((card, index) => card?.record?.phase === 'open' || index < Math.max(1, visible));
+}
+/**
+ * Where each rendered card sits while the corner is collapsed. Flat while they fit, and a deck once
+ * some of them are hidden behind the count: the front card keeps the top slot and the ones behind it
+ * peek out below at a smaller scale, which is what makes "there is more here" visible without a label.
+ */
+export function toastStackPlan({ heights = [], decked = false, gap = 12 } = {}) {
   let cursor = 0;
   return heights.map((height, index) => {
-    const depth = collapsed && index > 0 ? index : 0;
+    const depth = decked && index > 0 ? index : 0;
     const plan = depth
       ? { offsetY: depth * TOAST_DEPTH_OFFSET, scale: Math.max(TOAST_DEPTH_MIN_SCALE, 1 - depth * TOAST_DEPTH_SCALE), depth }
       : { offsetY: cursor, scale: 1, depth: 0 };
@@ -486,18 +495,15 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     } catch { return undefined; }
     return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
   }, [anyCard]);
-  /** Newest card on top: it takes the first slot and everything already there slides down one. */
+  /** A new card takes its place in the queue: waiting work first, then newest first. Nothing is dropped. */
   const showToast = (record) => {
     if (!record?.eventId) return;
     if (globalThis.document?.hidden) unseen.current.add(record.eventId);
     toasted.current.add(record.eventId);
-    const next = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
-    const { kept, dropped } = stackOverflow(next, TOAST_STACK_MAX);
-    // An overflowed card leaves the way any other card does — it is the oldest one, so the stack is
-    // simply retiring it — and its measurement goes now: a card on its way out needs no slot.
-    for (const card of dropped) forget(card.record.eventId);
-    commit([...kept, ...dropped.map((card) => ({ ...card, leaving: true }))]);
-    for (const card of dropped) retire(card.record.eventId);
+    const incoming = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
+    const next = queueCards(incoming);
+    for (const card of incoming) if (!next.includes(card)) forget(card.record.eventId);   // only the runaway-stream cap can reach this
+    commit(next);
     void soundPlayer.play();
   };
   React.useEffect(() => {
@@ -603,12 +609,15 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     if (!buttons.length && !note) return null;
     return React.createElement('div', { className: 'dsh-notify-toast-answers' }, buttons, note);
   };
-  const cardView = (card, index, plan) => {
+  const cardView = (card, index, plan, expanded, depth) => {
     const record = card.record; const status = card.status;
     const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
     const source = sessionLabel(sessions, record.sessionId);
     const more = record.eventId === frontLive ? chip : 0;
-    return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: { transform: `translateY(${plan.offsetY}px) scale(${plan.scale})`, zIndex: cards.length - index } },
+    // Expanded, the cards are laid out by the stylesheet in a scrollable column: an inline transform
+    // would fight the flow, so the slot carries no positioning of its own.
+    const slotStyle = expanded ? undefined : { transform: `translateY(${plan.offsetY}px) scale(${plan.scale})`, zIndex: depth - index };
+    return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: slotStyle },
       React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
         onClick: () => { if (!card.leaving) void activate(card); },
         onPointerEnter: enterStack, onPointerLeave: leaveStack, onFocus: enterStack, onBlur: leaveStack },
@@ -626,15 +635,24 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   // not make the stack look taller, and must not take a slot in the collapsed deck. It keeps its last
   // position while the slide-out animation plays, then its own timer takes the node away.
   const liveCards = cards.filter((card) => !card.leaving);
-  const livePlans = toastStackPlan({ heights: liveCards.map((card) => heights.current.get(card.record.eventId) ?? 0), hovering });
-  const planById = new Map(liveCards.map((card, index) => [card.record.eventId, livePlans[index]]));
-  const lastLive = liveCards[liveCards.length - 1];
-  const trailingPlan = { offsetY: lastLive ? (planById.get(lastLive.record.eventId).offsetY + (heights.current.get(lastLive.record.eventId) ?? 0)) : 0, scale: 1, depth: 0 };
-  const chip = !hovering && liveCards.length > TOAST_STACK_VISIBLE ? liveCards.length - 1 : 0;
-  const frontLive = liveCards[0]?.record.eventId ?? null;
-  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack',
-    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
-    cards.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan)));
+  const shown = visibleCards(liveCards, { expanded: hovering });
+  const hidden = Math.max(0, liveCards.length - shown.length);
+  // The deck is the look of "there is more behind this card", so it appears exactly when something is
+  // hidden; while everything fits, the cards lie flat.
+  const decked = !hovering && hidden > 0;
+  const livePlans = toastStackPlan({ heights: shown.map((card) => heights.current.get(card.record.eventId) ?? 0), decked });
+  const planById = new Map(shown.map((card, index) => [card.record.eventId, livePlans[index]]));
+  const lastWindowed = shown[shown.length - 1];
+  const trailingPlan = { offsetY: lastWindowed ? (planById.get(lastWindowed.record.eventId).offsetY + (heights.current.get(lastWindowed.record.eventId) ?? 0)) : 0, scale: 1, depth: 0 };
+  const chip = decked ? hidden : 0;
+  const frontLive = shown[0]?.record.eventId ?? null;
+  // A card on its way out is no longer part of the stack (it must not be counted, sized or slotted),
+  // but it still has to be RENDERED for its slide-out to play: it trails the stack for its 200ms.
+  const rendered = [...(hovering ? liveCards : shown), ...cards.filter((card) => card.leaving)];
+  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack', 'data-expanded': hovering ? 'true' : 'false',
+    onPointerEnter: enterStack, onPointerLeave: leaveStack,
+    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent' } },
+    rendered.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan, hovering, rendered.length)));
 }
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;

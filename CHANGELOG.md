@@ -15,6 +15,9 @@ Notifications are delivered live and nothing is stored: the stack in the top-rig
 
 ### Changed
 
+- **The corner is a window onto a page-scoped queue.** It shows three cards — always including anything waiting on the user, which is ordered first — and the rest stay in the page behind the `+N` count instead of being dropped. Hovering (or clicking the count) expands the whole queue into a scrollable column, and a card on its way out no longer counts towards the window while it slides away. A refresh still clears everything: nothing is stored, here or on the host.
+
+
 - **A card leaves when the user says so.** No countdown bar and no clock: a notification stays until it is closed with **×**, opened by clicking the body, or answered successfully from the card itself. A record that arrives again because the host settled it (an approval, asked and then decided) updates its card in place instead of stacking a second one, and retires it.
 - **Nothing is stored.** The profile keeps `settings.json` (sound, toast position, subtask noise) and nothing else. Records do not survive a restart, there is no read state anywhere, and no page is brought up to date on work it was not there for.
 

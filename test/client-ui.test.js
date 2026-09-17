@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createSoundPlayer, installClientStyles, navigateNotificationRecord, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, stackOverflow, toastStackPlan, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, visibleCards, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -169,37 +169,41 @@ test('a record with nowhere to go is still dismissible, while a real session sta
   assert.deepEqual(acked, ['self-test', 'deleted', 'normal']);
 });
 
-test('the stack lies flat until it is too tall, then collapses into a deck behind the front card', () => {
-  // Two cards: the second is pushed down by the first one's height plus the gap.
-  assert.deepEqual(toastStackPlan({ heights: [60, 40] }), [{ offsetY: 0, scale: 1, depth: 0 }, { offsetY: 72, scale: 1, depth: 0 }]);
-  // Three is still flat.
-  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40] }).map((slot) => slot.offsetY), [0, 72, 124]);
-  // The fourth collapses the stack: the front card keeps its place and the rest peek out beneath it.
-  const collapsed = toastStackPlan({ heights: [60, 40, 40, 40] });
-  assert.deepEqual(collapsed.map((slot) => slot.offsetY), [0, 10, 20, 30]);
-  assert.deepEqual(collapsed.map((slot) => slot.scale), [1, 0.96, 0.92, 0.88]);
-  assert.deepEqual(collapsed.map((slot) => slot.depth), [0, 1, 2, 3]);
-  // Hovering expands it again, and a card with no measured height never poisons the offsets.
-  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40, 40], hovering: true }).map((slot) => slot.offsetY), [0, 72, 124, 176]);
-  assert.deepEqual(toastStackPlan({ heights: [0, 0] }).map((slot) => slot.offsetY), [0, 12]);
+test('the stack lies flat while it fits and becomes a deck once something is hidden', () => {
+  // Two cards, decked: the second peeks out beneath the first, scaled down.
+  assert.deepEqual(toastStackPlan({ heights: [60, 40], decked: true }), [{ offsetY: 0, scale: 1, depth: 0 }, { offsetY: 10, scale: 0.96, depth: 1 }]);
+  // Flat: each card is pushed down by the heights above it.
+  assert.deepEqual(toastStackPlan({ heights: [60, 40], decked: false }), [{ offsetY: 0, scale: 1, depth: 0 }, { offsetY: 72, scale: 1, depth: 0 }]);
+  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40], decked: false }).map((slot) => slot.offsetY), [0, 72, 124]);
+  const deck = toastStackPlan({ heights: [60, 40, 40, 40], decked: true });
+  assert.deepEqual(deck.map((slot) => slot.offsetY), [0, 10, 20, 30]);
+  assert.deepEqual(deck.map((slot) => slot.scale), [1, 0.96, 0.92, 0.88]);
+  assert.deepEqual(deck.map((slot) => slot.depth), [0, 1, 2, 3]);
+  // An unmeasured card must not poison the offsets, and an empty stack is empty.
+  assert.deepEqual(toastStackPlan({ heights: [0, 0], decked: false }).map((slot) => slot.offsetY), [0, 12]);
   assert.deepEqual(toastStackPlan(), []);
 });
-test('an overflowing stack retires the oldest finished card, never one that waits on the user', () => {
+test('the page-scoped queue keeps waiting work first and lets go of nothing until it is full', () => {
+  const settled = (id, at) => ({ record: { eventId: id, phase: 'settled', at } });
+  const pending = (id, at) => ({ record: { eventId: id, phase: 'open', at } });
+  // Newest first within each group, and the question outranks every completion that followed it.
+  const queue = [settled('c3', 3), settled('c2', 2), pending('q1', 1)];
+  assert.deepEqual(queueCards(queue).map((card) => card.record.eventId), ['q1', 'c3', 'c2']);
+  assert.deepEqual(queueCards(queue).length, 3, 'nothing is dropped before the cap');
+  // The cap is a guard against a runaway stream; waiting work is ordered first, so it goes last.
+  const many = [pending('q1', 1), ...Array.from({ length: 8 }, (_, index) => settled(`c${index}`, 10 + index))];
+  const capped = queueCards(many, 4);
+  assert.equal(capped.length, 4);
+  assert.equal(capped[0].record.eventId, 'q1', 'the cap never takes the card that waits on the user');
+});
+test('the collapsed window shows every pending card and fills the rest with the newest finished ones', () => {
   const settled = (id) => ({ record: { eventId: id, phase: 'settled' } });
   const pending = (id) => ({ record: { eventId: id, phase: 'open' } });
-  // Newest first, as the stack holds them.
-  const eight = Array.from({ length: 8 }, (_, index) => settled(`s${8 - index}`));
-  assert.deepEqual(stackOverflow(eight, 5).kept.map((card) => card.record.eventId), ['s8', 's7', 's6', 's5', 's4'], 'the three oldest finished cards go');
-  assert.deepEqual(stackOverflow(eight, 5).dropped.map((card) => card.record.eventId), ['s3', 's2', 's1'], 'oldest first');
-  assert.deepEqual(stackOverflow(eight, 8), { kept: eight, dropped: [] }, 'nothing goes while there is room');
-
-  // A question at the bottom of a burst of completions outlives all of them.
-  const mixed = [settled('c5'), settled('c4'), settled('c3'), settled('c2'), settled('c1'), pending('q1')];
-  const kept = stackOverflow(mixed, 5).kept.map((card) => card.record.eventId);
-  assert.equal(kept.includes('q1'), true, 'the card that is waiting on the user is not the one pushed out');
-  assert.deepEqual(kept, ['c5', 'c4', 'c3', 'c2', 'q1']);
-
-  // If everything is pending the stack still has to stay bounded.
-  const allPending = Array.from({ length: 6 }, (_, index) => pending(`q${6 - index}`));
-  assert.deepEqual(stackOverflow(allPending, 5).kept.map((card) => card.record.eventId), ['q6', 'q5', 'q4', 'q3', 'q2']);
+  const queue = [settled('c5'), settled('c4'), settled('c3'), settled('c2'), pending('q1')];
+  assert.deepEqual(visibleCards(queue).map((card) => card.record.eventId), ['c5', 'c4', 'c3', 'q1'], 'three slots, but the question is never the one left out');
+  assert.deepEqual(visibleCards(queue, { expanded: true }), queue, 'expanded shows the whole queue');
+  const two = [settled('c2'), pending('q1'), pending('q2')];
+  assert.deepEqual(visibleCards(two).map((card) => card.record.eventId), ['c2', 'q1', 'q2']);
+  assert.deepEqual(visibleCards([settled('only')]).map((card) => card.record.eventId), ['only']);
 });
+

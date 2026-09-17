@@ -52,11 +52,17 @@ test('the self-test card only exercises the page: one button, no host request', 
   const beforeBatch = requests;
   await act(async () => { batch.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const all = [...document.querySelectorAll('aside[role="status"]')];
-  const cards = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
-  assert.equal(cards.length, 5, 'the stack keeps at most five cards: the single test card is the one pushed out');
-  assert.equal(all.length - cards.length, 1, 'and the card it pushed out is leaving rather than gone');
-  assert.equal(document.querySelector('.dsh-notify-toast-more')?.textContent, '+4', 'and the stack says how many sit behind the front card');
-  const tones = cards.map((node) => node.getAttribute('data-tone'));
-  for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
+  const live = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
+  assert.equal(live.length, 3, 'the corner keeps showing three cards, the single test card now behind the count');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'and it says how many are not on screen');
+  assert.equal(all.length - live.length, 0, 'nothing is thrown away to make room');
   assert.equal(requests, beforeBatch, 'a page test never talks to the host, however many it fires');
+
+  // Expanding shows every card the group fired, which is where the five tones are visible at once.
+  const stack = document.querySelector('.dsh-notify-stack');
+  await act(async () => { stack.dispatchEvent(new Event('pointerover', { bubbles: true })); });
+  const expanded = [...document.querySelectorAll('aside[role="status"]')];
+  assert.equal(expanded.length, 6, 'the single card and the group are all still there');
+  const tones = expanded.map((node) => node.getAttribute('data-tone'));
+  for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
 });

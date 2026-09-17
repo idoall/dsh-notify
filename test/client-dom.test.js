@@ -164,11 +164,15 @@ test('an unanswered record never starves later toasts, and every record is toast
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
   const toast = document.querySelector('aside.dsh-notify-toast');
   assert.ok(toast, 'a completion still toasts while an unrelated record is left open');
-  assert.match(toast.textContent, /任务完成/);
+  assert.match(toast.textContent, /需要审批/, 'the record waiting on the user is the one the corner puts first');
 
   await act(async () => { await pullTimer(); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-  assert.match(document.querySelector('aside.dsh-notify-toast').textContent, /任务完成/, 'the same record is not re-toasted by a later poll');
+  const titles = [...document.querySelectorAll('aside.dsh-notify-toast')].map((node) => node.querySelector('.dsh-notify-toast-title').textContent);
+  assert.deepEqual(titles, ['需要审批', '任务完成'], 'the completion is not starved: it follows the pending card instead of being skipped');
+  await act(async () => { await pullTimer(); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  assert.equal(document.querySelectorAll('aside.dsh-notify-toast').length, 2, 'and a later poll does not toast either of them again');
 });
 
 test('a pending question can be answered straight from the toast and stays in sync with the composer', async (t) => {
@@ -390,7 +394,7 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
 
 const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
 
-test('notifications stack newest-first, push the older ones down, and collapse past three', async (t) => {
+test('three cards lie flat, and the rest are hidden behind the count instead of dropped', async (t) => {
   const sandbox = await mountStackSandbox(t);
   for (const n of [1, 2, 3]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
   assert.equal(sandbox.count(), 3, 'three notifications lie flat');
@@ -400,16 +404,20 @@ test('notifications stack newest-first, push the older ones down, and collapse p
 
   sandbox.push(burstRecord(4));
   await sandbox.tick();
-  assert.equal(sandbox.count(), 4, 'a fourth card is kept');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)', 'translateY(30px) scale(0.88)'], 'past three the stack collapses into a deck behind the front card');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'the front card says how many sit behind it');
+  assert.equal(sandbox.count(), 3, 'the corner keeps showing three');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)'], 'and turns into a deck, so "there is more" is visible');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1', 'the front card counts what is not on screen');
 
+  // Hovering shows the whole queue, and every card that was behind the count is really there.
   await sandbox.hover();
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)', 'translateY(36px) scale(1)'], 'hovering expands the whole stack');
+  assert.equal(sandbox.count(), 4, 'hovering expands the whole queue');
+  assert.deepEqual(sandbox.transforms(), ['', '', '', ''], 'the expanded column is laid out in flow, not by transform');
+  assert.deepEqual(sandbox.titles(), ['任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1']);
   assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'and the count chip belongs to the collapsed state only');
   await sandbox.leave();
   await sandbox.wait(200);
-  assert.equal(sandbox.transforms()[1], 'translateY(10px) scale(0.96)', 'leaving the stack collapses it again');
+  assert.equal(sandbox.count(), 3, 'leaving the stack collapses it again');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1');
 });
 
 test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
@@ -525,26 +533,36 @@ test('an approval the host settles does retire its card', async (t) => {
   assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
 
-test('a burst past the cap retires the oldest finished card and leaves a pending one alone', async (t) => {
+test('nothing is dropped: the corner shows three, the count hides the rest, and expanding brings them all back', async (t) => {
   const sandbox = await mountStackSandbox(t);
   const live = () => sandbox.nodes().filter((node) => node.getAttribute('data-leaving') !== 'true');
-  const liveTitles = () => live().map((node) => node.querySelector('.dsh-notify-toast-title')?.textContent);
-  // One card that is waiting on the user, then a burst of finished work on top of it.
+  // One card that waits on the user, then a burst of finished work on top of it.
   sandbox.push({ eventId: 'ask-1', mergeKey: 'ask-1', kind: 'question', sessionId: 's1', title: '需要回复', body: '还在等你', at: 1, phase: 'open' });
   await sandbox.tick();
   assert.equal(live().length, 1);
   for (const n of [2, 3, 4, 5, 6, 7]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(live().length, 5, 'the stack stays bounded');
-  assert.deepEqual(liveTitles(), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '需要回复'], 'the card that waits on the user outlives six later completions');
+
+  // Seven cards in the page, three on screen: waiting work first, then the newest finished ones.
+  assert.equal(live().length, 3, 'the corner stays at three cards');
+  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['需要回复', '任务完成 7', '任务完成 6']);
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+4', 'the chip counts what is not on screen, not what was thrown away');
+
+  // Expanding shows every one of them — nothing was dropped to fit.
+  await sandbox.hover();
+  assert.equal(sandbox.count(), 7, 'expanding brings the whole queue back');
+  assert.deepEqual(sandbox.titles(), ['需要回复', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2']);
+  assert.equal(document.querySelector('.dsh-notify-toast-more'), null);
+
+  await sandbox.leave();
+  await sandbox.wait(200);
+  assert.equal(live().length, 3, 'and collapsing it puts the count back');
   assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+4');
 
-  // The retired cards leave the way any other card does, rather than blinking out of the stack.
-  sandbox.push(burstRecord(8));
-  await sandbox.tick();
-  const leaving = sandbox.nodes().filter((node) => node.getAttribute('data-leaving') === 'true');
-  assert.ok(leaving.length >= 1, 'an overflow slides the oldest card out instead of dropping it instantly');
-  assert.ok(leaving.some((node) => /任务完成 2/.test(node.textContent)), 'and the oldest finished card is one of the ones leaving');
+  // A card that leaves takes only itself out of the queue.
+  await sandbox.click(sandbox.closer(0));
   await sandbox.wait(320);
-  assert.equal(sandbox.count(), 5, 'the stack settles back to the cap once the exit finishes');
-  assert.deepEqual(liveTitles(), ['任务完成 8', '任务完成 7', '任务完成 6', '任务完成 5', '需要回复']);
+  assert.equal(live().length, 3, 'the queue drops from seven to six and the window stays full');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3');
+  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['任务完成 7', '任务完成 6', '任务完成 5'], 'the next finished card moves up into the freed slot');
 });
+
