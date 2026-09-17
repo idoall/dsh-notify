@@ -77,6 +77,9 @@ export const TOAST_CSS = `.dsh-notify-stack{overflow:visible;pointer-events:none
 .dsh-notify-stack[data-expanded=true]{display:flex;flex-direction:column;gap:12px;max-height:min(70vh,calc(100vh - 88px));overflow-y:auto;overscroll-behavior:contain;pointer-events:auto;padding:0 2px 2px;scrollbar-width:thin}
 .dsh-notify-stack[data-expanded=true]>.dsh-notify-slot{inset-inline:auto;pointer-events:auto;position:static;transform:none}
 .dsh-notify-stack[data-expanded=true]>.dsh-notify-slot>.dsh-notify-toast{box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%))}
+/* The layers behind the front card are edges, not cards: a taller notification further down the
+deck would otherwise leak a line of its own text out from under the card in front of it. */
+.dsh-notify-stack[data-decked=true]>.dsh-notify-slot[data-depth]:not([data-depth="0"])>.dsh-notify-toast>*{visibility:hidden}
 .dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:relative;width:100%}
 .dsh-notify-toast[data-leaving=true]{animation:dsh-notify-card-out 200ms ease-in forwards;pointer-events:none}
 @keyframes dsh-notify-card-in{0%{opacity:0;transform:translateY(-10px) scale(.9)}62%{opacity:1;transform:translateY(0) scale(1.02)}100%{opacity:1;transform:none}}
@@ -126,9 +129,11 @@ export function createLocalSelfTestRecord({ now = Date.now(), randomUUID = () =>
   return { eventId: id, mergeKey: id, kind: 'test', title: '自测：页面浮层', body: '只显示在当前页面，不会发送系统通知', at: now, phase: 'settled', localOnly: true };
 }
 /**
- * One of each tone, so a single click shows what the stack actually does: cards entering, the collapse
- * past three with its +N count, and every icon and accent a notification can carry. A group is also
- * the only honest way to look at the layout — one card says nothing about stacking.
+ * One of each tone and of the kinds that actually reach a page, so a single click shows what the
+ * stack does: cards entering, the collapse past five with its +N count, the scrollable expand, and
+ * every icon and accent a notification can carry. A group is also the only honest way to look at the
+ * layout — one card says nothing about stacking. Eight of them are what "more notifications than the
+ * window holds" looks like.
  */
 export const SELF_TEST_BATCH = Object.freeze([
   { kind: 'completed', title: '任务完成', body: '修复插件本机访问布局问题' },
@@ -136,9 +141,18 @@ export const SELF_TEST_BATCH = Object.freeze([
   { kind: 'question', title: '需要回复', body: '通道范围：浏览器通知要怎么处理？' },
   { kind: 'failed', title: '运行失败', body: 'OpenAI API error (503): Service temporarily unavailable' },
   { kind: 'job-end', title: '后台任务结束', body: 'pnpm build' },
+  { kind: 'subagent-end', title: '子任务结束', body: '审计 test/client-dom.test.js 的悬浮行为' },
+  { kind: 'workflow-end', title: '工作流结束', body: '3 个阶段，8 个文件，0 个失败' },
+  { kind: 'plan-review', title: '计划待确认', body: '迁移执行计划：5 步，含回滚' },
 ]);
-export function createLocalSelfTestBatch({ now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
-  return SELF_TEST_BATCH.map((entry, index) => {
+/**
+ * `count` exists so the settings buttons can fire a window-sized group and an overflowing one: the
+ * difference between five cards lying flat and eight cards behind a `+3` count is the whole point of
+ * looking at a group at all. Cards are distinct records — reusing one would merge into a single card.
+ */
+export function createLocalSelfTestBatch({ count = SELF_TEST_BATCH.length, now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
+  const wanted = Math.max(1, Math.min(SELF_TEST_BATCH.length, Math.trunc(Number(count)) || SELF_TEST_BATCH.length));
+  return SELF_TEST_BATCH.slice(0, wanted).map((entry, index) => {
     const id = `self-test:${randomUUID()}-${index}`;
     return { ...entry, eventId: id, mergeKey: id, at: now + index, phase: 'settled', localOnly: true };
   });
@@ -382,7 +396,7 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
 const attentionIndicator = createAttentionIndicator();
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
 /** How many cards the corner shows at once, and how long the page-scoped queue behind them may grow. */
-export const TOAST_STACK_VISIBLE = 3;
+export const TOAST_STACK_VISIBLE = 5;
 export const TOAST_QUEUE_MAX = 50;
 export const TOAST_DEPTH_OFFSET = 10;
 export const TOAST_DEPTH_SCALE = 0.04;
@@ -511,8 +525,10 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
     return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
   }, []);
-  // Hovering the stack expands it; leaving waits a beat first, so moving from one card to the next
-  // does not collapse the stack under the pointer.
+  // Hovering the stack expands it; leaving waits a beat first. Both halves live on the container and
+  // never on a card: the container's box spans the whole column (gaps included), so crossing the gap
+  // between two cards stays "inside". A card watching its own pointer left the stack there, which
+  // collapsed it — and because collapsing slides the cards back under the cursor, that flickered.
   const enterStack = () => {
     if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
     setHovering(true);
@@ -620,7 +636,11 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: slotStyle },
       React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
         onClick: () => { if (!card.leaving) void activate(card); },
-        onPointerEnter: enterStack, onPointerLeave: leaveStack, onFocus: enterStack, onBlur: leaveStack },
+        // Only the keyboard half of the hover gesture lives here: the pointer half belongs to the
+        // container, whose box spans the whole column. A card that watched its own pointer would
+        // collapse the stack every time the pointer crossed the gap between two cards — and because
+        // collapsing moves the cards under the cursor, that flicks back and forth.
+        onFocus: enterStack, onBlur: leaveStack },
         toastIcon(tone, status),
         React.createElement('div', { className: 'dsh-notify-toast-body' },
           React.createElement('span', { className: 'dsh-notify-toast-head' },
@@ -635,11 +655,16 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   // not make the stack look taller, and must not take a slot in the collapsed deck. It keeps its last
   // position while the slide-out animation plays, then its own timer takes the node away.
   const liveCards = cards.filter((card) => !card.leaving);
-  const shown = visibleCards(liveCards, { expanded: hovering });
-  const hidden = Math.max(0, liveCards.length - shown.length);
+  // The window is a property of the queue, not of the pointer: it is what the corner shows at rest.
+  const collapsedWindow = visibleCards(liveCards);
+  const hidden = Math.max(0, liveCards.length - collapsedWindow.length);
+  // Hovering only means something when the window hides a card. Expanding a queue that already fits
+  // would swap the flat layout for the scrolled column for no visual gain, so it stays collapsed.
+  const expanded = hovering && hidden > 0;
+  const shown = expanded ? liveCards : collapsedWindow;
   // The deck is the look of "there is more behind this card", so it appears exactly when something is
   // hidden; while everything fits, the cards lie flat.
-  const decked = !hovering && hidden > 0;
+  const decked = !expanded && hidden > 0;
   const livePlans = toastStackPlan({ heights: shown.map((card) => heights.current.get(card.record.eventId) ?? 0), decked });
   const planById = new Map(shown.map((card, index) => [card.record.eventId, livePlans[index]]));
   const lastWindowed = shown[shown.length - 1];
@@ -648,11 +673,11 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   const frontLive = shown[0]?.record.eventId ?? null;
   // A card on its way out is no longer part of the stack (it must not be counted, sized or slotted),
   // but it still has to be RENDERED for its slide-out to play: it trails the stack for its 200ms.
-  const rendered = [...(hovering ? liveCards : shown), ...cards.filter((card) => card.leaving)];
-  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack', 'data-expanded': hovering ? 'true' : 'false',
+  const rendered = [...shown, ...cards.filter((card) => card.leaving)];
+  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack', 'data-expanded': expanded ? 'true' : 'false', 'data-decked': decked ? 'true' : 'false',
     onPointerEnter: enterStack, onPointerLeave: leaveStack,
     style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent' } },
-    rendered.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan, hovering, rendered.length)));
+    rendered.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan, expanded, rendered.length)));
 }
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;
@@ -721,14 +746,15 @@ const hint = (children) => React.createElement('p', { className: 'dsh-notify-hin
 export function NotificationSelfTests() {
   const [state, setState] = React.useState(null);
   const fireOne = () => { publishLocalSelfTest(createLocalSelfTestRecord()); setState({ status: 'passed', reason: '页面浮层已渲染（一条）' }); };
-  const fireBatch = () => { for (const record of createLocalSelfTestBatch()) publishLocalSelfTest(record); setState({ status: 'passed', reason: `页面浮层已渲染（${SELF_TEST_BATCH.length} 条）` }); };
+  const fire = (count) => { for (const record of createLocalSelfTestBatch({ count })) publishLocalSelfTest(record); setState({ status: 'passed', reason: `页面浮层已渲染（${Math.min(count, SELF_TEST_BATCH.length)} 条）` }); };
   return React.createElement('section', { className: 'dsh-notify-card', 'aria-label': '通知自测' },
     React.createElement('h3', { className: 'dsh-notify-card-title' }, '自测'),
     hint('只有页面里这一条通道：右上角浮层 + 提示音 + 后台标签页闪动。这里发出的卡片只渲染在当前页面，不会外发系统通知。'),
     React.createElement('div', { className: 'dsh-notify-actions' },
       action('测试一条', fireOne),
-      action(`测试一组（${SELF_TEST_BATCH.length} 条）`, fireBatch)),
-    hint('「一组」连发 5 条不同状态的通知，用来看它们怎么叠起来、超过三张怎么折成「+N」，以及各类图标与配色。'),
+      action(`测试 ${TOAST_STACK_VISIBLE} 条`, () => fire(TOAST_STACK_VISIBLE)),
+      action(`测试 ${SELF_TEST_BATCH.length} 条`, () => fire(SELF_TEST_BATCH.length))),
+    hint(`「测试 ${TOAST_STACK_VISIBLE} 条」正好填满角上那一窗，可以看到它们平铺的样子；「测试 ${SELF_TEST_BATCH.length} 条」多出 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条，会折成「+${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE}」，鼠标移上去展开成完整一列。`),
     state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, `${state.status}: ${state.reason}`) : null);
 }
 function SettingsSection() {

@@ -33,7 +33,7 @@ Everything happens **inside the page you already have open**. There is no servic
 ## What it does
 
 - **Toast on the page**: a stack in the top-right corner, newest on top. Each card carries the title, body, session name, a tone colour per kind and a close button. Click the body to jump to the session; click the answers to reply without leaving the page, and the card reports the answer as loading until the host confirms (then ✓ 已完成 or ✗ with a 重试 button). Nothing expires on a clock: a card stays until you close it, open its session, or answer it — and a card whose record the Host has dropped leaves with it.
-- **Stacked, then collapsed**: the corner shows three cards, each one pushing the older ones down with a smooth transform. Anything waiting on you is always among them; the rest stay in the page behind a `+N` count, and hovering (or clicking the count) expands the whole queue into a scrollable column — newest first, nothing thrown away. A page keeps what it saw for as long as it is open; a refresh clears it.
+- **Stacked, then collapsed**: the corner shows five cards, each one pushing the older ones down with a smooth transform. Anything waiting on you is always among them; the rest stay in the page behind a `+N` count, and hovering (or clicking the count) expands the whole queue into a scrollable column — newest first, nothing thrown away. A page keeps what it saw for as long as it is open; a refresh clears it.
 - **Answer in the toast**: a pending question or approval renders the same options as the composer. Answering here and answering in the composer act on the same pending interaction, so the two stay in sync.
 - **Jump to the exact turn**: clicking a card opens its session and scrolls to (and briefly highlights) the turn the notification came from.
 - **Sound that survives being in the background**: synthesised in-page with WebAudio (no audio files shipped), plus uploadable custom sounds. It plays **even when the page is hidden** — that is the only way to reach you when the browser is behind another app.
@@ -86,16 +86,15 @@ Restart DSH and refresh the Web UI. The client half registers the settings card 
 **Settings → Notifications**:
 
 <p align="center">
-  <img src="./assets/settings.png" width="60%" alt="Notification settings: toast position, subtask notifications, the one remaining self-test and the sound card">
+  <img src="./assets/settings.png" width="60%" alt="Notification settings: toast position, subtask notifications, the three self-test buttons and the sound card">
 </p>
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Read retention | keep forever | Hides older **read** entries from the read list (1 / 7 / 30 days). Unread entries are never hidden; the host still evicts the oldest read records by capacity. |
 | Toast position | conversation column, top-right | Anchors the toast to the chat column, so it follows the conversation pane when the right sidebar is open or closed. |
 | Subtask / background job notifications | **off** | Each subagent and each background job would otherwise record an entry (titles often being raw commands). |
 | In-page sound | **on** | WebAudio cue on every new toast, **including while the page is hidden**. Built-ins: chime, ping, alert, silent — plus custom uploads. |
-| Self-test | — | One card for the only channel (in-page), plus an advanced section (persisted history, navigation and unread, storage round-trip, deduplication). Tests never fire on page load. |
+| Self-test | — | There is one channel, so there is one test surface: **测试一条**, **测试 5 条** (exactly fills the corner window) and **测试 8 条** (three past it, which is where the `+N` count and the scrollable expand show up). Tests never fire on page load. |
 
 Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory (not the plugin install directory), so reinstalling the plugin keeps them. Uploads are limited to 1 MB and to `mp3 / m4a / aac / wav / ogg / flac`; the file name must be a single path segment (no `../`, no subdirectories).
 

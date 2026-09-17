@@ -388,36 +388,75 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
     press: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })); }); },
     hover: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.Event('pointerover', { bubbles: true })); }); },
     leave: async (index = 0) => { await act(async () => { nodes()[index].dispatchEvent(new dom.window.Event('pointerout', { bubbles: true })); }); },
+    // The pointer, not the mouse: React derives enter/leave from the target's `relatedTarget`, which is
+    // how a real browser reports "the pointer left this card and landed on the container behind it".
+    pointer: async (target, type, related = null) => { await act(async () => { const event = new dom.window.Event(type, { bubbles: true }); Object.defineProperty(event, 'relatedTarget', { value: related }); target.dispatchEvent(event); }); },
+    stack: () => document.querySelector('.dsh-notify-stack'),
+    expanded: () => document.querySelector('.dsh-notify-stack')?.getAttribute('data-expanded'),
+    depths: () => slotsOf().map((node) => node.getAttribute('data-depth')),
     tabTitle: () => title.value,
   };
 }
 
 const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
 
-test('three cards lie flat, and the rest are hidden behind the count instead of dropped', async (t) => {
+test('five cards lie flat, and the rest are hidden behind the count instead of dropped', async (t) => {
   const sandbox = await mountStackSandbox(t);
-  for (const n of [1, 2, 3]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(sandbox.count(), 3, 'three notifications lie flat');
-  assert.deepEqual(sandbox.titles(), ['任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)'], 'each card is pushed down by the ones above it');
+  for (const n of [1, 2, 3, 4, 5]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
+  assert.equal(sandbox.count(), 5, 'five notifications lie flat');
+  assert.deepEqual(sandbox.titles(), ['任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)', 'translateY(36px) scale(1)', 'translateY(48px) scale(1)'], 'each card is pushed down by the ones above it');
   assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'nothing is hidden yet');
 
-  sandbox.push(burstRecord(4));
+  sandbox.push(burstRecord(6));
   await sandbox.tick();
-  assert.equal(sandbox.count(), 3, 'the corner keeps showing three');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)'], 'and turns into a deck, so "there is more" is visible');
+  assert.equal(sandbox.count(), 5, 'the corner keeps showing five');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)', 'translateY(30px) scale(0.88)', 'translateY(40px) scale(0.84)'], 'and turns into a deck, so "there is more" is visible');
   assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1', 'the front card counts what is not on screen');
+  // A layer behind the front card is an edge, not a card: it carries a depth so the stylesheet can
+  // hide its contents, which is what stops a taller notification from leaking a line of its text.
+  assert.equal(sandbox.stack().getAttribute('data-decked'), 'true', 'the stack says it is a deck');
+  assert.deepEqual(sandbox.depths(), ['0', '1', '2', '3', '4'], 'and marks every layer behind the front card');
 
   // Hovering shows the whole queue, and every card that was behind the count is really there.
   await sandbox.hover();
-  assert.equal(sandbox.count(), 4, 'hovering expands the whole queue');
-  assert.deepEqual(sandbox.transforms(), ['', '', '', ''], 'the expanded column is laid out in flow, not by transform');
-  assert.deepEqual(sandbox.titles(), ['任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1']);
+  assert.equal(sandbox.count(), 6, 'hovering expands the whole queue');
+  assert.deepEqual(sandbox.transforms(), ['', '', '', '', '', ''], 'the expanded column is laid out in flow, not by transform');
+  assert.deepEqual(sandbox.titles(), ['任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1']);
   assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'and the count chip belongs to the collapsed state only');
+  assert.equal(sandbox.stack().getAttribute('data-decked'), 'false', 'and every card is a card again');
+  assert.deepEqual(sandbox.depths(), ['0', '0', '0', '0', '0', '0']);
   await sandbox.leave();
   await sandbox.wait(200);
-  assert.equal(sandbox.count(), 3, 'leaving the stack collapses it again');
+  assert.equal(sandbox.count(), 5, 'leaving the stack collapses it again');
   assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1');
+});
+
+test('crossing the gap between two expanded cards keeps the stack open instead of flickering', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
+  assert.equal(sandbox.count(), 5, 'eight cards, five on screen');
+  assert.equal(sandbox.expanded(), 'false');
+
+  await sandbox.hover();
+  assert.equal(sandbox.expanded(), 'true', 'hovering a card expands the stack');
+  assert.equal(sandbox.count(), 8, 'and every hidden card is rendered');
+
+  // The pointer is now over the 12px gap: it left the card but not the container, so the stack must
+  // stay open. The card is the only node a boundary event can name here — the gap IS the container —
+  // and a card-level leave listener collapsed the stack at this exact moment, which flickered.
+  await sandbox.pointer(sandbox.nodes()[0], 'pointerout', sandbox.stack());
+  await sandbox.wait(200);
+  assert.equal(sandbox.expanded(), 'true', 'moving from a card into the gap leaves the stack open');
+  assert.equal(sandbox.count(), 8, 'and nothing is re-sorted away underneath the pointer');
+
+  // Leaving the container for the page is the real exit, and it still collapses — after the grace.
+  await sandbox.pointer(sandbox.stack(), 'pointerout', document.body);
+  assert.equal(sandbox.expanded(), 'true', 'the grace period keeps it open for a moment');
+  await sandbox.wait(200);
+  assert.equal(sandbox.expanded(), 'false', 'and then the stack collapses');
+  assert.equal(sandbox.count(), 5, 'back to the window');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'with the three hidden ones counted');
 });
 
 test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
@@ -533,7 +572,7 @@ test('an approval the host settles does retire its card', async (t) => {
   assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
 
-test('nothing is dropped: the corner shows three, the count hides the rest, and expanding brings them all back', async (t) => {
+test('nothing is dropped: the corner shows five, the count hides the rest, and expanding brings them all back', async (t) => {
   const sandbox = await mountStackSandbox(t);
   const live = () => sandbox.nodes().filter((node) => node.getAttribute('data-leaving') !== 'true');
   // One card that waits on the user, then a burst of finished work on top of it.
@@ -542,10 +581,10 @@ test('nothing is dropped: the corner shows three, the count hides the rest, and 
   assert.equal(live().length, 1);
   for (const n of [2, 3, 4, 5, 6, 7]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
 
-  // Seven cards in the page, three on screen: waiting work first, then the newest finished ones.
-  assert.equal(live().length, 3, 'the corner stays at three cards');
-  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['需要回复', '任务完成 7', '任务完成 6']);
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+4', 'the chip counts what is not on screen, not what was thrown away');
+  // Seven cards in the page, five on screen: waiting work first, then the newest finished ones.
+  assert.equal(live().length, 5, 'the corner stays at five cards');
+  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['需要回复', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4']);
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+2', 'the chip counts what is not on screen, not what was thrown away');
 
   // Expanding shows every one of them — nothing was dropped to fit.
   await sandbox.hover();
@@ -555,14 +594,14 @@ test('nothing is dropped: the corner shows three, the count hides the rest, and 
 
   await sandbox.leave();
   await sandbox.wait(200);
-  assert.equal(live().length, 3, 'and collapsing it puts the count back');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+4');
+  assert.equal(live().length, 5, 'and collapsing it puts the count back');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+2');
 
   // A card that leaves takes only itself out of the queue.
   await sandbox.click(sandbox.closer(0));
   await sandbox.wait(320);
-  assert.equal(live().length, 3, 'the queue drops from seven to six and the window stays full');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3');
-  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['任务完成 7', '任务完成 6', '任务完成 5'], 'the next finished card moves up into the freed slot');
+  assert.equal(live().length, 5, 'the queue drops from seven to six and the window stays full');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1');
+  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3'], 'the next finished card moves up into the freed slot');
 });
 

@@ -37,8 +37,9 @@ test('the self-test card only exercises the page: one button, no host request', 
   assert.ok(document.querySelector('[aria-label="通知自测"]'), 'the card is there');
   assert.equal(document.querySelector('[aria-label="A 页面里"]'), null, 'the old dimension grid is gone with the host self-tests');
   const one = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试一条');
-  const batch = [...document.querySelectorAll('button')].find((node) => node.textContent.startsWith('测试一组'));
-  assert.ok(one && batch, 'both self-test buttons are offered');
+  const windowed = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试 5 条');
+  const overflowing = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试 8 条');
+  assert.ok(one && windowed && overflowing, 'the three self-test buttons are offered');
   const button = one;
   const before = requests;   // the overlay polls on its own; only the click must stay silent
   await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
@@ -48,21 +49,28 @@ test('the self-test card only exercises the page: one button, no host request', 
   assert.equal(requests, before, 'a page test never talks to the host');
   assert.equal(document.querySelector('section[aria-label="通知历史"]'), null, 'and there is no history panel to look in');
 
-  // The group test exists so the stack, the collapse and every tone can be seen at once.
+  // The window-sized group is what "the stack is full" looks like: five cards, nothing hidden behind
+  // the count yet — the single test card from above is the sixth, so one card slips behind it.
+  await act(async () => { windowed.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  const flat = [...document.querySelectorAll('aside[role="status"]')];
+  assert.equal(flat.filter((node) => node.getAttribute('data-leaving') !== 'true').length, 5, 'the window is full');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1', 'six cards, five on screen');
+
+  // The overflowing group is the one that answers "what if there are more than the setting can show".
   const beforeBatch = requests;
-  await act(async () => { batch.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await act(async () => { overflowing.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const all = [...document.querySelectorAll('aside[role="status"]')];
   const live = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
-  assert.equal(live.length, 3, 'the corner keeps showing three cards, the single test card now behind the count');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'and it says how many are not on screen');
+  assert.equal(live.length, 5, 'the corner keeps showing five cards');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+9', 'and it says how many are not on screen');
   assert.equal(all.length - live.length, 0, 'nothing is thrown away to make room');
   assert.equal(requests, beforeBatch, 'a page test never talks to the host, however many it fires');
 
-  // Expanding shows every card the group fired, which is where the five tones are visible at once.
+  // Expanding shows every card the groups fired, which is where the five tones are visible at once.
   const stack = document.querySelector('.dsh-notify-stack');
   await act(async () => { stack.dispatchEvent(new Event('pointerover', { bubbles: true })); });
   const expanded = [...document.querySelectorAll('aside[role="status"]')];
-  assert.equal(expanded.length, 6, 'the single card and the group are all still there');
+  assert.equal(expanded.length, 14, 'the single card and both groups are all still there');
   const tones = expanded.map((node) => node.getAttribute('data-tone'));
   for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
 });

@@ -199,8 +199,8 @@ test('the page-scoped queue keeps waiting work first and lets go of nothing unti
 test('the collapsed window shows every pending card and fills the rest with the newest finished ones', () => {
   const settled = (id) => ({ record: { eventId: id, phase: 'settled' } });
   const pending = (id) => ({ record: { eventId: id, phase: 'open' } });
-  const queue = [settled('c5'), settled('c4'), settled('c3'), settled('c2'), pending('q1')];
-  assert.deepEqual(visibleCards(queue).map((card) => card.record.eventId), ['c5', 'c4', 'c3', 'q1'], 'three slots, but the question is never the one left out');
+  const queue = [settled('c7'), settled('c6'), settled('c5'), settled('c4'), settled('c3'), settled('c2'), pending('q1')];
+  assert.deepEqual(visibleCards(queue).map((card) => card.record.eventId), ['c7', 'c6', 'c5', 'c4', 'c3', 'q1'], 'five slots, but the question is never the one left out');
   assert.deepEqual(visibleCards(queue, { expanded: true }), queue, 'expanded shows the whole queue');
   const two = [settled('c2'), pending('q1'), pending('q2')];
   assert.deepEqual(visibleCards(two).map((card) => card.record.eventId), ['c2', 'q1', 'q2']);
