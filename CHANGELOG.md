@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-18
 
 Notifications are delivered live and nothing is stored: the stack in the top-right corner is the whole feature, so the sidebar bell, the history list and the store behind them are gone.
 
@@ -10,7 +10,7 @@ Notifications are delivered live and nothing is stored: the stack in the top-rig
 
 - **A toast stack.** Up to five notifications live in the top-right corner, newest on top; each new one takes the first slot and pushes the older ones down, animated by a measured `transform` rather than a re-flow. Cards enter with a spring scale + fade and leave by sliding out to the right.
 - **Every card carries its own time.** The arrival time leads the card, to the second (`00:33:08`), because parallel tasks finish seconds apart and "which one was this" is exactly the question a stack of similar cards raises. It shares the metadata row the session name already used, so it costs the card no height and five cards still fit the same window; a record that is not from today falls back to `02-14 09:05`, and the full local date and time always sits in the tooltip. The clock leads rather than trails that row because the `+N` count is pinned to the corner and would otherwise sit on top of it; fixed-width digits keep the clocks in one column either way. The self-test group is spread over the previous half-minute so a burst shows distinct moments instead of eight identical ones.
-- **A window, not a pile.** The corner is exactly five cards tall. A sixth notification takes its place below them, where the window scrolls to it (the wheel, or the count button, which jumps between the two ends of the queue); a sliver of the next card under the window edge is what makes the rest look reachable. The count is the whole queue — eight notifications show `+8`, whether five of them are on screen or not — and it is pinned to the corner outside the scroll box, so it neither scrolls away nor means something different once you have scrolled.
+- **A window, not a pile.** The corner is exactly five cards tall — three on a narrow, touch viewport, where screen space is the scarce thing. A sixth notification takes its place below them, where the window scrolls to it (the wheel, a swipe, or the count button, which jumps between the two ends of the queue); a sliver of the next card under the window edge is what makes the rest look reachable. The count is the whole queue — eight notifications show `+8`, whether five of them are on screen or not — and it is pinned to the corner outside the scroll box, so it neither scrolls away nor means something different once you have scrolled.
 - **Action state on the card.** Answering a question or a plan review from a card reports itself: the icon spins while the answer is in flight, the buttons disable, and the card settles on a green check plus 已完成 (then retires on its own) or on a red error with the host message and a 重试 button.
 - The settings self-test can fire a window-sized group (**测试 5 条**) and an overflowing one (**测试 8 条**), so what happens past the window — the count, the scroll and the card that waits below the fold — can be looked at without waiting for eight real notifications.
 - **`src/buffer.js`**: a bounded in-memory delivery buffer, plus the one thing that does persist — the user own preferences. A page asks `/pull?since=<seq>` for whatever it has not seen, and the first poll of a page is treated as history it was not there for: it is never replayed as a pile of old cards.
@@ -18,7 +18,6 @@ Notifications are delivered live and nothing is stored: the stack in the top-rig
 ### Changed
 
 - **The corner is a window onto a page-scoped queue.** Five cards fit — always including anything waiting on the user, which is ordered first — and everything older keeps its slot below the fold instead of being dropped, one wheel-scroll away. Nothing about the stack depends on the pointer any more, and a card on its way out no longer counts towards the window while it slides away. A refresh still clears everything: nothing is stored, here or on the host.
-
 
 - **A card leaves when the user says so.** No countdown bar and no clock: a notification stays until it is closed with **×**, opened by clicking the body, or answered successfully from the card itself. A record that arrives again because the host settled it (an approval, asked and then decided) updates its card in place instead of stacking a second one, and retires it.
 - **Nothing is stored.** The profile keeps `settings.json` (sound, toast position, subtask noise) and nothing else. Records do not survive a restart, there is no read state anywhere, and no page is brought up to date on work it was not there for.
@@ -101,6 +100,7 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.2.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.0
 [0.1.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.2
 [0.1.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.1
 [0.1.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.0
