@@ -52,7 +52,15 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-status[data-tone=warn]::before{background:var(--dsw-alias-state-warn-primary,#d97706)}
 .dsh-notify-status[data-tone=error]::before{background:var(--dsw-alias-state-error-primary,#dc2626)}
 .dsh-notify-toggle{align-items:flex-start;cursor:pointer;display:flex;font-size:13px;gap:10px;line-height:1.45}
-.dsh-notify-toggle input{accent-color:var(--dsw-alias-state-business-primary);flex:none;height:18px;margin:1px 0 0;min-height:18px;min-width:18px;width:18px}
+/* The host's mobile stylesheet (bridge-mobile-styles, max-width 767px) stretches every input and select
+   inside the settings options pane to width:100%. That is right for our select and wrong for the
+   checkbox, which took the whole row and pushed its label past the card edge — the host's selector is
+   div[class*=...] input, which outranks a bare .dsh-notify-toggle input. Scoping the rule to the
+   settings section wins the cascade back, and the size is pinned three ways (width, max-width and a
+   flex basis) so no width rule from outside can stretch it again. The label may shrink, so a cramped
+   pane wraps the text rather than overflowing. */
+.dsh-notify-settings .dsh-notify-toggle input{accent-color:var(--dsw-alias-state-business-primary);flex:0 0 18px;height:18px;margin:1px 0 0;max-width:18px;min-height:18px;min-width:18px;width:18px}
+.dsh-notify-settings .dsh-notify-toggle>span{min-width:0;overflow-wrap:anywhere}
 .dsh-notify-field{display:grid;font-size:13px;font-weight:600;gap:8px;min-width:0}
 .dsh-notify-select{background:var(--dsw-specific-input-major,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;font:inherit;font-weight:400;max-width:100%;min-height:36px;min-width:0;padding:0 10px;width:100%}
 .dsh-notify-actions{align-items:center;display:flex;flex-wrap:wrap;gap:8px;min-width:0}
@@ -65,7 +73,7 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-result[data-tone=passed]{color:var(--dsw-alias-state-success-primary,#16a36a)}
 .dsh-notify-result[data-tone=failed]{color:var(--dsw-alias-state-error-primary,#dc2626)}
 .dsh-notify-result[data-tone=active]{color:var(--dsw-alias-state-business-primary)}
-@media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-toggle input{height:22px;min-height:22px;min-width:22px;width:22px}}`;
+@media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-settings .dsh-notify-toggle input{flex:0 0 22px;height:22px;max-width:22px;min-height:22px;min-width:22px;width:22px}}`;
 /**
  * Toast presentation: a window anchored in the top-right corner. Each card is one row of
  * [tone icon][title + text + actions][close X]. The container is a scroll box exactly as tall as the
