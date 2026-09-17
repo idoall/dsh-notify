@@ -398,6 +398,8 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
     windowHeight: () => document.querySelector('.dsh-notify-frame')?.style.height,
     contentHeight: () => document.querySelector('.dsh-notify-stack-inner')?.style.height,
     badge: () => document.querySelector('.dsh-notify-count')?.textContent ?? null,
+    times: () => nodes().map((node) => node.querySelector('.dsh-notify-toast-time')?.textContent ?? null),
+    headParts: (index = 0) => [...nodes()[index].querySelectorAll('.dsh-notify-toast-head > *')],
     tabTitle: () => title.value,
   };
 }
@@ -604,3 +606,28 @@ test('nothing is dropped: every card keeps its slot, and the window scrolls to i
   assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)']);
 });
 
+
+test('every card says when it happened, on the line the session name already used', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  // The card renders against the real clock, so "today at 09:05:03" is built from today's own date:
+  // the label under test is the clock form, and the date form has its own unit test.
+  const today = new Date(); const pad = (value) => String(value).padStart(2, '0');
+  const day = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const at = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 9, 5, 3).getTime();
+  sandbox.push({ ...burstRecord(1), at });
+  await sandbox.tick();
+  const time = sandbox.nodes()[0].querySelector('.dsh-notify-toast-time');
+  assert.equal(time?.tagName, 'TIME', 'it is a real time element, not just styled text');
+  assert.equal(time.textContent, '09:05:03', 'the clock, to the second');
+  assert.equal(time.getAttribute('datetime'), new Date(at).toISOString(), 'machine-readable stamp');
+  assert.equal(time.getAttribute('title'), `${day} 09:05:03`, 'the full date is one hover away');
+  // The time shares the metadata row with the session name: adding it must not add a line to the card,
+  // which is what keeps five cards in the same window they fitted in before.
+  assert.deepEqual(sandbox.headParts(0).map((node) => node.className), ['dsh-notify-toast-time', 'dsh-notify-toast-source'], 'the clock leads, so the +N chip and the close button keep the right end of the row to themselves');
+  assert.equal(sandbox.nodes()[0].querySelectorAll('.dsh-notify-toast-body > *').length, 2, 'head and title — the clock added no row');
+  // A record without a usable stamp renders without one, instead of an empty element that shifts the row.
+  sandbox.push({ ...burstRecord(2), at: undefined });
+  await sandbox.tick();
+  assert.deepEqual(sandbox.times(), [null, '09:05:03'], 'the undated card simply has no clock');
+  assert.equal(sandbox.headParts(0).length, 1, 'and its row holds only the session name');
+});

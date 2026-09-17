@@ -94,7 +94,8 @@ export const TOAST_CSS = `.dsh-notify-frame{position:fixed;z-index:1100}
 .dsh-notify-toast[data-tone=info] .dsh-notify-toast-icon{color:var(--dsw-alias-state-business-primary,#2563eb)}
 .dsh-notify-toast-body{display:grid;gap:2px;min-width:0;flex:1 1 auto}
 .dsh-notify-toast-head{align-items:center;display:flex;gap:6px;min-width:0}
-.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);flex:1 1 auto;font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-notify-toast-time{color:var(--dsw-alias-label-tertiary,#7a8494);flex:none;font-size:11px;font-variant-numeric:tabular-nums;line-height:1.4;white-space:nowrap}
 .dsh-notify-toast-title{font-size:13px;font-weight:650;line-height:1.45}
 .dsh-notify-toast-text{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .dsh-notify-toast-answers{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
@@ -148,12 +149,16 @@ export const SELF_TEST_BATCH = Object.freeze([
  * `count` exists so the settings buttons can fire a window-sized group and an overflowing one: the
  * difference between five cards lying flat and eight cards behind a `+3` count is the whole point of
  * looking at a group at all. Cards are distinct records — reusing one would merge into a single card.
+ *
+ * The group is spread over the last few seconds rather than all stamped at the same millisecond, so a
+ * self-test shows what a real burst looks like: eight cards, eight readable times, newest on top.
  */
+export const SELF_TEST_STEP_MS = 6_000;
 export function createLocalSelfTestBatch({ count = SELF_TEST_BATCH.length, now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
   const wanted = Math.max(1, Math.min(SELF_TEST_BATCH.length, Math.trunc(Number(count)) || SELF_TEST_BATCH.length));
   return SELF_TEST_BATCH.slice(0, wanted).map((entry, index) => {
     const id = `self-test:${randomUUID()}-${index}`;
-    return { ...entry, eventId: id, mergeKey: id, at: now + index, phase: 'settled', localOnly: true };
+    return { ...entry, eventId: id, mergeKey: id, at: now - (wanted - 1 - index) * SELF_TEST_STEP_MS, phase: 'settled', localOnly: true };
   });
 }
 export function publishLocalSelfTest(record, dispatch = (event) => globalThis.dispatchEvent(event)) {
@@ -420,6 +425,27 @@ export function queueCards(cards = [], max = TOAST_QUEUE_MAX) {
   return [...pending, ...finished].slice(0, Math.max(1, max));
 }
 /**
+ * When a card happened, in the smallest form that still answers "which one was this".
+ *
+ * A page only holds what arrived while it was open, so the usual case is today and the clock alone
+ * says it. Seconds are kept because parallel tasks finish seconds apart — that is exactly when the
+ * user is trying to tell two cards apart — and the full date is always in the tooltip for the rare
+ * card that arrives after the tab was asleep across midnight. Relative wording ("3 分钟前") is
+ * deliberately not used: it would need a timer redrawing the stack to stay true, and reconstructing
+ * *when* something happened is the whole point of the field.
+ */
+export function toastTime(at, now = Date.now()) {
+  const stamp = Number(at);
+  if (!Number.isFinite(stamp) || stamp <= 0) return null;
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return null;
+  const pad = (value) => String(value).padStart(2, '0');
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  const today = new Date(Number.isFinite(Number(now)) ? Number(now) : Date.now());
+  const sameDay = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+  return { label: sameDay ? clock : `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${clock.slice(0, 5)}`, title: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${clock}`, iso: date.toISOString() };
+}
+/**
  * Where each card sits. Every card keeps its own slot in one flat column — a new one takes the top and
  * pushes the rest down by exactly its own measured height — and the window below decides how much of
  * that column is on screen.
@@ -632,6 +658,7 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     const record = card.record; const status = card.status;
     const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
     const source = sessionLabel(sessions, record.sessionId);
+    const stamp = toastTime(record.at);
     // The slot is absolutely positioned and moved by its transform; that is what lets the cards below
     // a new one slide down instead of jumping.
     const slotStyle = { transform: `translateY(${plan.offsetY}px)` };
@@ -641,6 +668,11 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
         toastIcon(tone, status),
         React.createElement('div', { className: 'dsh-notify-toast-body' },
           React.createElement('span', { className: 'dsh-notify-toast-head' },
+            // The time leads the metadata row the session name already occupies: no new line, no third
+            // column, and fixed-width digits line the clocks up down the stack. It must not take the
+            // right end of that row — the `+N` chip and the close button live there, and the chip is
+            // pinned to the corner rather than to a card, so anything right-aligned would slide under it.
+            stamp ? React.createElement('time', { className: 'dsh-notify-toast-time', dateTime: stamp.iso, title: stamp.title }, stamp.label) : null,
             source ? React.createElement('span', { className: 'dsh-notify-toast-source', title: record.sessionId }, source) : null),
           React.createElement('strong', { className: 'dsh-notify-toast-title' }, record.title),
           record.body ? React.createElement('p', { className: 'dsh-notify-toast-text' }, record.body) : null,

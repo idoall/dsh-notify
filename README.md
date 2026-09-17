@@ -27,12 +27,12 @@ When a session **really stops**, fails, asks a question, or needs approval, a ca
 Everything happens **inside the page you already have open**. There is no service worker, no web push, no host-side OS notification, and no extra app to install: browser and operating-system notification matrices were removed on purpose, because they fail invisibly (submitted, never seen) and cannot be made reliable across platforms.
 
 <p align="center">
-  <img src="./assets/toast.png" width="70%" alt="Notification cards in the top-right corner: icon, title, body text and a close button">
+  <img src="./assets/toast.png" width="70%" alt="Notification cards in the top-right corner: arrival time, session name, title, body text and a close button">
 </p>
 
 ## What it does
 
-- **Toast on the page**: a stack in the top-right corner, newest on top. Each card carries the title, body, session name, a tone colour per kind and a close button. Click the body to jump to the session; click the answers to reply without leaving the page, and the card reports the answer as loading until the host confirms (then ✓ 已完成 or ✗ with a 重试 button). Nothing expires on a clock: a card stays until you close it, open its session, or answer it — and a card whose record the Host has dropped leaves with it.
+- **Toast on the page**: a stack in the top-right corner, newest on top. Each card carries the arrival time to the second (`00:33:08`, or `02-14 09:05` when it is not from today; the full date is in its tooltip), the session name, the title, the body, a tone colour per kind and a close button. Click the body to jump to the session; click the answers to reply without leaving the page, and the card reports the answer as loading until the host confirms (then ✓ 已完成 or ✗ with a 重试 button). Nothing expires on a clock: a card stays until you close it, open its session, or answer it — and a card whose record the Host has dropped leaves with it.
 - **A window onto the queue**: the corner is five cards tall and each new card pushes the older ones down with a smooth transform. Anything waiting on you is always among them; everything older sits below the fold, one scroll away, and the count on the corner says how many the page is holding (`+8`) — not just what is out of sight. Click the count to jump between the two ends of the queue. Nothing is thrown away while the page is open; a refresh clears it.
 - **Answer in the toast**: a pending question or approval renders the same options as the composer. Answering here and answering in the composer act on the same pending interaction, so the two stay in sync.
 - **Jump to the exact turn**: clicking a card opens its session and scrolls to (and briefly highlights) the turn the notification came from.

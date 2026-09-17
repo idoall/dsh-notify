@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -209,3 +209,23 @@ test('the page-scoped queue keeps waiting work first and lets go of nothing unti
   assert.equal(capped[0].record.eventId, 'q1', 'the cap never takes the card that waits on the user');
 });
 
+test('each card is stamped with its own clock, and the full date rides in the tooltip', () => {
+  // Constructed and formatted in local time on purpose: the label never depends on the runner's zone.
+  const at = new Date(2026, 1, 14, 9, 5, 3).getTime();
+  assert.deepEqual(toastTime(at, new Date(2026, 1, 14, 23, 59, 0).getTime()),
+    { label: '09:05:03', title: '2026-02-14 09:05:03', iso: new Date(at).toISOString() },
+    'the same day is just the clock, to the second, because parallel tasks finish seconds apart');
+  // A tab that was asleep across midnight still gets a date instead of a lie about "today".
+  assert.equal(toastTime(at, new Date(2026, 1, 15, 0, 1, 0).getTime()).label, '02-14 09:05');
+  assert.equal(toastTime(at, new Date(2027, 1, 14, 9, 5, 3).getTime()).label, '02-14 09:05');
+  // And a record with no usable stamp is simply not stamped, rather than stamped with 1970.
+  for (const missing of [undefined, null, 0, -1, 'nonsense', NaN]) assert.equal(toastTime(missing), null, `${missing} has no time`);
+});
+test('a self-test group is spread over time so eight cards read as eight different moments', () => {
+  const batch = createLocalSelfTestBatch({ count: 8, now: 1_000_000, randomUUID: () => 'r' });
+  assert.equal(batch.length, 8);
+  assert.equal(batch.at(-1).at, 1_000_000, 'the newest card is now');
+  assert.equal(batch[0].at, 1_000_000 - 7 * SELF_TEST_STEP_MS, 'and the oldest is seven steps back');
+  assert.equal(new Set(batch.map((record) => record.at)).size, 8, 'every card keeps its own moment');
+  assert.deepEqual(batch.map((record) => record.eventId), batch.map((record) => record.mergeKey), 'distinct records, so they cannot merge into one card');
+});
