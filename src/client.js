@@ -389,6 +389,20 @@ export const TOAST_EXIT_MS = 200;
 export const TOAST_SUCCESS_MS = 900;
 const TOAST_HOVER_GRACE_MS = 120;
 /**
+ * Which cards survive a burst that overflows the stack. The oldest SETTLED cards go first: a question
+ * or an approval pushed out by a run of completions would be gone for good (there is no history to
+ * find it in) and it is the only kind of notification that is actually waiting on the user. Only when
+ * everything on screen is pending does the oldest of those go, because the stack has to stay bounded.
+ */
+export function stackOverflow(cards = [], cap = TOAST_STACK_MAX) {
+  if (!(cards.length > cap)) return { kept: cards, dropped: [] };
+  const excess = cards.length - cap;
+  const doomed = new Set();
+  for (let index = cards.length - 1; index >= 0 && doomed.size < excess; index -= 1) if (cards[index]?.record?.phase !== 'open') doomed.add(index);
+  for (let index = cards.length - 1; index >= 0 && doomed.size < excess; index -= 1) doomed.add(index);
+  return { kept: cards.filter((_, index) => !doomed.has(index)), dropped: [...doomed].sort((a, b) => a - b).map((index) => cards[index]) };
+}
+/**
  * Stack geometry, as a pure function: `heights[i]` is the measured height of the i-th card, newest
  * first. Up to `TOAST_STACK_VISIBLE` cards lie flat, each one pushed down by the heights above it —
  * that offset is what a new card animates into, so the older ones slide rather than jump. Past that
@@ -421,12 +435,16 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   const commit = (next) => { cardsRef.current = next; setCards(next); };
   const forget = (eventId) => { heights.current.delete(eventId); };
   /** Retire a card: the DOM node stays for the slide-out animation and is dropped when it ends. */
+  /** Watch a card leave: the node stays for the animation, and the timer takes it out of the stack. */
+  const retire = (eventId) => {
+    const previous = exits.current.get(eventId); if (previous) clearTimeout(previous);
+    exits.current.set(eventId, setTimeout(() => { exits.current.delete(eventId); forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); }, TOAST_EXIT_MS));
+  };
   const dismiss = (eventId, { animate = true } = {}) => {
     const success = successes.current.get(eventId); if (success) { clearTimeout(success); successes.current.delete(eventId); }
     if (!animate) { forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); return; }
     commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, leaving: true } : card)));
-    const previous = exits.current.get(eventId); if (previous) clearTimeout(previous);
-    exits.current.set(eventId, setTimeout(() => { exits.current.delete(eventId); forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); }, TOAST_EXIT_MS));
+    retire(eventId);
   };
   const patchCard = (eventId, patch) => commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, ...patch } : card)));
   const measure = (eventId) => (node) => {
@@ -474,8 +492,12 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     if (globalThis.document?.hidden) unseen.current.add(record.eventId);
     toasted.current.add(record.eventId);
     const next = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
-    for (const dropped of next.slice(TOAST_STACK_MAX)) forget(dropped.record.eventId);
-    commit(next.slice(0, TOAST_STACK_MAX));
+    const { kept, dropped } = stackOverflow(next, TOAST_STACK_MAX);
+    // An overflowed card leaves the way any other card does — it is the oldest one, so the stack is
+    // simply retiring it — and its measurement goes now: a card on its way out needs no slot.
+    for (const card of dropped) forget(card.record.eventId);
+    commit([...kept, ...dropped.map((card) => ({ ...card, leaving: true }))]);
+    for (const card of dropped) retire(card.record.eventId);
     void soundPlayer.play();
   };
   React.useEffect(() => {
@@ -585,7 +607,7 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     const record = card.record; const status = card.status;
     const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
     const source = sessionLabel(sessions, record.sessionId);
-    const more = !hovering && cards.length > TOAST_STACK_VISIBLE && index === 0 ? cards.length - 1 : 0;
+    const more = record.eventId === frontLive ? chip : 0;
     return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: { transform: `translateY(${plan.offsetY}px) scale(${plan.scale})`, zIndex: cards.length - index } },
       React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
         onClick: () => { if (!card.leaving) void activate(card); },
@@ -600,10 +622,19 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
           actionRow(card)),
         React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); dismiss(record.eventId); } }, '\u00d7')));
   };
-  const plans = toastStackPlan({ heights: cards.map((card) => heights.current.get(card.record.eventId) ?? 0), hovering });
+  // A card on its way out is no longer part of the stack: it must not be counted by the +N chip, must
+  // not make the stack look taller, and must not take a slot in the collapsed deck. It keeps its last
+  // position while the slide-out animation plays, then its own timer takes the node away.
+  const liveCards = cards.filter((card) => !card.leaving);
+  const livePlans = toastStackPlan({ heights: liveCards.map((card) => heights.current.get(card.record.eventId) ?? 0), hovering });
+  const planById = new Map(liveCards.map((card, index) => [card.record.eventId, livePlans[index]]));
+  const lastLive = liveCards[liveCards.length - 1];
+  const trailingPlan = { offsetY: lastLive ? (planById.get(lastLive.record.eventId).offsetY + (heights.current.get(lastLive.record.eventId) ?? 0)) : 0, scale: 1, depth: 0 };
+  const chip = !hovering && liveCards.length > TOAST_STACK_VISIBLE ? liveCards.length - 1 : 0;
+  const frontLive = liveCards[0]?.record.eventId ?? null;
   return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack',
     style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
-    cards.map((card, index) => cardView(card, index, plans[index] ?? { offsetY: 0, scale: 1, depth: 0 })));
+    cards.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan)));
 }
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;

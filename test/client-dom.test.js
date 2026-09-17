@@ -524,3 +524,27 @@ test('an approval the host settles does retire its card', async (t) => {
   await sandbox.wait(260);
   assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
+
+test('a burst past the cap retires the oldest finished card and leaves a pending one alone', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  const live = () => sandbox.nodes().filter((node) => node.getAttribute('data-leaving') !== 'true');
+  const liveTitles = () => live().map((node) => node.querySelector('.dsh-notify-toast-title')?.textContent);
+  // One card that is waiting on the user, then a burst of finished work on top of it.
+  sandbox.push({ eventId: 'ask-1', mergeKey: 'ask-1', kind: 'question', sessionId: 's1', title: '需要回复', body: '还在等你', at: 1, phase: 'open' });
+  await sandbox.tick();
+  assert.equal(live().length, 1);
+  for (const n of [2, 3, 4, 5, 6, 7]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
+  assert.equal(live().length, 5, 'the stack stays bounded');
+  assert.deepEqual(liveTitles(), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '需要回复'], 'the card that waits on the user outlives six later completions');
+  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+4');
+
+  // The retired cards leave the way any other card does, rather than blinking out of the stack.
+  sandbox.push(burstRecord(8));
+  await sandbox.tick();
+  const leaving = sandbox.nodes().filter((node) => node.getAttribute('data-leaving') === 'true');
+  assert.ok(leaving.length >= 1, 'an overflow slides the oldest card out instead of dropping it instantly');
+  assert.ok(leaving.some((node) => /任务完成 2/.test(node.textContent)), 'and the oldest finished card is one of the ones leaving');
+  await sandbox.wait(320);
+  assert.equal(sandbox.count(), 5, 'the stack settles back to the cap once the exit finishes');
+  assert.deepEqual(liveTitles(), ['任务完成 8', '任务完成 7', '任务完成 6', '任务完成 5', '需要回复']);
+});

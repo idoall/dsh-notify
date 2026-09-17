@@ -51,8 +51,10 @@ test('the self-test card only exercises the page: one button, no host request', 
   // The group test exists so the stack, the collapse and every tone can be seen at once.
   const beforeBatch = requests;
   await act(async () => { batch.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  const cards = [...document.querySelectorAll('aside[role="status"]')];
+  const all = [...document.querySelectorAll('aside[role="status"]')];
+  const cards = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
   assert.equal(cards.length, 5, 'the stack keeps at most five cards: the single test card is the one pushed out');
+  assert.equal(all.length - cards.length, 1, 'and the card it pushed out is leaving rather than gone');
   assert.equal(document.querySelector('.dsh-notify-toast-more')?.textContent, '+4', 'and the stack says how many sit behind the front card');
   const tones = cards.map((node) => node.getAttribute('data-tone'));
   for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
