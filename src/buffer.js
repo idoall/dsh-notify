@@ -63,8 +63,15 @@ export function createBuffer({ limit = BUFFER_LIMIT } = {}) {
  * written by the store this replaced is unwrapped rather than allowed to shadow what the user chose.
  */
 export const SETTINGS_VERSION = 1;
-export function createSettings({ dataDir } = {}) {
+/**
+ * @param options.dataDir — profile-owned directory; without an absolute one, preferences are per process.
+ * @param options.keys — the settings this version knows. A file from an older one is filtered through
+ *   it, so a key that no longer exists cannot be carried forward forever; omitting it keeps every key.
+ */
+export function createSettings({ dataDir, keys } = {}) {
   const file = typeof dataDir === 'string' && isAbsolute(dataDir) ? join(dataDir, 'settings.json') : null;
+  const allowed = Array.isArray(keys) ? new Set(keys) : null;
+  const clean = (input) => (allowed ? Object.fromEntries(Object.entries(input ?? {}).filter(([key]) => allowed.has(key))) : { ...(input ?? {}) });
   let value = {};
   if (file) {
     try {
@@ -74,13 +81,13 @@ export function createSettings({ dataDir } = {}) {
       // place would shadow every setting already chosen, and it would be written back forever; the
       // next `set` rewrites the file flat.
       const legacy = document?.version === SETTINGS_VERSION && document.value && typeof document.value === 'object' && !Array.isArray(document.value);
-      value = legacy ? document.value : (document ?? {});
+      value = clean(legacy ? document.value : document);
     } catch { /* first run, or a file we are about to overwrite */ }
   }
   return {
     get: () => ({ ...value }),
     set(next = {}) {
-      value = { ...value, ...next };
+      value = { ...value, ...clean(next) };
       if (!file) return { ...value };
       try {
         mkdirSync(dirname(file), { recursive: true });

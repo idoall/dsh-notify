@@ -119,8 +119,26 @@ export function installClientStyles({ document: doc = globalThis.document } = {}
 export function layoutFor({ width = 1024, coarse = false } = {}) { return { narrow: width < 760, hitTarget: coarse ? 44 : 32 }; }
 /** A page-local notification, used by the settings self-test: it never touches the host. */
 export function createLocalSelfTestRecord({ now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
-  const testRunId = `self-test:a:${randomUUID()}`;
-  return { eventId: testRunId, mergeKey: `test:${testRunId}`, kind: 'test', deliveryScope: 'a-only', testRunId, title: '自测：页面浮层', body: '只显示在当前页面，不会发送系统通知', at: now, unread: false, phase: 'settled', localOnly: true };
+  const id = `self-test:${randomUUID()}`;
+  return { eventId: id, mergeKey: id, kind: 'test', title: '自测：页面浮层', body: '只显示在当前页面，不会发送系统通知', at: now, phase: 'settled', localOnly: true };
+}
+/**
+ * One of each tone, so a single click shows what the stack actually does: cards entering, the collapse
+ * past three with its +N count, and every icon and accent a notification can carry. A group is also
+ * the only honest way to look at the layout — one card says nothing about stacking.
+ */
+export const SELF_TEST_BATCH = Object.freeze([
+  { kind: 'completed', title: '任务完成', body: '修复插件本机访问布局问题' },
+  { kind: 'approval', title: '需要审批', body: 'escalate sandbox to danger-full-access' },
+  { kind: 'question', title: '需要回复', body: '通道范围：浏览器通知要怎么处理？' },
+  { kind: 'failed', title: '运行失败', body: 'OpenAI API error (503): Service temporarily unavailable' },
+  { kind: 'job-end', title: '后台任务结束', body: 'pnpm build' },
+]);
+export function createLocalSelfTestBatch({ now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
+  return SELF_TEST_BATCH.map((entry, index) => {
+    const id = `self-test:${randomUUID()}-${index}`;
+    return { ...entry, eventId: id, mergeKey: id, at: now + index, phase: 'settled', localOnly: true };
+  });
 }
 export function publishLocalSelfTest(record, dispatch = (event) => globalThis.dispatchEvent(event)) {
   dispatch(typeof CustomEvent === 'function' ? new CustomEvent(LOCAL_TEST_EVENT, { detail: record }) : { type: LOCAL_TEST_EVENT, detail: record });
@@ -650,14 +668,18 @@ export function resultTone(status) {
 }
 const action = (label, onClick, extra = {}) => React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick, ...extra }, label);
 const hint = (children) => React.createElement('p', { className: 'dsh-notify-hint' }, children);
-/** The one self-test that still means something: does a page-level toast actually appear here? */
+/** The one self-test that still means something: does a page-level card actually appear here? */
 export function NotificationSelfTests() {
   const [state, setState] = React.useState(null);
+  const fireOne = () => { publishLocalSelfTest(createLocalSelfTestRecord()); setState({ status: 'passed', reason: '页面浮层已渲染（一条）' }); };
+  const fireBatch = () => { for (const record of createLocalSelfTestBatch()) publishLocalSelfTest(record); setState({ status: 'passed', reason: `页面浮层已渲染（${SELF_TEST_BATCH.length} 条）` }); };
   return React.createElement('section', { className: 'dsh-notify-card', 'aria-label': '通知自测' },
     React.createElement('h3', { className: 'dsh-notify-card-title' }, '自测'),
-    hint('现在只有页面里这一条通道：右上角浮层 + 提示音 + 后台标签页闪动。按下按钮会立刻弹一张卡，不会外发任何系统通知。'),
+    hint('只有页面里这一条通道：右上角浮层 + 提示音 + 后台标签页闪动。这里发出的卡片只渲染在当前页面，不会外发系统通知。'),
     React.createElement('div', { className: 'dsh-notify-actions' },
-      action('测试页面浮层', () => { publishLocalSelfTest(createLocalSelfTestRecord()); setState({ status: 'passed', reason: '页面浮层已渲染' }); })),
+      action('测试一条', fireOne),
+      action(`测试一组（${SELF_TEST_BATCH.length} 条）`, fireBatch)),
+    hint('「一组」连发 5 条不同状态的通知，用来看它们怎么叠起来、超过三张怎么折成「+N」，以及各类图标与配色。'),
     state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, `${state.status}: ${state.reason}`) : null);
 }
 function SettingsSection() {

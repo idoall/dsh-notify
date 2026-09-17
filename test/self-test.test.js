@@ -36,7 +36,10 @@ test('the self-test card only exercises the page: one button, no host request', 
 
   assert.ok(document.querySelector('[aria-label="通知自测"]'), 'the card is there');
   assert.equal(document.querySelector('[aria-label="A 页面里"]'), null, 'the old dimension grid is gone with the host self-tests');
-  const button = [...document.querySelectorAll('button')].find((node) => node.textContent.includes('测试页面浮层'));
+  const one = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试一条');
+  const batch = [...document.querySelectorAll('button')].find((node) => node.textContent.startsWith('测试一组'));
+  assert.ok(one && batch, 'both self-test buttons are offered');
+  const button = one;
   const before = requests;   // the overlay polls on its own; only the click must stay silent
   await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const toast = document.querySelector('aside[role="status"]');
@@ -44,4 +47,14 @@ test('the self-test card only exercises the page: one button, no host request', 
   assert.match(toast.textContent, /自测：页面浮层/);
   assert.equal(requests, before, 'a page test never talks to the host');
   assert.equal(document.querySelector('section[aria-label="通知历史"]'), null, 'and there is no history panel to look in');
+
+  // The group test exists so the stack, the collapse and every tone can be seen at once.
+  const beforeBatch = requests;
+  await act(async () => { batch.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  const cards = [...document.querySelectorAll('aside[role="status"]')];
+  assert.equal(cards.length, 5, 'the stack keeps at most five cards: the single test card is the one pushed out');
+  assert.equal(document.querySelector('.dsh-notify-toast-more')?.textContent, '+4', 'and the stack says how many sit behind the front card');
+  const tones = cards.map((node) => node.getAttribute('data-tone'));
+  for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
+  assert.equal(requests, beforeBatch, 'a page test never talks to the host, however many it fires');
 });

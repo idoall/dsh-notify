@@ -152,10 +152,10 @@ export async function apply(ctx, config = {}) {
   // No store, no history: the buffer holds what has not been delivered yet, and preferences are the
   // only thing that outlives the process.
   const buffer = createBuffer();
-  const preferences = createSettings({ dataDir: config.dataDir });
+  const preferences = createSettings({ dataDir: config.dataDir, keys: SETTING_KEYS });
   const settings = { ...DEFAULT_SETTINGS, ...pickSettings(preferences.get()) };
   const reducer = new EventReducer(() => Date.now());
-  const diagnostics = { eventErrors: 0 };
+  const diagnostics = { eventErrors: 0, services: {} };
   const sounds = createSoundLibrary({ dataDir: config.dataDir });
   // Tool call IDs remain available for authoritative replay/result handling.
   // A live user-questions/request has no source-proven causal callId, therefore
@@ -365,8 +365,32 @@ export async function apply(ctx, config = {}) {
   // per background job, often titled with the raw command). They are opt-in via `subtaskNotify`.
   const subtasksWanted = () => ({ ...settings, ...preferences.get() }).subtaskNotify === true;
   ctx?.on?.('workflow/end', (info, result) => { if (!subtasksWanted()) return; safely(() => dispatch(reducer.upsert({ kind: 'workflow-end', mergeKey: `wf:${info.id}`, title: info.meta?.name || '工作流结束', body: result.error || result.stopReason, phase: 'settled', outcome: result.stopReason }))); });
-  const jobs = contextService(ctx, 'jobs');
-  jobs?.onJobDone?.((snapshot, owner) => { if (!subtasksWanted()) return; safely(() => dispatch(reducer.upsert({ kind: 'job-end', mergeKey: `job:${snapshot.id}`, sessionId: snapshot.ownerSession ?? sessionIdOf(owner), ...jobNotification(snapshot), phase: 'settled', outcome: snapshot.status }))); });
+  const onJobDone = (snapshot, owner) => {
+    if (!subtasksWanted()) return;
+    safely(() => dispatch(reducer.upsert({ kind: 'job-end', mergeKey: `job:${snapshot?.id}`, sessionId: snapshot?.ownerSession ?? sessionIdOf(owner), ...jobNotification(snapshot ?? {}), phase: 'settled', outcome: snapshot?.status })));
+  };
+  /**
+   * The job registry is a process-wide service, and this plugin is not the composition that provides
+   * it. Registering through `contextService` alone failed silently for a long time — the listener was
+   * simply never called, so "notify me when a background job finishes" did nothing — while the web
+   * mount right below has always worked because it declares `ctx.inject([...])` and lets Cordis hand
+   * it the service. So: inject first (the same seam as webServer/connection), keep the reflective read
+   * as the fallback for plain test doubles, and report which one took.
+   */
+  let jobListenerAttached = false;
+  const attachJobs = (registry) => {
+    if (jobListenerAttached || typeof registry?.onJobDone !== 'function') return false;
+    jobListenerAttached = true;
+    registry.onJobDone(onJobDone);
+    diagnostics.services.jobs = 'injected';
+    return true;
+  };
+  if (typeof ctx?.inject === 'function') { try { ctx.inject(['jobs'], (jobCtx) => { attachJobs(jobCtx?.jobs); }); } catch { /* no registry in this composition */ } }
+  if (!jobListenerAttached) {
+    const reflected = contextService(ctx, 'jobs');
+    if (attachJobs(reflected)) diagnostics.services.jobs = 'reflected';
+  }
+  if (!jobListenerAttached) diagnostics.services.jobs = 'unavailable';
 
   let guiAvailable = false;
   const mountWeb = (lifecycleCtx, webServer, connection) => {

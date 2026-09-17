@@ -108,11 +108,11 @@ test('a preferences file written by the store this replaced is unwrapped, not al
   // Exactly what the deleted store wrote: a {version, value} wrapper, plus a setting this version
   // does not have any more.
   await writeFile(join(dir, 'settings.json'), `${JSON.stringify({ version: 1, value: { sound: 'ping', toastPosition: 'viewport', readRetentionDays: 7 } }, null, 2)}\n`, 'utf8');
-  const settings = createSettings({ dataDir: dir });
-  assert.deepEqual(settings.get(), { sound: 'ping', toastPosition: 'viewport', readRetentionDays: 7 }, 'the wrapper is transparent: the choices inside it are the settings');
+  const settings = createSettings({ dataDir: dir, keys: ['sound', 'toastPosition', 'subtaskNotify'] });
+  assert.deepEqual(settings.get(), { sound: 'ping', toastPosition: 'viewport' }, 'the wrapper is transparent, and a key this version no longer has is dropped');
 
   settings.set({ subtaskNotify: true });
-  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'ping', toastPosition: 'viewport', readRetentionDays: 7, subtaskNotify: true }, 'and the next write flattens the file');
+  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'ping', toastPosition: 'viewport', subtaskNotify: true }, 'and the next write flattens the file without the dead key');
   const reopened = createSettings({ dataDir: dir });
   assert.equal(reopened.get().sound, 'ping', 'a restart still finds what the user chose');
 });

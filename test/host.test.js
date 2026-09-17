@@ -261,6 +261,60 @@ test('/config only adopts the settings this version has, whatever the file on di
 
   const patched = await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: { subtaskNotify: true } }));
   assert.equal(patched.statusCode, 200);
-  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'ping', toastPosition: 'viewport', readRetentionDays: 7, subtaskNotify: true }, 'the write is flat and keeps the choices it did not touch');
+  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'ping', toastPosition: 'viewport', subtaskNotify: true }, 'the write is flat, drops the dead key and keeps the choices it did not touch');
   await runtime();
+});
+
+test('the job registry is reached through ctx.inject, since a reflective read is not guaranteed', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-jobs-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const listeners = new Map();
+  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => listeners.delete('job/done'); } };
+  const routes = new Map();
+  // A real Cordis profile context: services are declared, not readable as plain properties.
+  const ctx = {
+    inject(names, callback) { if (names.includes('jobs')) callback({ jobs }); return () => {}; },
+    get() { return undefined; },
+    on(name, handler) { listeners.set(name, handler); return () => {}; },
+    effect(setup) { return setup(); },
+    emit() {},
+  };
+  const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0, webServer: undefined });
+  assert.equal(runtime.diagnostics.services.jobs, 'injected', 'the injected seam is the one that takes');
+
+  // Off by default: a background job finishing is not news.
+  listeners.get('job/done')({ id: 'job-off', status: 'completed', label: 'pnpm build', ownerSession: 's1' }, { session: { id: 's1' } });
+  await settle();
+  assert.equal(runtime.buffer.size, 0, 'subtask noise stays off until the user asks for it');
+
+  runtime.preferences.set({ subtaskNotify: true });
+  listeners.get('job/done')({ id: 'job-1', status: 'completed', label: 'pnpm build', ownerSession: 'session-1' }, { session: { id: 'session-1' } });
+  await waitUntil(() => runtime.buffer.size >= 1);
+  const [record] = runtime.buffer.pull().items;
+  assert.equal(record.kind, 'job-end'); assert.equal(record.title, '后台任务结束'); assert.equal(record.body, 'pnpm build');
+  assert.equal(record.sessionId, 'session-1', 'the notification knows which session the job belonged to');
+  void routes;
+});
+
+test('a composition with no job registry says so instead of failing silently', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-nojobs-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const ctx = { get() { return undefined; }, on() { return () => {}; }, effect(setup) { return setup(); }, emit() {} };
+  const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0 });
+  assert.equal(runtime.diagnostics.services.jobs, 'unavailable', 'the report is how a silent seam becomes visible');
+});
+
+test('a plain test double still resolves the registry reflectively', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-reflect-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const listeners = new Map();
+  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => {}; } };
+  const ctx = { get(name) { return name === 'jobs' ? jobs : undefined; }, on() { return () => {}; }, effect(setup) { return setup(); }, emit() {} };
+  const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0 });
+  assert.equal(runtime.diagnostics.services.jobs, 'reflected');
+  runtime.preferences.set({ subtaskNotify: true });
+  listeners.get('job/done')({ id: 'job-2', status: 'failed', label: 'go test ./...', ownerSession: 's2' }, undefined);
+  await waitUntil(() => runtime.buffer.size >= 1);
+  assert.equal(runtime.buffer.pull().items[0].kind, 'job-end');
+  assert.equal(runtime.buffer.pull().items[0].title, '后台任务失败');
 });
