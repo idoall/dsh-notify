@@ -65,21 +65,22 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-confirm{border-left:2px solid var(--dsw-alias-state-warn-primary,#d97706);display:grid;gap:8px;min-width:0;padding-left:10px}
 @media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-toggle input{height:22px;min-height:22px;min-width:22px;width:22px}}`;
 /**
- * Toast presentation: a stack anchored in the top-right corner. Each card is one row of
- * [tone icon][title + text + actions][close X]; the stack container owns the position, and every card
- * sits in an absolutely positioned slot whose `transform` is computed from the cards above it — that
- * is what makes a new card push the others down smoothly instead of re-flowing them. Cards enter with
- * a spring scale + fade and leave by sliding out to the right. The stack is promoted to the browser
- * top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the settings modal.
+ * Toast presentation: a window anchored in the top-right corner. Each card is one row of
+ * [tone icon][title + text + actions][close X]. The container is a scroll box exactly as tall as the
+ * cards it shows, and every card sits in an absolutely positioned slot whose `transform` is computed
+ * from the cards above it — that is what makes a new card push the others down smoothly instead of
+ * re-flowing them. A queue longer than the window waits below the fold: the user scrolls the corner,
+ * and a sliver of the next card shows that there is something to scroll to. Cards enter with a spring
+ * scale + fade and leave by sliding out to the right, from where they were. The window is promoted to
+ * the browser top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the
+ * settings modal.
  */
-export const TOAST_CSS = `.dsh-notify-stack{overflow:visible;pointer-events:none;position:fixed;width:min(360px,calc(100vw - 32px));z-index:1100}
+export const TOAST_CSS = `.dsh-notify-frame{position:fixed;z-index:1100}
+.dsh-notify-stack{height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.dsh-notify-stack-inner{pointer-events:none;position:relative}
 .dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 320ms cubic-bezier(.22,1,.36,1)}
-.dsh-notify-stack[data-expanded=true]{display:flex;flex-direction:column;gap:12px;max-height:min(70vh,calc(100vh - 88px));overflow-y:auto;overscroll-behavior:contain;pointer-events:auto;padding:0 2px 2px;scrollbar-width:thin}
-.dsh-notify-stack[data-expanded=true]>.dsh-notify-slot{inset-inline:auto;pointer-events:auto;position:static;transform:none}
-.dsh-notify-stack[data-expanded=true]>.dsh-notify-slot>.dsh-notify-toast{box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%))}
-/* The layers behind the front card are edges, not cards: a taller notification further down the
-deck would otherwise leak a line of its own text out from under the card in front of it. */
-.dsh-notify-stack[data-decked=true]>.dsh-notify-slot[data-depth]:not([data-depth="0"])>.dsh-notify-toast>*{visibility:hidden}
+.dsh-notify-count{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;inset-inline-end:35px;line-height:18px;padding:0 8px;position:absolute;top:13px;z-index:2}
+.dsh-notify-count:hover{color:var(--dsw-alias-label-primary)}
 .dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:relative;width:100%}
 .dsh-notify-toast[data-leaving=true]{animation:dsh-notify-card-out 200ms ease-in forwards;pointer-events:none}
 @keyframes dsh-notify-card-in{0%{opacity:0;transform:translateY(-10px) scale(.9)}62%{opacity:1;transform:translateY(0) scale(1.02)}100%{opacity:1;transform:none}}
@@ -94,8 +95,6 @@ deck would otherwise leak a line of its own text out from under the card in fron
 .dsh-notify-toast-body{display:grid;gap:2px;min-width:0;flex:1 1 auto}
 .dsh-notify-toast-head{align-items:center;display:flex;gap:6px;min-width:0}
 .dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-notify-toast-more{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:none;font:inherit;font-size:11px;line-height:18px;margin-inline-start:auto;padding:0 8px}
-.dsh-notify-toast-more:hover{color:var(--dsw-alias-label-primary)}
 .dsh-notify-toast-title{font-size:13px;font-weight:650;line-height:1.45}
 .dsh-notify-toast-text{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .dsh-notify-toast-answers{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
@@ -397,14 +396,15 @@ const attentionIndicator = createAttentionIndicator();
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
 /** How many cards the corner shows at once, and how long the page-scoped queue behind them may grow. */
 export const TOAST_STACK_VISIBLE = 5;
+/** A phone has no room for five of these; the window shrinks rather than covering the conversation. */
+export const TOAST_STACK_VISIBLE_NARROW = 3;
+export const TOAST_STACK_GAP = 12;
+/** How much of the next card shows below the window: the affordance that there is more to scroll to. */
+export const TOAST_STACK_PEEK = 10;
 export const TOAST_QUEUE_MAX = 50;
-export const TOAST_DEPTH_OFFSET = 10;
-export const TOAST_DEPTH_SCALE = 0.04;
-export const TOAST_DEPTH_MIN_SCALE = 0.82;
 /** Must match the `dsh-notify-card-out` animation; the card is dropped from the DOM when it ends. */
 export const TOAST_EXIT_MS = 200;
 export const TOAST_SUCCESS_MS = 900;
-const TOAST_HOVER_GRACE_MS = 120;
 /**
  * The order the page keeps its notifications in: anything still waiting on the user first (newest
  * first), then everything else (newest first), capped so a runaway stream cannot grow without bound.
@@ -420,38 +420,44 @@ export function queueCards(cards = [], max = TOAST_QUEUE_MAX) {
   return [...pending, ...finished].slice(0, Math.max(1, max));
 }
 /**
- * The cards the corner renders while it is collapsed: everything waiting on the user, plus finished
- * cards filling the remaining slots. A second question hidden behind a `+N` count would defeat the
- * point of the stack, so the window grows past `visible` rather than hiding one.
+ * Where each card sits. Every card keeps its own slot in one flat column — a new one takes the top and
+ * pushes the rest down by exactly its own measured height — and the window below decides how much of
+ * that column is on screen.
  */
-export function visibleCards(cards = [], { expanded = false, visible = TOAST_STACK_VISIBLE } = {}) {
-  if (expanded) return cards;
-  return cards.filter((card, index) => card?.record?.phase === 'open' || index < Math.max(1, visible));
-}
-/**
- * Where each rendered card sits while the corner is collapsed. Flat while they fit, and a deck once
- * some of them are hidden behind the count: the front card keeps the top slot and the ones behind it
- * peek out below at a smaller scale, which is what makes "there is more here" visible without a label.
- */
-export function toastStackPlan({ heights = [], decked = false, gap = 12 } = {}) {
+export function toastStackPlan({ heights = [], gap = TOAST_STACK_GAP } = {}) {
   let cursor = 0;
-  return heights.map((height, index) => {
-    const depth = decked && index > 0 ? index : 0;
-    const plan = depth
-      ? { offsetY: depth * TOAST_DEPTH_OFFSET, scale: Math.max(TOAST_DEPTH_MIN_SCALE, 1 - depth * TOAST_DEPTH_SCALE), depth }
-      : { offsetY: cursor, scale: 1, depth: 0 };
+  return heights.map((height) => {
+    const plan = { offsetY: cursor };
     cursor += (Number(height) || 0) + gap;
     return plan;
   });
 }
+/**
+ * The corner is a window, not a pile. `visible` cards fit — measured, not assumed, because a card with
+ * a body and answer buttons is not the height of a one-line one — and everything older waits below
+ * the fold, where the user scrolls to it. The window is a little taller than those cards when there is
+ * more, so the next card shows its edge: "there is more here" is something to see, not only to count.
+ *
+ * The count is the whole queue, not what is hidden behind it: eight notifications are eight
+ * notifications, whether five of them are on screen or not.
+ */
+export function stackWindow({ heights = [], visible = TOAST_STACK_VISIBLE, gap = TOAST_STACK_GAP, peek = TOAST_STACK_PEEK } = {}) {
+  const list = (Array.isArray(heights) ? heights : []).map((height) => Number(height) || 0);
+  const count = Math.max(1, visible);
+  const onScreen = list.slice(0, count);
+  const sum = (values) => values.reduce((total, height) => total + height, 0) + gap * Math.max(0, values.length - 1);
+  const hidden = Math.max(0, list.length - onScreen.length);
+  const windowHeight = sum(onScreen);
+  return { total: list.length, hidden, windowHeight: windowHeight + (hidden > 0 ? peek : 0), contentHeight: sum(list), overflow: hidden > 0 };
+}
 function ToastOverlay({ sessions, pendingInteractions } = {}) {
-  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [hovering, setHovering] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
+  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);
   // One ref per piece of per-card runtime state: the exit/success timers and each card's measured
   // height. Nothing here retires a card on a clock — a toast leaves when the user says so.
-  const stackRef = React.useRef(null); const exits = React.useRef(new Map()); const successes = React.useRef(new Map()); const heights = React.useRef(new Map()); const hoverTimer = React.useRef(null); const unseen = React.useRef(new Set()); const sawPending = React.useRef(new Set()); const cardsRef = React.useRef(cards);
+  const frameRef = React.useRef(null); const stackRef = React.useRef(null); const exits = React.useRef(new Map()); const successes = React.useRef(new Map()); const heights = React.useRef(new Map()); const slots = React.useRef(new Map()); const unseen = React.useRef(new Set()); const sawPending = React.useRef(new Set()); const cardsRef = React.useRef(cards);
   const anyCard = cards.length > 0; const rerenderNow = () => rerender((value) => value + 1);
   // The ref mirrors every write so two pushes in the same tick (a self-test and a poll, say) cannot
   // race each other through a stale render.
@@ -494,14 +500,13 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
   React.useEffect(() => () => {
     for (const id of exits.current.values()) clearTimeout(id);
     for (const id of successes.current.values()) clearTimeout(id);
-    clearTimeout(hoverTimer.current);
   }, []);
   // The shell.overlay seat lives inside the official overlayLayer (z-index 20), so no z-index of
   // ours can clear the settings modal (z-index 1000). Promoting the whole stack to the browser top
   // layer is what actually keeps a self-test fired from 设置 visible and closable; without Popover
   // support the stack stays a normal fixed element and simply degrades to the old stacking.
   React.useEffect(() => {
-    const element = stackRef.current;
+    const element = frameRef.current;
     if (!anyCard || !element || typeof element.showPopover !== 'function') return undefined;
     try {
       if (!element.hasAttribute('popover')) element.setAttribute('popover', 'manual');
@@ -525,17 +530,15 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
     return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
   }, []);
-  // Hovering the stack expands it; leaving waits a beat first. Both halves live on the container and
-  // never on a card: the container's box spans the whole column (gaps included), so crossing the gap
-  // between two cards stays "inside". A card watching its own pointer left the stack there, which
-  // collapsed it — and because collapsing slides the cards back under the cursor, that flickered.
-  const enterStack = () => {
-    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
-    setHovering(true);
-  };
-  const leaveStack = () => {
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => { hoverTimer.current = null; setHovering(false); }, TOAST_HOVER_GRACE_MS);
+  // Nothing about the stack changes on hover any more: the window is a fixed size and the rest of the
+  // queue is below the fold. The mouse wheel scrolls it (the container is the scroll box), and the
+  // count on the front card is a button for the times a wheel is not at hand: it jumps to the other
+  // end of the queue, and back.
+  const scrollWindow = () => {
+    const element = stackRef.current;
+    if (!element || typeof element.scrollTo !== 'function') return;
+    const atEnd = element.scrollTop + element.clientHeight >= (element.scrollHeight ?? 0) - 2;
+    element.scrollTo({ top: atEnd ? 0 : element.scrollHeight, behavior: 'smooth' });
   };
   // An open toast must not outlive the thing it asks about. The user can answer in the composer, in
   // another browser, or through the official modal, and none of those paths touch this element: the
@@ -625,59 +628,47 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     if (!buttons.length && !note) return null;
     return React.createElement('div', { className: 'dsh-notify-toast-answers' }, buttons, note);
   };
-  const cardView = (card, index, plan, expanded, depth) => {
+  const cardView = (card, plan) => {
     const record = card.record; const status = card.status;
     const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
     const source = sessionLabel(sessions, record.sessionId);
-    const more = record.eventId === frontLive ? chip : 0;
-    // Expanded, the cards are laid out by the stylesheet in a scrollable column: an inline transform
-    // would fight the flow, so the slot carries no positioning of its own.
-    const slotStyle = expanded ? undefined : { transform: `translateY(${plan.offsetY}px) scale(${plan.scale})`, zIndex: depth - index };
-    return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', 'data-depth': String(plan.depth), style: slotStyle },
+    // The slot is absolutely positioned and moved by its transform; that is what lets the cards below
+    // a new one slide down instead of jumping.
+    const slotStyle = { transform: `translateY(${plan.offsetY}px)` };
+    return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', style: slotStyle },
       React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
-        onClick: () => { if (!card.leaving) void activate(card); },
-        // Only the keyboard half of the hover gesture lives here: the pointer half belongs to the
-        // container, whose box spans the whole column. A card that watched its own pointer would
-        // collapse the stack every time the pointer crossed the gap between two cards — and because
-        // collapsing moves the cards under the cursor, that flicks back and forth.
-        onFocus: enterStack, onBlur: leaveStack },
+        onClick: () => { if (!card.leaving) void activate(card); } },
         toastIcon(tone, status),
         React.createElement('div', { className: 'dsh-notify-toast-body' },
           React.createElement('span', { className: 'dsh-notify-toast-head' },
-            source ? React.createElement('span', { className: 'dsh-notify-toast-source', title: record.sessionId }, source) : null,
-            more > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-toast-more', 'aria-label': `展开其余 ${more} 条通知`, onClick: (event) => { event.stopPropagation(); enterStack(); } }, `+${more}`) : null),
+            source ? React.createElement('span', { className: 'dsh-notify-toast-source', title: record.sessionId }, source) : null),
           React.createElement('strong', { className: 'dsh-notify-toast-title' }, record.title),
           record.body ? React.createElement('p', { className: 'dsh-notify-toast-text' }, record.body) : null,
           actionRow(card)),
         React.createElement('button', { type: 'button', className: 'dsh-notify-toast-close', 'aria-label': '关闭通知', onClick: (event) => { event.stopPropagation(); dismiss(record.eventId); } }, '\u00d7')));
   };
-  // A card on its way out is no longer part of the stack: it must not be counted by the +N chip, must
-  // not make the stack look taller, and must not take a slot in the collapsed deck. It keeps its last
-  // position while the slide-out animation plays, then its own timer takes the node away.
+  // A card on its way out is no longer part of the stack: it must not be counted by the +N chip and
+  // must not make the window taller. It keeps the slot it had while the slide-out plays, then its own
+  // timer takes the node away.
   const liveCards = cards.filter((card) => !card.leaving);
-  // The window is a property of the queue, not of the pointer: it is what the corner shows at rest.
-  const collapsedWindow = visibleCards(liveCards);
-  const hidden = Math.max(0, liveCards.length - collapsedWindow.length);
-  // Hovering only means something when the window hides a card. Expanding a queue that already fits
-  // would swap the flat layout for the scrolled column for no visual gain, so it stays collapsed.
-  const expanded = hovering && hidden > 0;
-  const shown = expanded ? liveCards : collapsedWindow;
-  // The deck is the look of "there is more behind this card", so it appears exactly when something is
-  // hidden; while everything fits, the cards lie flat.
-  const decked = !expanded && hidden > 0;
-  const livePlans = toastStackPlan({ heights: shown.map((card) => heights.current.get(card.record.eventId) ?? 0), decked });
-  const planById = new Map(shown.map((card, index) => [card.record.eventId, livePlans[index]]));
-  const lastWindowed = shown[shown.length - 1];
-  const trailingPlan = { offsetY: lastWindowed ? (planById.get(lastWindowed.record.eventId).offsetY + (heights.current.get(lastWindowed.record.eventId) ?? 0)) : 0, scale: 1, depth: 0 };
-  const chip = decked ? hidden : 0;
-  const frontLive = shown[0]?.record.eventId ?? null;
-  // A card on its way out is no longer part of the stack (it must not be counted, sized or slotted),
-  // but it still has to be RENDERED for its slide-out to play: it trails the stack for its 200ms.
-  const rendered = [...shown, ...cards.filter((card) => card.leaving)];
-  return React.createElement('div', { ref: stackRef, popover: 'manual', className: 'dsh-notify-stack', 'data-expanded': expanded ? 'true' : 'false', 'data-decked': decked ? 'true' : 'false',
-    onPointerEnter: enterStack, onPointerLeave: leaveStack,
-    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: 'auto', margin: 0, padding: 0, border: 0, background: 'transparent' } },
-    rendered.map((card, index) => cardView(card, index, planById.get(card.record.eventId) ?? trailingPlan, expanded, rendered.length)));
+  const liveHeights = liveCards.map((card) => heights.current.get(card.record.eventId) ?? 0);
+  const plans = toastStackPlan({ heights: liveHeights });
+  const frame = stackWindow({ heights: liveHeights, visible: narrow ? TOAST_STACK_VISIBLE_NARROW : TOAST_STACK_VISIBLE });
+  const planById = new Map(liveCards.map((card, index) => [card.record.eventId, plans[index]]));
+  // Remember where every live card sits: a card that leaves slides out from where the user last saw it,
+  // not from wherever the column happens to have moved on to.
+  for (const [eventId, plan] of planById) slots.current.set(eventId, plan);
+  const queueCount = frame.overflow ? frame.total : 0;
+  const onScreenCount = Math.max(0, frame.total - frame.hidden);
+  const rendered = [...liveCards, ...cards.filter((card) => card.leaving)];
+  // The count belongs to the window, not to whichever card happens to be on top: it is pinned to the
+  // corner outside the scroll box, so it stays put (and stays the same number) once the user scrolls.
+  return React.createElement('div', { ref: frameRef, popover: 'manual', className: 'dsh-notify-frame',
+    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
+    queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,
+    React.createElement('div', { ref: stackRef, className: 'dsh-notify-stack', 'data-overflow': frame.overflow ? 'true' : 'false' },
+      React.createElement('div', { className: 'dsh-notify-stack-inner', style: { height: `${frame.contentHeight}px` } },
+        rendered.map((card) => cardView(card, planById.get(card.record.eventId) ?? slots.current.get(card.record.eventId) ?? { offsetY: frame.contentHeight })))));
 }
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;
@@ -754,7 +745,7 @@ export function NotificationSelfTests() {
       action('测试一条', fireOne),
       action(`测试 ${TOAST_STACK_VISIBLE} 条`, () => fire(TOAST_STACK_VISIBLE)),
       action(`测试 ${SELF_TEST_BATCH.length} 条`, () => fire(SELF_TEST_BATCH.length))),
-    hint(`「测试 ${TOAST_STACK_VISIBLE} 条」正好填满角上那一窗，可以看到它们平铺的样子；「测试 ${SELF_TEST_BATCH.length} 条」多出 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条，会折成「+${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE}」，鼠标移上去展开成完整一列。`),
+    hint(`「测试 ${TOAST_STACK_VISIBLE} 条」正好填满角上那一窗；「测试 ${SELF_TEST_BATCH.length} 条」多出 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条，角上仍然只占一窗的高度，前面那张卡右上角显示总数「+${SELF_TEST_BATCH.length}」，在通知区里向下滚动就能看到剩下的 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条。`),
     state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, `${state.status}: ${state.reason}`) : null);
 }
 function SettingsSection() {

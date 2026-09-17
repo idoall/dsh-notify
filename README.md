@@ -33,7 +33,7 @@ Everything happens **inside the page you already have open**. There is no servic
 ## What it does
 
 - **Toast on the page**: a stack in the top-right corner, newest on top. Each card carries the title, body, session name, a tone colour per kind and a close button. Click the body to jump to the session; click the answers to reply without leaving the page, and the card reports the answer as loading until the host confirms (then ✓ 已完成 or ✗ with a 重试 button). Nothing expires on a clock: a card stays until you close it, open its session, or answer it — and a card whose record the Host has dropped leaves with it.
-- **Stacked, then collapsed**: the corner shows five cards, each one pushing the older ones down with a smooth transform. Anything waiting on you is always among them; the rest stay in the page behind a `+N` count, and hovering (or clicking the count) expands the whole queue into a scrollable column — newest first, nothing thrown away. A page keeps what it saw for as long as it is open; a refresh clears it.
+- **A window onto the queue**: the corner is five cards tall and each new card pushes the older ones down with a smooth transform. Anything waiting on you is always among them; everything older sits below the fold, one scroll away, and the count on the corner says how many the page is holding (`+8`) — not just what is out of sight. Click the count to jump between the two ends of the queue. Nothing is thrown away while the page is open; a refresh clears it.
 - **Answer in the toast**: a pending question or approval renders the same options as the composer. Answering here and answering in the composer act on the same pending interaction, so the two stay in sync.
 - **Jump to the exact turn**: clicking a card opens its session and scrolls to (and briefly highlights) the turn the notification came from.
 - **Sound that survives being in the background**: synthesised in-page with WebAudio (no audio files shipped), plus uploadable custom sounds. It plays **even when the page is hidden** — that is the only way to reach you when the browser is behind another app.
@@ -42,7 +42,7 @@ Everything happens **inside the page you already have open**. There is no servic
 - **Live only — there is no history**: the least surprising thing a notification can do is stop existing once you have dealt with it, so the plugin stores nothing. A page is told about what happens while it is open; nothing is kept to catch up on later, and a page that was not connected never learns about it. That is the trade for having no queue, no read state and no panel to reconcile.
 
 <p align="center">
-  <img src="./assets/panel.png" width="46%" alt="Five notifications collapse into the front card plus a count, with the rest peeking out beneath it">
+  <img src="./assets/panel.png" width="46%" alt="Eight notifications in a window five cards tall: the count reads +8 and the sixth card shows its edge below the window">
 </p>
 
 ## Quick start
@@ -94,7 +94,7 @@ Restart DSH and refresh the Web UI. The client half registers the settings card 
 | Toast position | conversation column, top-right | Anchors the toast to the chat column, so it follows the conversation pane when the right sidebar is open or closed. |
 | Subtask / background job notifications | **off** | Each subagent and each background job would otherwise record an entry (titles often being raw commands). |
 | In-page sound | **on** | WebAudio cue on every new toast, **including while the page is hidden**. Built-ins: chime, ping, alert, silent — plus custom uploads. |
-| Self-test | — | There is one channel, so there is one test surface: **测试一条**, **测试 5 条** (exactly fills the corner window) and **测试 8 条** (three past it, which is where the `+N` count and the scrollable expand show up). Tests never fire on page load. |
+| Self-test | — | There is one channel, so there is one test surface: **测试一条**, **测试 5 条** (exactly fills the corner window) and **测试 8 条** (three past it, which is where the count, the window edge and the scrolling show up). Tests never fire on page load. |
 
 Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory (not the plugin install directory), so reinstalling the plugin keeps them. Uploads are limited to 1 MB and to `mp3 / m4a / aac / wav / ogg / flac`; the file name must be a single path segment (no `../`, no subdirectories).
 

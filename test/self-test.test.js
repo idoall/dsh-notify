@@ -49,28 +49,25 @@ test('the self-test card only exercises the page: one button, no host request', 
   assert.equal(requests, before, 'a page test never talks to the host');
   assert.equal(document.querySelector('section[aria-label="通知历史"]'), null, 'and there is no history panel to look in');
 
-  // The window-sized group is what "the stack is full" looks like: five cards, nothing hidden behind
-  // the count yet — the single test card from above is the sixth, so one card slips behind it.
+  // The window-sized group is what "the stack is full" looks like: five readable cards, nothing out of
+  // sight — the single test card from above is the sixth, so one card sits below the fold.
   await act(async () => { windowed.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const flat = [...document.querySelectorAll('aside[role="status"]')];
-  assert.equal(flat.filter((node) => node.getAttribute('data-leaving') !== 'true').length, 5, 'the window is full');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1', 'six cards, five on screen');
+  assert.equal(flat.filter((node) => node.getAttribute('data-leaving') !== 'true').length, 6, 'the single card and the five');
+  assert.equal(document.querySelector('.dsh-notify-count').textContent, '+6', 'the count is the whole queue');
+  assert.equal(document.querySelector('.dsh-notify-stack').getAttribute('data-overflow'), 'true', 'one card is below the fold');
 
-  // The overflowing group is the one that answers "what if there are more than the setting can show".
+  // The overflowing group is the one that answers "what if there are more than the window can show".
   const beforeBatch = requests;
   await act(async () => { overflowing.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const all = [...document.querySelectorAll('aside[role="status"]')];
   const live = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
-  assert.equal(live.length, 5, 'the corner keeps showing five cards');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+9', 'and it says how many are not on screen');
+  assert.equal(live.length, 14, 'every card the groups fired is in the stack');
+  assert.equal(document.querySelector('.dsh-notify-count').textContent, '+14', 'and the front card counts all of them');
   assert.equal(all.length - live.length, 0, 'nothing is thrown away to make room');
   assert.equal(requests, beforeBatch, 'a page test never talks to the host, however many it fires');
 
-  // Expanding shows every card the groups fired, which is where the five tones are visible at once.
-  const stack = document.querySelector('.dsh-notify-stack');
-  await act(async () => { stack.dispatchEvent(new Event('pointerover', { bubbles: true })); });
-  const expanded = [...document.querySelectorAll('aside[role="status"]')];
-  assert.equal(expanded.length, 14, 'the single card and both groups are all still there');
-  const tones = expanded.map((node) => node.getAttribute('data-tone'));
+  // Every tone the groups carry is on one of those cards.
+  const tones = all.map((node) => node.getAttribute('data-tone'));
   for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
-import { mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor } from '../src/client.js';
+import { mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor, TOAST_STACK_GAP, TOAST_STACK_PEEK } from '../src/client.js';
 
 function response(value) { return { ok: true, json: async () => value }; }
 
@@ -302,9 +302,9 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   await act(async () => { root.render(React.createElement(components.get('shell.overlay'))); });
 
   const fire = async (eventId) => { await act(async () => { publishLocalSelfTest({ eventId, localOnly: true, kind: 'completed', title: '任务完成', body: '自检' }); }); };
-  const stack = () => document.querySelector('.dsh-notify-stack');
+  const frame = () => document.querySelector('.dsh-notify-frame');
   await fire('anchor-check'); const toast = document.querySelector('aside[role="status"]');
-  assert.ok(toast); assert.equal(stack().style.insetInlineEnd, '340px', 'the stack container carries the anchor');
+  assert.ok(toast); assert.equal(frame().style.insetInlineEnd, '340px', 'the notification window carries the anchor');
   assert.match(toast.textContent, /任务完成/);
   assert.equal(toast.dataset.tone, 'success', 'a completed toast carries its tone for the icon/accent colour');
   assert.ok(toast.querySelector('.dsh-notify-toast-icon'), 'react-toastify-style per-result icon');
@@ -323,7 +323,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   assert.equal(Boolean(document.querySelector('aside[role="status"]')), false, '关闭（保留铃铛历史）must stop the in-page toast');
   setToastConfig({ toastPosition: 'viewport' }); await fire('viewport-check');
   const viewportToast = document.querySelector('aside[role="status"]');
-  assert.ok(viewportToast, 'the off switch must not latch'); assert.equal(stack().style.insetInlineEnd, '16px');
+  assert.ok(viewportToast, 'the off switch must not latch'); assert.equal(frame().style.insetInlineEnd, '16px');
 });
 
 /**
@@ -391,72 +391,64 @@ async function mountStackSandbox(t, { host = 'live' } = {}) {
     // The pointer, not the mouse: React derives enter/leave from the target's `relatedTarget`, which is
     // how a real browser reports "the pointer left this card and landed on the container behind it".
     pointer: async (target, type, related = null) => { await act(async () => { const event = new dom.window.Event(type, { bubbles: true }); Object.defineProperty(event, 'relatedTarget', { value: related }); target.dispatchEvent(event); }); },
+    scrollTo: (impl) => { dom.window.Element.prototype.scrollTo = impl; },
     stack: () => document.querySelector('.dsh-notify-stack'),
-    expanded: () => document.querySelector('.dsh-notify-stack')?.getAttribute('data-expanded'),
-    depths: () => slotsOf().map((node) => node.getAttribute('data-depth')),
+    frame: () => document.querySelector('.dsh-notify-frame'),
+    overflow: () => document.querySelector('.dsh-notify-stack')?.getAttribute('data-overflow'),
+    windowHeight: () => document.querySelector('.dsh-notify-frame')?.style.height,
+    contentHeight: () => document.querySelector('.dsh-notify-stack-inner')?.style.height,
+    badge: () => document.querySelector('.dsh-notify-count')?.textContent ?? null,
     tabTitle: () => title.value,
   };
 }
 
 const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
 
-test('five cards lie flat, and the rest are hidden behind the count instead of dropped', async (t) => {
+test('the corner is a window five cards tall, and the rest wait below the fold', async (t) => {
   const sandbox = await mountStackSandbox(t);
   for (const n of [1, 2, 3, 4, 5]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(sandbox.count(), 5, 'five notifications lie flat');
+  assert.equal(sandbox.count(), 5, 'five notifications, five cards');
   assert.deepEqual(sandbox.titles(), ['任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(12px) scale(1)', 'translateY(24px) scale(1)', 'translateY(36px) scale(1)', 'translateY(48px) scale(1)'], 'each card is pushed down by the ones above it');
-  assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'nothing is hidden yet');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)'], 'each card is pushed down by the ones above it');
+  assert.equal(sandbox.badge(), null, 'nothing is out of sight yet');
+  assert.equal(sandbox.overflow(), 'false', 'so there is nothing to scroll to');
+  // jsdom lays nothing out, so the heights the window is built from are all 0 here: what is being
+  // checked is the arithmetic (four gaps for five cards), not a pixel size. client-ui.test.js covers
+  // the measured case.
+  assert.equal(sandbox.windowHeight(), `${TOAST_STACK_GAP * 4}px`, 'the window is as tall as the cards it holds');
 
   sandbox.push(burstRecord(6));
   await sandbox.tick();
-  assert.equal(sandbox.count(), 5, 'the corner keeps showing five');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px) scale(1)', 'translateY(10px) scale(0.96)', 'translateY(20px) scale(0.92)', 'translateY(30px) scale(0.88)', 'translateY(40px) scale(0.84)'], 'and turns into a deck, so "there is more" is visible');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1', 'the front card counts what is not on screen');
-  // A layer behind the front card is an edge, not a card: it carries a depth so the stylesheet can
-  // hide its contents, which is what stops a taller notification from leaking a line of its text.
-  assert.equal(sandbox.stack().getAttribute('data-decked'), 'true', 'the stack says it is a deck');
-  assert.deepEqual(sandbox.depths(), ['0', '1', '2', '3', '4'], 'and marks every layer behind the front card');
+  assert.equal(sandbox.count(), 6, 'the sixth card is rendered, not thrown away');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)'], 'and takes its slot below the window');
+  assert.equal(sandbox.overflow(), 'true', 'the window says there is more');
+  assert.equal(sandbox.badge(), '+6', 'and the front card counts the whole queue, not what is hidden');
+  assert.equal(sandbox.windowHeight(), `${TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`, 'the window grows by a peek so the next card shows its edge');
+  assert.equal(sandbox.contentHeight(), `${TOAST_STACK_GAP * 5}px`, 'while the content is every card, which is what makes scrolling possible');
 
-  // Hovering shows the whole queue, and every card that was behind the count is really there.
-  await sandbox.hover();
-  assert.equal(sandbox.count(), 6, 'hovering expands the whole queue');
-  assert.deepEqual(sandbox.transforms(), ['', '', '', '', '', ''], 'the expanded column is laid out in flow, not by transform');
-  assert.deepEqual(sandbox.titles(), ['任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1']);
-  assert.equal(document.querySelector('.dsh-notify-toast-more'), null, 'and the count chip belongs to the collapsed state only');
-  assert.equal(sandbox.stack().getAttribute('data-decked'), 'false', 'and every card is a card again');
-  assert.deepEqual(sandbox.depths(), ['0', '0', '0', '0', '0', '0']);
-  await sandbox.leave();
-  await sandbox.wait(200);
-  assert.equal(sandbox.count(), 5, 'leaving the stack collapses it again');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1');
+  // The count is a button for the times a wheel is not at hand: it jumps to the other end of the queue.
+  const scrolls = [];
+  sandbox.scrollTo((options) => scrolls.push(options));
+  await sandbox.click(document.querySelector('.dsh-notify-count'));
+  assert.deepEqual(scrolls, [{ top: 0, behavior: 'smooth' }], 'with everything already in view, the count scrolls back to the top');
 });
 
-test('crossing the gap between two expanded cards keeps the stack open instead of flickering', async (t) => {
+test('the pointer cannot resize the stack, so nothing flickers when it crosses a gap', async (t) => {
   const sandbox = await mountStackSandbox(t);
   for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(sandbox.count(), 5, 'eight cards, five on screen');
-  assert.equal(sandbox.expanded(), 'false');
+  assert.equal(sandbox.count(), 8, 'eight cards');
+  assert.equal(sandbox.badge(), '+8', 'the count is the queue, not what is hidden behind it');
+  const before = { height: sandbox.windowHeight(), content: sandbox.contentHeight(), transforms: sandbox.transforms(), titles: sandbox.titles() };
 
-  await sandbox.hover();
-  assert.equal(sandbox.expanded(), 'true', 'hovering a card expands the stack');
-  assert.equal(sandbox.count(), 8, 'and every hidden card is rendered');
-
-  // The pointer is now over the 12px gap: it left the card but not the container, so the stack must
-  // stay open. The card is the only node a boundary event can name here — the gap IS the container —
-  // and a card-level leave listener collapsed the stack at this exact moment, which flickered.
+  // Every boundary event a browser fires while the pointer moves across the stack: onto a card, from a
+  // card into the 12px gap (the card leaves, the container does not), and off the stack entirely.
+  await sandbox.pointer(sandbox.nodes()[0], 'pointerover', null);
   await sandbox.pointer(sandbox.nodes()[0], 'pointerout', sandbox.stack());
-  await sandbox.wait(200);
-  assert.equal(sandbox.expanded(), 'true', 'moving from a card into the gap leaves the stack open');
-  assert.equal(sandbox.count(), 8, 'and nothing is re-sorted away underneath the pointer');
-
-  // Leaving the container for the page is the real exit, and it still collapses — after the grace.
+  await sandbox.pointer(sandbox.nodes()[1], 'pointerover', sandbox.nodes()[0]);
   await sandbox.pointer(sandbox.stack(), 'pointerout', document.body);
-  assert.equal(sandbox.expanded(), 'true', 'the grace period keeps it open for a moment');
-  await sandbox.wait(200);
-  assert.equal(sandbox.expanded(), 'false', 'and then the stack collapses');
-  assert.equal(sandbox.count(), 5, 'back to the window');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+3', 'with the three hidden ones counted');
+  await sandbox.wait(300);   // longer than the old 120ms hover grace, so a collapse would have landed
+  assert.deepEqual({ height: sandbox.windowHeight(), content: sandbox.contentHeight(), transforms: sandbox.transforms(), titles: sandbox.titles() }, before, 'the window is exactly where it was');
+  assert.equal(sandbox.badge(), '+8', 'and the whole queue is still counted');
 });
 
 test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
@@ -572,7 +564,7 @@ test('an approval the host settles does retire its card', async (t) => {
   assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
 
-test('nothing is dropped: the corner shows five, the count hides the rest, and expanding brings them all back', async (t) => {
+test('nothing is dropped: every card keeps its slot, and the window scrolls to it', async (t) => {
   const sandbox = await mountStackSandbox(t);
   const live = () => sandbox.nodes().filter((node) => node.getAttribute('data-leaving') !== 'true');
   // One card that waits on the user, then a burst of finished work on top of it.
@@ -581,27 +573,34 @@ test('nothing is dropped: the corner shows five, the count hides the rest, and e
   assert.equal(live().length, 1);
   for (const n of [2, 3, 4, 5, 6, 7]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
 
-  // Seven cards in the page, five on screen: waiting work first, then the newest finished ones.
-  assert.equal(live().length, 5, 'the corner stays at five cards');
-  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['需要回复', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4']);
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+2', 'the chip counts what is not on screen, not what was thrown away');
-
-  // Expanding shows every one of them — nothing was dropped to fit.
-  await sandbox.hover();
-  assert.equal(sandbox.count(), 7, 'expanding brings the whole queue back');
+  // Seven cards in the page, in one column: waiting work first, then the newest finished ones. The
+  // window is five cards tall, so the last two are simply further down that column.
+  assert.equal(live().length, 7, 'every card is in the stack');
   assert.deepEqual(sandbox.titles(), ['需要回复', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2']);
-  assert.equal(document.querySelector('.dsh-notify-toast-more'), null);
+  assert.equal(sandbox.badge(), '+7', 'the front card says how many there are in the page');
+  assert.equal(sandbox.overflow(), 'true');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)', 'translateY(72px)']);
 
-  await sandbox.leave();
-  await sandbox.wait(200);
-  assert.equal(live().length, 5, 'and collapsing it puts the count back');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+2');
+  // Scrolling is the only way past the window, and it stays a scroll: the count is not a disclosure.
+  // jsdom has no layout, so the scroll geometry is stated here instead of measured.
+  const stack = sandbox.stack();
+  Object.defineProperty(stack, 'scrollHeight', { configurable: true, value: 600 });
+  Object.defineProperty(stack, 'clientHeight', { configurable: true, value: 400 });
+  Object.defineProperty(stack, 'scrollTop', { configurable: true, writable: true, value: 0 });
+  const scrolls = [];
+  sandbox.scrollTo((options) => scrolls.push(options));
+  await sandbox.click(document.querySelector('.dsh-notify-count'));
+  assert.deepEqual(scrolls, [{ top: 600, behavior: 'smooth' }], 'at the top, the count goes down to the rest of the queue');
+  stack.scrollTop = 200;
+  await sandbox.click(document.querySelector('.dsh-notify-count'));
+  assert.deepEqual(scrolls.at(-1), { top: 0, behavior: 'smooth' }, 'and at the end of it, the count comes back up');
 
-  // A card that leaves takes only itself out of the queue.
+  // A card that leaves takes only itself out of the queue, and the ones below move up a slot.
   await sandbox.click(sandbox.closer(0));
   await sandbox.wait(320);
-  assert.equal(live().length, 5, 'the queue drops from seven to six and the window stays full');
-  assert.equal(document.querySelector('.dsh-notify-toast-more').textContent, '+1');
-  assert.deepEqual(live().map((node) => node.querySelector('.dsh-notify-toast-title').textContent), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3'], 'the next finished card moves up into the freed slot');
+  assert.equal(live().length, 6, 'the queue drops from seven to six');
+  assert.equal(sandbox.badge(), '+6');
+  assert.deepEqual(sandbox.titles(), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2'], 'the next finished card moves up into the freed slot');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)']);
 });
 

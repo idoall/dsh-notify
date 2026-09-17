@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, visibleCards, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -169,19 +169,31 @@ test('a record with nowhere to go is still dismissible, while a real session sta
   assert.deepEqual(acked, ['self-test', 'deleted', 'normal']);
 });
 
-test('the stack lies flat while it fits and becomes a deck once something is hidden', () => {
-  // Two cards, decked: the second peeks out beneath the first, scaled down.
-  assert.deepEqual(toastStackPlan({ heights: [60, 40], decked: true }), [{ offsetY: 0, scale: 1, depth: 0 }, { offsetY: 10, scale: 0.96, depth: 1 }]);
-  // Flat: each card is pushed down by the heights above it.
-  assert.deepEqual(toastStackPlan({ heights: [60, 40], decked: false }), [{ offsetY: 0, scale: 1, depth: 0 }, { offsetY: 72, scale: 1, depth: 0 }]);
-  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40], decked: false }).map((slot) => slot.offsetY), [0, 72, 124]);
-  const deck = toastStackPlan({ heights: [60, 40, 40, 40], decked: true });
-  assert.deepEqual(deck.map((slot) => slot.offsetY), [0, 10, 20, 30]);
-  assert.deepEqual(deck.map((slot) => slot.scale), [1, 0.96, 0.92, 0.88]);
-  assert.deepEqual(deck.map((slot) => slot.depth), [0, 1, 2, 3]);
+test('each card is pushed down by the measured heights above it', () => {
+  assert.deepEqual(toastStackPlan({ heights: [60, 40] }).map((slot) => slot.offsetY), [0, 72]);
+  assert.deepEqual(toastStackPlan({ heights: [60, 40, 40] }).map((slot) => slot.offsetY), [0, 72, 124]);
   // An unmeasured card must not poison the offsets, and an empty stack is empty.
-  assert.deepEqual(toastStackPlan({ heights: [0, 0], decked: false }).map((slot) => slot.offsetY), [0, 12]);
+  assert.deepEqual(toastStackPlan({ heights: [0, 0] }).map((slot) => slot.offsetY), [0, 12]);
+  assert.deepEqual(toastStackPlan({ heights: [60, 40], gap: 8 }).map((slot) => slot.offsetY), [0, 68]);
   assert.deepEqual(toastStackPlan(), []);
+});
+test('the window is as tall as the cards it holds, plus a peek when there are more', () => {
+  // Five fit: the window is exactly those five, and there is nothing to scroll to.
+  const five = stackWindow({ heights: [60, 60, 60, 60, 60] });
+  assert.deepEqual(five, { total: 5, hidden: 0, windowHeight: 60 * 5 + 12 * 4, contentHeight: 60 * 5 + 12 * 4, overflow: false });
+  // Eight: the window still holds five, but is a sliver taller so the sixth card shows its edge, and
+  // the content behind it is the whole queue — that is what makes scrolling possible at all.
+  const eight = stackWindow({ heights: Array(8).fill(60) });
+  assert.equal(eight.windowHeight, 60 * 5 + 12 * 4 + 10, 'five cards plus a peek');
+  assert.equal(eight.contentHeight, 60 * 8 + 12 * 7, 'everything the user can scroll to');
+  assert.deepEqual([eight.total, eight.hidden, eight.overflow], [8, 3, true]);
+  // Cards are not all the same height, so the window is measured, never assumed.
+  assert.equal(stackWindow({ heights: [100, 60, 60, 60, 60, 60] }).windowHeight, 100 + 60 * 4 + 12 * 4 + 10);
+  // An unmeasured first paint must not make the window taller than the cards it is showing.
+  assert.equal(stackWindow({ heights: [0, 0, 0, 0, 0, 0] }).windowHeight, 12 * 4 + 10);
+  assert.equal(stackWindow({ heights: [] }).overflow, false);
+  assert.equal(stackWindow({ heights: [60, 60, 60] , visible: 3 }).overflow, false);
+  assert.equal(stackWindow({ heights: [60, 60, 60, 60], visible: 3 }).overflow, true, 'a phone window overflows sooner');
 });
 test('the page-scoped queue keeps waiting work first and lets go of nothing until it is full', () => {
   const settled = (id, at) => ({ record: { eventId: id, phase: 'settled', at } });
@@ -195,15 +207,5 @@ test('the page-scoped queue keeps waiting work first and lets go of nothing unti
   const capped = queueCards(many, 4);
   assert.equal(capped.length, 4);
   assert.equal(capped[0].record.eventId, 'q1', 'the cap never takes the card that waits on the user');
-});
-test('the collapsed window shows every pending card and fills the rest with the newest finished ones', () => {
-  const settled = (id) => ({ record: { eventId: id, phase: 'settled' } });
-  const pending = (id) => ({ record: { eventId: id, phase: 'open' } });
-  const queue = [settled('c7'), settled('c6'), settled('c5'), settled('c4'), settled('c3'), settled('c2'), pending('q1')];
-  assert.deepEqual(visibleCards(queue).map((card) => card.record.eventId), ['c7', 'c6', 'c5', 'c4', 'c3', 'q1'], 'five slots, but the question is never the one left out');
-  assert.deepEqual(visibleCards(queue, { expanded: true }), queue, 'expanded shows the whole queue');
-  const two = [settled('c2'), pending('q1'), pending('q2')];
-  assert.deepEqual(visibleCards(two).map((card) => card.record.eventId), ['c2', 'q1', 'q2']);
-  assert.deepEqual(visibleCards([settled('only')]).map((card) => card.record.eventId), ['only']);
 });
 
