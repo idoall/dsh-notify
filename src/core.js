@@ -1,5 +1,23 @@
 export const USER_KINDS = new Set(['approval', 'question', 'plan-review', 'completed', 'failed', 'job-end', 'subagent-end', 'workflow-end']);
 
+/**
+ * `exit_plan_mode` has no question text of its own, so the tool/call path uses this until the
+ * matching `user-questions/request` (which does carry "Approve this plan…") can replace it.
+ * Never let it clobber a real question if both paths fire.
+ */
+export const PLAN_REVIEW_FALLBACK = '计划待审：请在页面里查看并批准或拒绝';
+
+const isUnlinkedKey = (mergeKey) => typeof mergeKey === 'string' && mergeKey.includes(':unlinked:');
+
+function preferredQuestionBody(existing, incoming) {
+  const next = sanitizeBody(incoming);
+  const previous = existing?.body;
+  if (!previous) return next;
+  if (next === PLAN_REVIEW_FALLBACK) return previous;
+  if (previous === PLAN_REVIEW_FALLBACK && next) return next;
+  return next || previous;
+}
+
 export function sanitizeBody(body = '', verbosity = 'normal') {
   const text = String(body)
     .replace(/(?:[A-Za-z]:\\|\/)[^\s]+/g, '[path]')
@@ -64,12 +82,41 @@ export class EventReducer {
     record.outcome = outcome;
     return record;
   }
+  #openOf(sessionId, kind) {
+    const open = [];
+    for (const record of this.records.values()) {
+      if (record.sessionId === sessionId && record.kind === kind && record.phase === 'open') open.push(record);
+    }
+    return open;
+  }
   question(event) {
     const kind = event.intent?.kind === 'plan-review' ? 'plan-review' : 'question';
-    // callId is authoritative only when supplied by the source event.  Never
-    // infer it from same-kind FIFO ordering: concurrent requests can reverse.
-    const callId = event.callId || `unlinked:${event.uniqueId || this.makeId()}`;
-    return this.upsert({ kind, mergeKey: `question:${event.sessionId}:${callId}`, sessionId: event.sessionId, title: kind === 'plan-review' ? '计划待审' : '需要回复', body: event.title, phase: 'open', turn: event.turn });
+    const title = kind === 'plan-review' ? '计划待审' : '需要回复';
+    const incomingCallId = typeof event.callId === 'string' && event.callId !== '' ? event.callId : '';
+    const turn = Number.isSafeInteger(event.turn) && event.turn > 0 ? { turn: event.turn } : {};
+    // A profile plugin sees both the live `tool/call` (real callId) and the `user-questions/request`
+    // waterfall (no source-proven callId). Those are one interaction, not two: merge only that
+    // complementary pair. Never FIFO-bind two unlinked records or two different callIds — concurrent
+    // requests can reverse, and that is why unlinked keys exist.
+    const open = this.#openOf(event.sessionId, kind);
+    if (open.length === 1) {
+      const current = open[0];
+      const currentLinked = !isUnlinkedKey(current.mergeKey);
+      const incomingLinked = incomingCallId !== '';
+      if (currentLinked !== incomingLinked) {
+        if (incomingLinked) {
+          const mergeKey = `question:${event.sessionId}:${incomingCallId}`;
+          if (current.mergeKey !== mergeKey) {
+            this.records.delete(current.mergeKey);
+            current.mergeKey = mergeKey;
+            this.records.set(mergeKey, current);
+          }
+        }
+        return this.upsert({ kind, mergeKey: current.mergeKey, sessionId: event.sessionId, title, body: preferredQuestionBody(current, event.title), phase: 'open', ...turn });
+      }
+    }
+    const callId = incomingCallId || `unlinked:${event.uniqueId || this.makeId()}`;
+    return this.upsert({ kind, mergeKey: `question:${event.sessionId}:${callId}`, sessionId: event.sessionId, title, body: event.title, phase: 'open', ...turn });
   }
   settleQuestionKey(mergeKey, outcome = 'settled') {
     if (typeof mergeKey !== 'string') return null;

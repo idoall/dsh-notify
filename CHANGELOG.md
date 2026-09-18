@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [Unreleased]
+
+## [0.2.1] - 2026-09-18
+
+### Fixed
+
+- One plan review (or question) no longer becomes two toasts. A profile plugin sees both the live `tool/call` (`exit_plan_mode` / `ask_user_question`) and the `user-questions/request` waterfall for the same interaction; those used to be two `mergeKey`s, so the corner showed two 「计划待审」 cards for one session — one with the real question (`Approve this plan and leave plan mode?`) and one with the generic `计划待审：请在页面里查看并批准或拒绝`. Complementary identities now collapse onto the callId, the waterfall body wins over the fallback, and a rekey drops the old buffer copy so a page asking from 0 still sees one card.
+- Clicking a card can jump to its session again. Current DSH moved view selection to `uiWorkspace.openSession` and dropped `sessions.open` / `list.current`; `sessions.binding()` is only live after the main view has already retained the session, so requiring it first made every card report 没能打开这个会话. The toast now selects through `openSession` and treats `retainedBy.mainView` as landed (the older `open` + `current` path still works).
+- The toast follows the conversation's top-right when a sidebar opens or closes. AppFrame animates `grid-template-columns` on a frame that does not itself resize, so a ResizeObserver on the first `[data-conversation-scroll]` node (or on `body`) never saw the toggle: the stack stayed at the old `inset-inline-end` while the chat expanded. It now re-queries the conversation, watches the grid frame's style and collapsed attributes, and tracks the slow column transition.
+
 ## [0.2.0] - 2026-09-18
 
 Notifications are delivered live and nothing is stored: the stack in the top-right corner is the whole feature, so the sidebar bell, the history list and the store behind them are gone.
@@ -100,6 +110,7 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.2.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.1
 [0.2.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.0
 [0.1.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.2
 [0.1.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.1

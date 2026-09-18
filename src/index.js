@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import z from '@deepseek-ai/schemastery';
-import { EventReducer, validateRequest } from './core.js';
+import { EventReducer, PLAN_REVIEW_FALLBACK, validateRequest } from './core.js';
 import { createBuffer, createSettings } from './buffer.js';
 import { createSoundLibrary } from './sounds.js';
 import { BUILTIN_SOUNDS, SOUND_BYTES } from './sound-choices.js';
@@ -12,7 +12,7 @@ export const Config = z.object({
   // 0 restores the old "notify on every finished turn" behaviour.
   completionGraceMs: z.number().step(1).min(0).max(600_000).default(8_000).description('How long a finished turn must stay quiet before it counts as a finished task (ms).'),
 });
-export { EventReducer, sanitizeBody, validateRequest } from './core.js';
+export { EventReducer, PLAN_REVIEW_FALLBACK, sanitizeBody, validateRequest } from './core.js';
 export { createBuffer, createSettings, BUFFER_LIMIT } from './buffer.js';
 export { createSoundLibrary } from './sounds.js';
 export { BUILTIN_SOUNDS, SOUND_BYTES, parseSoundChoice, validSoundName } from './sound-choices.js';
@@ -250,7 +250,7 @@ export async function apply(ctx, config = {}) {
   // root-scope plugin never receives, so a profile plugin must read the session event stream.
   // It carries the real callId and the raw arguments, so this is not FIFO guessing.
   const interactionBody = (name, rawArguments) => {
-    if (name === 'exit_plan_mode') return '计划待审：请在页面里查看并批准或拒绝';
+    if (name === 'exit_plan_mode') return PLAN_REVIEW_FALLBACK;
     try {
       const parsed = JSON.parse(rawArguments || '{}');
       const list = Array.isArray(parsed.questions) ? parsed.questions.filter((item) => item && typeof item === 'object') : [];

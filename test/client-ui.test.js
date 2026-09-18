@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -19,6 +19,17 @@ test('toast anchors to the conversation column so it clears the right sidebar, n
   assert.equal(toastAnchor({ document: { querySelector: () => null }, innerWidth: 1024 }), 168, 'the legacy centered-content guess remains the no-DOM-hook fallback');
   assert.equal(toastAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 40, width: 0 }) }) }, innerWidth: 1024 }), 168, 'a collapsed measurement falls back instead of anchoring off-screen');
   assert.equal(toastAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 5000, width: 100 }) }) }, innerWidth: 1024 }), 16, 'an out-of-viewport rect clamps to the 16px edge inset');
+  const scroll = { id: 'scroll' }; const content = { id: 'content' }; const frame = { id: 'frame' };
+  const col = { parentElement: frame };
+  const layout = {
+    querySelector: (selector) => {
+      if (selector === '[data-conversation-scroll]') return scroll;
+      if (selector === '[data-conversation-content]') return content;
+      if (selector === '[data-rightbar-col]') return col;
+      return null;
+    },
+  };
+  assert.deepEqual(toastAnchorWatchTargets(layout), [scroll, content, frame], 'sidebar toggles resize the conversation and the grid frame, not the window');
 });
 test('toast tone maps every kind to one icon/progress colour family', () => {
   assert.equal(toastTone('completed'), 'success'); assert.equal(toastTone('failed'), 'error');
@@ -157,10 +168,10 @@ test('a record with nowhere to go is still dismissible, while a real session sta
   assert.deepEqual(await navigateNotificationRecord(deleted, { sessions, acknowledge }), { status: 'acknowledged-without-session' });
   assert.deepEqual(acked, ['self-test', 'deleted']);
 
-  // Still listed but not openable here: do not ack by guesswork, so the notification is not lost.
+  // Still listed but the host did not select it: do not ack by guesswork, so the notification is not lost.
   const unbound = { eventId: 'unbound', sessionId: 's1' };
-  const strict = { ...sessions, binding: () => undefined };
-  assert.deepEqual(await navigateNotificationRecord(unbound, { strict, sessions: strict, acknowledge }), { status: 'navigation-failed' });
+  const strict = { binding: () => undefined, open: () => true, list: { getSnapshot: () => ({ current: 'other', byId: { s1: { displayTitle: '会话一' } } }) } };
+  assert.deepEqual(await navigateNotificationRecord(unbound, { sessions: strict, acknowledge }), { status: 'navigation-failed' });
   assert.deepEqual(acked, ['self-test', 'deleted'], 'an unopenable but existing session keeps its unread state');
 
   // The normal path still navigates, reveals the turn and acknowledges.

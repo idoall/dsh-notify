@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EventReducer, RECORD_MEMORY, sanitizeBody, validateRequest } from '../src/core.js';
+import { EventReducer, PLAN_REVIEW_FALLBACK, RECORD_MEMORY, sanitizeBody, validateRequest } from '../src/core.js';
 
 test('approval merge uses asked id and request always advances waterfall', () => {
   const r = new EventReducer(() => 1); const a = r.approvalAsked({ id: 'a', title: 'x' }); const b = r.approvalAsked({ id: 'a', title: 'y' }); let next = 0;
@@ -21,6 +21,41 @@ test('unlinked questions do not use FIFO association and result requires authori
   const b = r.question({ sessionId: 's', callId: 'b', title: 'b' }); const a = r.question({ sessionId: 's', callId: 'a', title: 'a' });
   r.questionResult({ sessionId: 's', callId: 'a' }); assert.equal(a.phase, 'settled'); assert.equal(b.phase, 'open');
   assert.equal(r.questionResult({ sessionId: 's', outcome: 'abort' }), null); assert.equal(r.questionResult({ sessionId: 's', callId: 'b', outcome: 'abort' }).phase, 'expired');
+});
+test('a tool/call and its unlinked waterfall are one card, not two', () => {
+  const r = new EventReducer(() => 1);
+  const linked = r.question({ sessionId: 's', callId: 'call-plan', intent: { kind: 'plan-review' }, title: PLAN_REVIEW_FALLBACK, turn: 3 });
+  const waterfall = r.question({ sessionId: 's', intent: { kind: 'plan-review' }, title: 'Approve this plan and leave plan mode?' });
+  assert.equal(waterfall, linked);
+  assert.equal(linked.eventId, waterfall.eventId);
+  assert.equal(r.records.size, 1);
+  assert.equal(linked.mergeKey, 'question:s:call-plan');
+  assert.equal(linked.body, 'Approve this plan and leave plan mode?', 'the real question replaces the exit_plan_mode fallback');
+  assert.equal(linked.turn, 3, 'the tool/call turn survives the waterfall, which has none');
+  assert.equal(r.questionResult({ sessionId: 's', callId: 'call-plan' }).phase, 'settled');
+
+  const unlinkedFirst = r.question({ sessionId: 's2', intent: { kind: 'plan-review' }, title: 'Approve this plan and leave plan mode?' });
+  const lateCall = r.question({ sessionId: 's2', callId: 'call-late', intent: { kind: 'plan-review' }, title: PLAN_REVIEW_FALLBACK });
+  assert.equal(lateCall, unlinkedFirst);
+  assert.equal(lateCall.mergeKey, 'question:s2:call-late');
+  assert.equal(lateCall.body, 'Approve this plan and leave plan mode?', 'the fallback must not clobber the question the waterfall already had');
+  assert.equal(r.questionResult({ sessionId: 's2', callId: 'call-late' }).phase, 'settled');
+
+  const ask = r.question({ sessionId: 's3', callId: 'q1', title: '通道范围：怎么处理？' });
+  const askWaterfall = r.question({ sessionId: 's3', title: '通道范围：怎么处理？' });
+  assert.equal(askWaterfall.eventId, ask.eventId);
+  assert.equal(ask.mergeKey, 'question:s3:q1');
+
+  const question = r.question({ sessionId: 's4', callId: 'q2', title: 'Continue?' });
+  const plan = r.question({ sessionId: 's4', callId: 'p2', intent: { kind: 'plan-review' }, title: PLAN_REVIEW_FALLBACK });
+  assert.notEqual(question.mergeKey, plan.mergeKey, 'a question and a plan review in the same session stay two cards');
+
+  const first = r.question({ sessionId: 's5', title: 'first' });
+  const second = r.question({ sessionId: 's5', title: 'second' });
+  const third = r.question({ sessionId: 's5', callId: 'c5', title: 'third' });
+  assert.notEqual(third.mergeKey, first.mergeKey);
+  assert.notEqual(third.mergeKey, second.mergeKey);
+  assert.equal(third.mergeKey, 'question:s5:c5', 'two open unlinked records are ambiguous: a later callId must not guess');
 });
 test('a replayed ask leaves a resolved interaction resolved', () => {
   const r = new EventReducer(() => 1);

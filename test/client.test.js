@@ -26,15 +26,24 @@ test('client composition reports missing services and per-seat failures without 
   assert.deepEqual(registrations, ['shell.overlay']); partial.destroy();
 });
 test('notification navigation requires a listed binding and the session it actually opened', async () => {
-  const record = { eventId: 'event-1', sessionId: 'session-1' }; let opens = 0;
-  const missing = { binding: () => undefined, open: () => { opens += 1; }, list: { getSnapshot: () => ({ current: undefined }) } };
-  assert.equal((await navigateNotificationRecord(record, { sessions: missing })).status, 'navigation-failed'); assert.equal(opens, 0);
+  const record = { eventId: 'event-1', sessionId: 'session-1' };
+  const missing = { binding: () => undefined, list: { getSnapshot: () => ({ current: undefined, byId: { 'session-1': { displayTitle: 'x' } } }) } };
+  assert.equal((await navigateNotificationRecord(record, { sessions: missing })).status, 'navigation-failed');
   const throws = { binding: () => ({}), open: () => { throw new Error('unknown'); }, list: { getSnapshot: () => ({ current: undefined }) } };
   assert.equal((await navigateNotificationRecord(record, { sessions: throws })).status, 'failed');
   const refused = { binding: () => ({}), open: () => false, list: { getSnapshot: () => ({ current: 'other' }) } };
   assert.equal((await navigateNotificationRecord(record, { sessions: refused })).status, 'navigation-failed');
   const success = { binding: () => ({}), open: () => {}, list: { getSnapshot: () => ({ current: 'session-1' }) } };
   assert.equal((await navigateNotificationRecord(record, { sessions: success })).status, 'acknowledged');
+
+  const list = { byId: { 'session-1': { displayTitle: 'x', retainedBy: {} } } };
+  let opened = 0;
+  const uiWorkspace = { openSession(id) { opened += 1; list.byId[id].retainedBy = { mainView: 1 }; } };
+  const modern = { list: { getSnapshot: () => list } };
+  assert.equal((await navigateNotificationRecord(record, { sessions: modern, uiWorkspace })).status, 'acknowledged');
+  assert.equal(opened, 1, 'current DSH selects through uiWorkspace.openSession, not sessions.open');
+  const stale = { list: { getSnapshot: () => ({ byId: { 'session-1': { retainedBy: {} } } }) } };
+  assert.equal((await navigateNotificationRecord(record, { sessions: stale, uiWorkspace: { openSession() {} } })).status, 'navigation-failed');
 });
 test('a record with nowhere to go is still dismissible, but a real navigation failure is reported', async () => {
   const gone = { eventId: 'event-gone', sessionId: 'session-deleted' };
