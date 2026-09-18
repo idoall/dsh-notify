@@ -49,6 +49,16 @@ test('the newest copy of a record replaces the older one, at the end of the queu
   assert.equal(buffer.size, 2, 'and the superseded copy is not kept');
 });
 
+test('a rekey of the same event drops the old merge identity', () => {
+  const buffer = createBuffer();
+  buffer.push(record(1, { eventId: 'same', mergeKey: 'question:s:unlinked:1', kind: 'plan-review', body: 'Approve this plan and leave plan mode?' }));
+  buffer.push(record(1, { eventId: 'same', mergeKey: 'question:s:call-1', kind: 'plan-review', body: 'Approve this plan and leave plan mode?' }));
+  const all = buffer.pull();
+  assert.equal(all.items.length, 1, 'a page asking from 0 must not see both identities');
+  assert.equal(buffer.size, 1);
+  assert.equal(all.items[0].eventId, 'same');
+  assert.equal(all.items[0].mergeKey, 'question:s:call-1');
+});
 test('the buffer is a live tail: an overflow drops the oldest and forgets its identity', () => {
   const buffer = createBuffer({ limit: 3 });
   for (const n of [1, 2, 3, 4]) buffer.push(record(n));

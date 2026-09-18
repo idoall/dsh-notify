@@ -145,6 +145,56 @@ test('each unlinked waterfall yields its own record and settles only its own key
   await runtime();
 });
 
+test('a plan review is one card even when both the tool/call and the waterfall fire', async (t) => {
+  const { listeners, records, runtime } = await fixture(t);
+  const waterfall = listeners.get('user-questions/request');
+  const session = { id: 'plan-session', header: {} };
+  listeners.get('session/event')(session, { type: 'tool/call', data: { callId: 'call-plan', name: 'exit_plan_mode', arguments: '{}', turn: 4 } });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'question:plan-session:call-plan'));
+  const firstId = records().find((record) => record.mergeKey === 'question:plan-session:call-plan').eventId;
+
+  let resolveAnswer;
+  const pending = new Promise((resolve) => { resolveAnswer = resolve; });
+  const done = waterfall({ agent: { session }, questions: [{ id: 'plan', question: 'Approve this plan and leave plan mode?', intent: { kind: 'plan-review' } }] }, () => pending);
+  await waitUntil(() => records().some((record) => record.mergeKey === 'question:plan-session:call-plan' && record.body.includes('Approve this plan')));
+  const plans = records().filter((record) => record.kind === 'plan-review');
+  assert.equal(plans.length, 1, 'the waterfall must not mint a second unlinked card');
+  assert.equal(plans[0].eventId, firstId);
+  assert.equal(plans[0].mergeKey, 'question:plan-session:call-plan');
+  assert.equal(plans[0].title, '计划待审');
+  assert.equal(plans[0].body, 'Approve this plan and leave plan mode?');
+  assert.equal(plans[0].phase, 'open');
+
+  resolveAnswer({ answers: [] });
+  await done;
+  await waitUntil(() => records().find((record) => record.mergeKey === 'question:plan-session:call-plan').phase !== 'open');
+  assert.equal(records().filter((record) => record.kind === 'plan-review').length, 1);
+  await runtime();
+});
+
+test('a live question is one card even when the waterfall arrives before the tool/call', async (t) => {
+  const { listeners, records, runtime } = await fixture(t);
+  const waterfall = listeners.get('user-questions/request');
+  const session = { id: 'ask-session', header: {} };
+  let resolveAnswer;
+  const pending = new Promise((resolve) => { resolveAnswer = resolve; });
+  const done = waterfall({ agent: { session }, questions: [{ id: 'q', header: '通道范围', question: '浏览器与主机通知要怎么处理？' }] }, () => pending);
+  await waitUntil(() => records().some((record) => record.kind === 'question' && record.phase === 'open'));
+  const first = records().find((record) => record.kind === 'question');
+  assert.equal(first.mergeKey.includes(':unlinked:'), true);
+
+  listeners.get('session/event')(session, { type: 'tool/call', data: { callId: 'call-ask', name: 'ask_user_question', arguments: JSON.stringify({ questions: [{ header: '通道范围', question: '浏览器与主机通知要怎么处理？' }] }) } });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'question:ask-session:call-ask'));
+  const questions = records().filter((record) => record.kind === 'question');
+  assert.equal(questions.length, 1, 'the late tool/call rekeys the unlinked card instead of stacking a second one');
+  assert.equal(questions[0].eventId, first.eventId);
+  assert.equal(questions[0].body, '通道范围：浏览器与主机通知要怎么处理？');
+
+  resolveAnswer({ answers: [] });
+  await done;
+  await runtime();
+});
+
 test('/pull hands a page only what it has not seen, and the buffer is memory-only', async (t) => {
   const { routes, runtime, listeners } = await fixture(t);
   const pull = routes.get('exact:/plugins/dsh-notify/pull');

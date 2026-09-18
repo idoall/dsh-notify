@@ -305,6 +305,9 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   const frame = () => document.querySelector('.dsh-notify-frame');
   await fire('anchor-check'); const toast = document.querySelector('aside[role="status"]');
   assert.ok(toast); assert.equal(frame().style.insetInlineEnd, '340px', 'the notification window carries the anchor');
+  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 1000, width: 720, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  await act(async () => { document.dispatchEvent(new dom.window.Event('transitionend', { bubbles: true })); });
+  assert.equal(frame().style.insetInlineEnd, '40px', 'a sidebar grid transition re-anchors to the expanded conversation right edge');
   assert.match(toast.textContent, /任务完成/);
   assert.equal(toast.dataset.tone, 'success', 'a completed toast carries its tone for the icon/accent colour');
   assert.ok(toast.querySelector('.dsh-notify-toast-icon'), 'react-toastify-style per-result icon');
@@ -420,9 +423,8 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
 
 const burstRecord = (n) => ({ eventId: `burst-${n}`, mergeKey: `turn:s1:${n}`, kind: 'completed', sessionId: 's1', title: `任务完成 ${n}`, body: '', at: n, phase: 'settled' });
 /**
- * The smallest sessions service a card click can really go through: it lists `ids`, `binding` answers for
- * them, and `open` selects — which is the whole contract `navigateNotificationRecord` reads. Without one,
- * a click cannot navigate at all and the card now says so instead of pretending it worked.
+ * The smallest sessions service a card click can really go through: it lists `ids`, and `open` selects
+ * (`list.current` is the older host; current DSH uses `uiWorkspace.openSession` + `retainedBy.mainView`).
  */
 function fakeSessions(ids = ['s1']) {
   let current;

@@ -31,10 +31,16 @@ export function createBuffer({ limit = BUFFER_LIMIT } = {}) {
      */
     push(record) {
       if (!record || typeof record.mergeKey !== 'string') return null;
-      const previous = index.get(record.mergeKey);
-      if (previous !== undefined) {
-        const at = entries.findIndex((entry) => entry.seq === previous);
-        if (at !== -1) entries.splice(at, 1);
+      const dropAt = (at) => {
+        if (at === -1) return;
+        const dropped = entries.splice(at, 1)[0];
+        if (index.get(dropped.record.mergeKey) === dropped.seq) index.delete(dropped.record.mergeKey);
+      };
+      dropAt(entries.findIndex((entry) => entry.seq === index.get(record.mergeKey)));
+      // A complementary merge rekeys `unlinked:…` onto the real callId but keeps the eventId, so the
+      // toast can update in place. The old merge identity is not news and must not sit beside it.
+      if (typeof record.eventId === 'string' && record.eventId !== '') {
+        dropAt(entries.findIndex((entry) => entry.record.eventId === record.eventId));
       }
       seq += 1;
       entries.push({ seq, record: clone(record) });

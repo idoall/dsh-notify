@@ -18,6 +18,73 @@ export function toastAnchor({ document: doc = globalThis.document, innerWidth = 
   return right === null ? Math.max(16, (innerWidth - fallbackContentWidth) / 2 + 16) : Math.max(16, innerWidth - right + 16);
 }
 /**
+ * Nodes whose size or grid track changes when a sidebar opens or closes. The AppFrame itself does
+ * not resize — it animates `grid-template-columns` — so a ResizeObserver on the window or the
+ * frame misses the toggle. The conversation node can also be replaced on session switch; callers
+ * must re-query rather than hold the first node forever.
+ */
+export function toastAnchorWatchTargets(doc = globalThis.document) {
+  const nodes = [];
+  const seen = new Set();
+  const add = (node) => { if (node && !seen.has(node)) { seen.add(node); nodes.push(node); } };
+  add(doc?.querySelector?.('[data-conversation-scroll]'));
+  add(doc?.querySelector?.('[data-conversation-content]'));
+  const frame = doc?.querySelector?.('[data-rightbar-col]')?.parentElement
+    ?? doc?.querySelector?.('[data-conversation-content]')?.parentElement;
+  add(frame);
+  return nodes;
+}
+/** Follow the conversation's right edge through a sidebar grid animation (~slow duration). */
+const TOAST_ANCHOR_FOLLOW_MS = 450;
+export function watchToastAnchor(onChange, { document: doc = globalThis.document, window: win = globalThis } = {}) {
+  if (typeof onChange !== 'function') return () => {};
+  let raf = 0;
+  let followingUntil = 0;
+  const observed = new Set();
+  const measure = () => onChange(toastAnchor({ document: doc, innerWidth: win.innerWidth }));
+  const tick = () => {
+    measure();
+    const now = typeof win.performance?.now === 'function' ? win.performance.now() : Date.now();
+    raf = now < followingUntil && typeof win.requestAnimationFrame === 'function' ? win.requestAnimationFrame(tick) : 0;
+  };
+  const follow = () => {
+    const now = typeof win.performance?.now === 'function' ? win.performance.now() : Date.now();
+    followingUntil = now + TOAST_ANCHOR_FOLLOW_MS;
+    if (!raf && typeof win.requestAnimationFrame === 'function') raf = win.requestAnimationFrame(tick);
+    else if (!raf) measure();
+  };
+  const observer = typeof win.ResizeObserver === 'function' ? new win.ResizeObserver(() => { measure(); follow(); }) : null;
+  const mo = typeof win.MutationObserver === 'function' ? new win.MutationObserver(() => { retarget(); measure(); follow(); }) : null;
+  const styleTargets = new Set();
+  const frameOf = () => doc?.querySelector?.('[data-rightbar-col]')?.parentElement
+    ?? doc?.querySelector?.('[data-conversation-content]')?.parentElement;
+  const retarget = () => {
+    for (const node of toastAnchorWatchTargets(doc)) {
+      if (observer && !observed.has(node)) { observer.observe(node); observed.add(node); }
+    }
+    const frame = frameOf();
+    if (mo && frame && !styleTargets.has(frame)) {
+      mo.observe(frame, { attributes: true, attributeFilter: ['style', 'data-sidebar-collapsed', 'data-rightbar-collapsed', 'data-rightbar-fullscreen'] });
+      styleTargets.add(frame);
+    }
+  };
+  const update = () => { retarget(); measure(); follow(); };
+  win.addEventListener?.('resize', update);
+  doc.addEventListener?.('transitionstart', update, true);
+  doc.addEventListener?.('transitionend', update, true);
+  mo?.observe(doc.documentElement, { subtree: true, attributes: true, attributeFilter: ['data-sidebar-collapsed', 'data-rightbar-collapsed', 'data-rightbar-fullscreen'] });
+  retarget();
+  measure();
+  return () => {
+    win.removeEventListener?.('resize', update);
+    doc.removeEventListener?.('transitionstart', update, true);
+    doc.removeEventListener?.('transitionend', update, true);
+    observer?.disconnect();
+    mo?.disconnect();
+    if (raf && typeof win.cancelAnimationFrame === 'function') win.cancelAnimationFrame(raf);
+  };
+}
+/**
  * Official sidebar foot renders `sidebar.footer.action` as ONE nowrap flex line, so every
  * registrant (dsh-mobile 移动访问, Cordis, us) is forced onto the same row. Letting that row wrap
  * is the only way a plugin can occupy its own row there, because the sidebar exposes no row-level
@@ -203,7 +270,12 @@ export function revealTurn(turn, { document: doc = globalThis.document, attempts
   timer = setTimer(attempt, 0);
   return clear;
 }
-export async function navigateNotificationRecord(record, { sessions, acknowledge } = {}) {
+function isMainView(sessions, sessionId) {
+  const snap = sessions?.list?.getSnapshot?.();
+  if (snap?.current === sessionId) return true;
+  return (snap?.byId?.[sessionId]?.retainedBy?.mainView ?? 0) > 0;
+}
+export async function navigateNotificationRecord(record, { sessions, uiWorkspace, acknowledge } = {}) {
   const sessionId = record?.sessionId;
   // A record with nowhere to go — a self-test artefact (`sessionId: null`), or a session that has
   // since been deleted — must still be dismissible. Refusing to acknowledge it used to leave the
@@ -214,10 +286,21 @@ export async function navigateNotificationRecord(record, { sessions, acknowledge
     await acknowledge?.(record);
     return { status: 'acknowledged-without-session' };
   }
-  if (!sessions?.binding?.(sessionId)) return { status: 'navigation-failed' };
+  // Current DSH: view selection is `uiWorkspace.openSession` and "current" is
+  // `retainedBy.mainView`. `sessions.open` / `list.current` / a pre-existing
+  // `binding()` are the older host. `binding()` in particular is only live
+  // after the main view has already retained the session, so requiring it
+  // first made every other card report 没能打开这个会话.
   try {
-    const opened = sessions.open(sessionId);
-    if (opened === false || sessions.list?.getSnapshot?.().current !== sessionId) return { status: 'navigation-failed' };
+    if (typeof uiWorkspace?.openSession === 'function') uiWorkspace.openSession(sessionId);
+    else if (typeof sessions?.open === 'function') {
+      const opened = sessions.open(sessionId);
+      if (opened === false) return { status: 'navigation-failed' };
+      if (opened && typeof opened.then === 'function') await opened;
+    } else if (!isMainView(sessions, sessionId) && !sessions?.binding?.(sessionId)) {
+      return { status: 'navigation-failed' };
+    }
+    if (!isMainView(sessions, sessionId)) return { status: 'navigation-failed' };
     if (Number.isSafeInteger(record.turn) && record.turn > 0) revealTurn(record.turn);
     await acknowledge?.(record);
     return { status: 'acknowledged' };
@@ -239,7 +322,7 @@ async function fetchJson(path, init) {
  * Clicking a card opens the session (and the exact turn) it is about. There is nothing else to write:
  * the card disappearing is the entire record of the interaction.
  */
-const navigateRecord = (record, sessions) => (record?.localOnly ? Promise.resolve({ status: 'local' }) : navigateNotificationRecord(record, { sessions }));
+const navigateRecord = (record, { sessions, uiWorkspace } = {}) => (record?.localOnly ? Promise.resolve({ status: 'local' }) : navigateNotificationRecord(record, { sessions, uiWorkspace }));
 function mergeRecords(previous, items) {
   const merged = new Map(previous.map((record) => [record.eventId, record]));
   for (const record of items) if (record?.eventId) merged.set(record.eventId, record);
@@ -486,7 +569,7 @@ export function stackWindow({ heights = [], visible = TOAST_STACK_VISIBLE, gap =
   const windowHeight = sum(onScreen);
   return { total: list.length, hidden, windowHeight: windowHeight + (hidden > 0 ? peek : 0), contentHeight: sum(list), overflow: hidden > 0 };
 }
-function ToastOverlay({ sessions, pendingInteractions } = {}) {
+function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
@@ -540,18 +623,7 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
     if (changed) rerenderNow();
   };
   React.useEffect(() => { const onConfig = () => refresh((n) => n + 1); globalThis.addEventListener?.('dsh-notify:toast-config', onConfig); return () => globalThis.removeEventListener?.('dsh-notify:toast-config', onConfig); }, []);
-  React.useEffect(() => {
-    const update = () => setAnchor(toastAnchor());
-    update();
-    globalThis.addEventListener?.('resize', update);
-    let observer;
-    if (typeof ResizeObserver === 'function') {
-      observer = new ResizeObserver(update);
-      const target = globalThis.document?.querySelector?.('[data-conversation-scroll]') ?? globalThis.document?.body;
-      if (target) observer.observe(target);
-    }
-    return () => { globalThis.removeEventListener?.('resize', update); observer?.disconnect(); };
-  }, []);
+  React.useEffect(() => watchToastAnchor((next) => setAnchor((prev) => (prev === next ? prev : next))), []);
   React.useEffect(() => { setAnchor(toastAnchor()); }, [cards.length]);
   React.useEffect(() => () => {
     for (const id of exits.current.values()) clearTimeout(id);
@@ -672,7 +744,7 @@ function ToastOverlay({ sessions, pendingInteractions } = {}) {
    */
   const activate = async (card) => {
     const eventId = card.record.eventId;
-    const result = await navigateRecord(card.record, sessions);
+    const result = await navigateRecord(card.record, { sessions, uiWorkspace });
     if (result?.status === 'acknowledged' || result?.status === 'local') { dismiss(eventId); return; }
     const error = !validSessionId(card.record.sessionId) ? '这条通知没有可以打开的会话'
       : result?.status === 'acknowledged-without-session' ? '这个会话已经不在了，无法打开'
@@ -892,7 +964,7 @@ function SettingsSection() {
       customSounds.length > 0 && React.createElement('div', { className: 'dsh-notify-actions' }, customSounds.map((sound) => React.createElement('button', { key: sound.name, type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', onClick: () => void removeSound(sound.name) }, `删除 ${sound.name}`)))));
 }
 export const CLIENT_COMPOSITION = Object.freeze({ service: 'slots', modules: Object.freeze(['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general']), seats: Object.freeze(['settings.section', 'shell.overlay']) });
-export function mountNotifyClient({ slots, sessions, getSessions, getUiSession } = {}) {
+export function mountNotifyClient({ slots, sessions, uiWorkspace, getSessions, getUiSession, getUiWorkspace } = {}) {
   const status = { service: slots?.inject && slots?.register ? 'available' : 'unavailable', seats: {} };
   if (status.service === 'unavailable') return { status, destroy() {} };
   // Resolved lazily: the host may not expose the question surface at all, and the toast degrades to
@@ -903,7 +975,7 @@ export function mountNotifyClient({ slots, sessions, getSessions, getUiSession }
   status.seats['settings.section'] = 'waiting';
   try { disposers.push(slots.inject('settings.section', () => activate('settings.section', { id: 'dsh-notify', order: 100, label: '通知', inject: () => ({ sessions: sessions ?? getSessions?.() }) }, SettingsSection))); } catch { status.seats['settings.section'] = 'unavailable'; }
   status.seats['shell.overlay'] = 'waiting';
-  try { disposers.push(slots.inject('shell.overlay', () => activate('shell.overlay', { id: 'dsh-notify-toast', order: 100, inject: () => ({ sessions: sessions ?? getSessions?.(), pendingInteractions: pendingInteractions() }) }, ToastOverlay))); } catch { status.seats['shell.overlay'] = 'unavailable'; }
+  try { disposers.push(slots.inject('shell.overlay', () => activate('shell.overlay', { id: 'dsh-notify-toast', order: 100, inject: () => ({ sessions: sessions ?? getSessions?.(), uiWorkspace: uiWorkspace ?? getUiWorkspace?.(), pendingInteractions: pendingInteractions() }) }, ToastOverlay))); } catch { status.seats['shell.overlay'] = 'unavailable'; }
   return { status, destroy() { for (const dispose of disposers.reverse()) dispose?.(); } };
 }
-export function apply(ctx) { return mountNotifyClient({ slots: ctx?.slots, getSessions: () => ctx?.get?.('sessions'), getUiSession: () => ctx?.get?.('uiSession') }); }
+export function apply(ctx) { return mountNotifyClient({ slots: ctx?.slots, getSessions: () => ctx?.get?.('sessions'), getUiSession: () => ctx?.get?.('uiSession'), getUiWorkspace: () => ctx?.get?.('uiWorkspace') }); }
