@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-18
+
 ### Fixed
 
 - One plan review (or question) no longer becomes two toasts. A profile plugin sees both the live `tool/call` (`exit_plan_mode` / `ask_user_question`) and the `user-questions/request` waterfall for the same interaction; those used to be two `mergeKey`s, so the corner showed two 「计划待审」 cards for one session — one with the real question (`Approve this plan and leave plan mode?`) and one with the generic `计划待审：请在页面里查看并批准或拒绝`. Complementary identities now collapse onto the callId, the waterfall body wins over the fallback, and a rekey drops the old buffer copy so a page asking from 0 still sees one card.
@@ -108,6 +110,7 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.2.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.1
 [0.2.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.0
 [0.1.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.2
 [0.1.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.1

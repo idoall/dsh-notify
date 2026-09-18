@@ -33,7 +33,7 @@ Everything happens **inside the page you already have open**. There is no servic
 ## What it does
 
 - **Toast on the page**: a stack in the top-right corner, newest on top. Each card carries the arrival time to the second (`00:33:08`, or `02-14 09:05` when it is not from today; the full date is in its tooltip), the session name, the title, the body, a tone colour per kind and a close button. Click the body to jump to the session; click the answers to reply without leaving the page, and the card reports the answer as loading until the host confirms (then ✓ 已完成 or ✗ with a 重试 button). Nothing expires on a clock: a card stays until you close it, open its session, or answer it — and a card whose record the Host has dropped leaves with it.
-- **A window onto the queue**: the corner is five cards tall — three on a narrow, touch viewport, where screen space is the scarce thing — and each new card pushes the older ones down with a smooth transform. Anything waiting on you is always among them; everything older sits below the fold, one scroll (or one swipe) away, and a sliver of the next card under the window edge is what says so. The count on the corner is the whole queue the page is holding (`+8`), not just what is out of sight; click or tap it to jump between the two ends. Nothing is thrown away while the page is open; a refresh clears it.
+- **A window onto the queue, not a folded pile**: one through five cards (three on a narrow, touch viewport) are **all fully visible** — they never overlap, whether they arrived together or one by one. The **sixth** card is the first that sits below the fold, one scroll (or one swipe) away, with a sliver of the next card under the window edge. The count on the corner is the whole queue the page is holding (`+8`), not just what is out of sight; click or tap it to jump between the two ends. Nothing is thrown away while the page is open; a refresh clears it.
 - **Answer in the toast**: a pending question or approval renders the same options as the composer. Answering here and answering in the composer act on the same pending interaction, so the two stay in sync.
 - **Jump to the exact turn**: clicking a card opens its session (through the host's `uiWorkspace.openSession` on current DSH, with the older `sessions.open` still accepted) and scrolls to (and briefly highlights) the turn the notification came from. The card is dismissed only once that really happened, so a jump that could not happen is not silently swallowed: a session that is gone (deleted, archived, or not in this page's list) leaves the card in place reading 这个会话已经不在了，无法打开, a jump that merely failed says 没能打开这个会话，再点一次试试 and clicking again retries, and a self-test card — which has no session on purpose — just closes.
 - **One card per ask**: a plan review or a question is one notification even when the host emits it twice — the live `tool/call` and the in-page question waterfall. The corner will not stack two 「计划待审」 cards for the same session.
@@ -52,7 +52,7 @@ Requirements:
 
 - DeepSeek Harness with a Web profile
 - Node.js 20 or newer
-- Verified DSH version: `0.1.6-alpha.1` (plugin `0.2.0`)
+- Verified DSH version: `0.1.6-alpha.1` (plugin `0.2.1`)
 
 Install from GitHub into your Web profile:
 
@@ -100,10 +100,11 @@ Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory 
 
 ## Compatibility
 
-Current release: plugin **`0.2.0`** is verified against DeepSeek Harness **`0.1.6-alpha.1`**.
+Current release: plugin **`0.2.1`** is verified against DeepSeek Harness **`0.1.6-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.2.1` | `0.1.6-alpha.1` |
 | `0.2.0` | `0.1.6-alpha.1` |
 | `0.1.2` | `0.1.6-alpha.1` |
 | `0.1.1` | `0.1.5-rc.1` |
