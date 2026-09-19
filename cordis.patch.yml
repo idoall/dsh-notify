@@ -1,5 +1,10 @@
 # Bundle mount. Persistence stays disabled until the profile owner supplies an
 # absolute config.dataDir in its own patch; the plugin never guesses a profile.
+#
+# `name` is the Node-resolvable package name and must stay in sync with
+# package.json; it is quoted because `@` cannot open a plain YAML scalar.
+# `id` is the local mount id, so profile config keys keep the short
+# `dsh-notify` spelling independent of the published name.
 - insert:
     - id: dsh-notify
-      name: dsh-notify
+      name: '@idoall/dsh-notify'

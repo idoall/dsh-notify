@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
   <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
 </p>
@@ -52,9 +53,15 @@ Requirements:
 
 - DeepSeek Harness with a Web profile
 - Node.js 20 or newer
-- Verified DSH version: `0.1.6-alpha.1` (plugin `0.2.1`)
+- Verified DSH version: `0.1.6-alpha.1` (plugin `0.2.2`)
 
-Install from GitHub into your Web profile:
+Install from npm into your Web profile:
+
+```sh
+dsh plugin --profile web add @idoall/dsh-notify@latest
+```
+
+Install from GitHub:
 
 ```sh
 dsh plugin --profile web add "github:idoall/dsh-notify"
@@ -66,13 +73,14 @@ From a local clone (what this repository is developed against):
 git clone https://github.com/idoall/dsh-notify.git
 cd dsh-notify
 npm install
-npm run build
 dsh plugin --profile web add "link:$(pwd)"
 ```
 
 Restart DSH and refresh the Web UI. The client half registers the settings card in `settings.section` and the toast in `shell.overlay`; the host half mounts through `cordis.patch.yml`.
 
-> **Name note:** the npm package `dsh-notify` belongs to a **different** author (a Windows tray/toast plugin). This plugin is not published on npm — install it from GitHub or from a local clone exactly as shown above, so a plain `dsh plugin add dsh-notify` cannot pull the wrong plugin.
+> **Name note:** the unscoped npm name `dsh-notify` belongs to a **different** author (a Windows tray/toast plugin). This plugin is published as **`@idoall/dsh-notify`** — always install it with the scope, because a bare `dsh plugin add dsh-notify` would pull the other plugin.
+>
+> Only the published package name is scoped. The plugin's internal identity — cordis name, the `dsh-notify` mount id and the `/plugins/dsh-notify/*` routes — keeps its short spelling, so profile config and settings are unaffected.
 
 ## Usage
 
@@ -100,10 +108,11 @@ Custom sounds are uploaded to `<dataDir>/sounds/` in the profile data directory 
 
 ## Compatibility
 
-Current release: plugin **`0.2.1`** is verified against DeepSeek Harness **`0.1.6-alpha.1`**.
+Current release: plugin **`0.2.2`** is verified against DeepSeek Harness **`0.1.6-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.2.2` | `0.1.6-alpha.1` |
 | `0.2.1` | `0.1.6-alpha.1` |
 | `0.2.0` | `0.1.6-alpha.1` |
 | `0.1.2` | `0.1.6-alpha.1` |
@@ -121,7 +130,7 @@ Verified on macOS (Chrome and the DSH desktop shell) and remotely through a phon
 ## Uninstall
 
 ```sh
-dsh plugin --profile web remove dsh-notify
+dsh plugin --profile web remove @idoall/dsh-notify
 ```
 
 Uninstalling deletes nothing that persists: the uploaded sounds and `settings.json` (sound, toast position, subtask noise) live in the data directory your profile patch owns (`config.dataDir`). Delete that directory to wipe them. Notification records never reach the disk, so there is no history to clean up.
@@ -133,9 +142,23 @@ npm install
 npm run verify     # typecheck + tests + build + package check
 npm run test       # node --test test/*.test.js
 npm run build      # dist/index.js, dist/client.js
+npm run pack:check # publish preconditions + the exact client registration
 ```
 
 The repository keeps the host half (`src/index.js`, `src/core.js`, `src/buffer.js`, `src/sounds.js`, `src/sound-choices.js`), the client half (`src/client.js`), and a dependency-free test suite (`test/`). `dist/` is build output and is not committed.
+
+### Releasing
+
+Releases are tag-driven. Bump `version` in `package.json`, move the CHANGELOG entry out of `Unreleased`, write bilingual notes in `release-notes/v<version>.md`, then push the tag:
+
+```sh
+git tag v0.2.2
+git push origin v0.2.2
+```
+
+`.github/workflows/release.yml` then gates the tag against `package.json`, runs `npm run verify`, packs the plugin, publishes to npm through GitHub Actions OIDC (no long-lived token, `repository.url` must match this repository, and an already-published version is skipped instead of failing), and creates the GitHub Release with the tarball and its sha256.
+
+Publishing needs a **trusted publisher** on npmjs.com for `@idoall/dsh-notify` naming this repository and the exact workflow filename `release.yml`, with a direct `npm publish` allowed (connections created after 2026-09-03 default to staged publishing only).
 
 ## License
 

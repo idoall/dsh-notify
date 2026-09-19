@@ -1,7 +1,6 @@
 {
-  "name": "dsh-notify",
-  "version": "0.2.1",
-  "private": true,
+  "name": "@idoall/dsh-notify",
+  "version": "0.2.2",
   "type": "module",
   "description": "DSH web plugin: in-page task notifications for DeepSeek Harness — a stacking top-right toast (answer buttons, live action state, background-tab flash and a WebAudio cue that also plays while the page is hidden). Live delivery only: no history, no service worker, no web push, no OS notification matrix.",
   "main": "./dist/index.js",
@@ -12,6 +11,7 @@
   },
   "files": [
     "dist",
+    "assets",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -37,8 +37,12 @@
     "test": "node --test test/*.test.js",
     "build": "node scripts/build.mjs",
     "prepare": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
     "pack:check": "node scripts/pack-check.mjs",
     "verify": "npm run typecheck && npm run test && npm run build && npm run pack:check"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.2"
@@ -70,7 +74,11 @@
   },
   "keywords": [
     "dsh",
+    "dsh-plugin",
+    "deepseek",
     "deepseek-harness",
+    "harness",
+    "cordis",
     "plugin",
     "notifications",
     "toast",
