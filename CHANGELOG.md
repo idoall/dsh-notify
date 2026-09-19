@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-19
+
+Published to npm as **`@idoall/dsh-notify`**, with a tag-driven release pipeline. Nothing about the plugin's behaviour changes: the cordis name, the mount id, the `/plugins/dsh-notify/*` routes and every CSS class keep their short spelling, so profile config and the test suite are untouched.
+
+### Added
+
+- **npm releases.** The package publishes as `@idoall/dsh-notify`. The unscoped `dsh-notify` name belongs to another author's Windows tray plugin, so the scope is what keeps `dsh plugin add dsh-notify` from pulling the wrong package. `package.json` drops `private`, declares `publishConfig.access: public`, and now ships `assets/` so the README screenshots render on the npm package page.
+- **`.github/workflows/release.yml`.** A `v*` tag gates on the `package.json` version, runs `npm run verify`, packs the plugin, publishes through GitHub Actions OIDC (no long-lived token; a version that is already on npm is skipped instead of failing), and creates the GitHub Release with the tarball and its sha256. `release-notes/v<version>.md` supplies the bilingual notes whenever it exists.
+- **`.github/dependabot.yml`**: monthly grouped npm maintenance plus GitHub Actions updates.
+
+### Changed
+
+- **`cordis.patch.yml` mounts `@idoall/dsh-notify`** — the Node-resolvable package name — while the mount `id` stays `dsh-notify`.
+- **The client bundle registers under `@idoall/dsh-notify`.** `scripts/build.mjs` derives the `__ModuleLoader__.load({id})` id from `package.json` instead of hardcoding it, because DSH identifies a browser module by its manifest package name.
+- **`scripts/pack-check.mjs` also asserts the publish preconditions**: `private` unset, public scoped access, `assets/` shipped, `repository.url` matching the GitHub repository, and both `cordis.patch.yml` and the client registration id tracking `package.json`'s name.
+- Installing from a local clone no longer needs a manual `npm run build`: `npm install` builds through `prepare`, and `prepack` rebuilds before packing or publishing.
+- README and README.zh document the scoped install name, the npm badge and the release flow.
+
 ## [0.2.1] - 2026-09-18
 
 ### Fixed

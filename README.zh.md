@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm 版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
   <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
 </p>
@@ -52,9 +53,15 @@
 
 - 带 Web profile 的 DeepSeek Harness
 - Node.js 20 或更新
-- 已验证的 DSH 版本：`0.1.6-alpha.1`（插件 `0.2.1`）
+- 已验证的 DSH 版本：`0.1.6-alpha.1`（插件 `0.2.2`）
 
-从 GitHub 装进 Web profile：
+从 npm 装进 Web profile：
+
+```sh
+dsh plugin --profile web add @idoall/dsh-notify@latest
+```
+
+从 GitHub 安装：
 
 ```sh
 dsh plugin --profile web add "github:idoall/dsh-notify"
@@ -66,13 +73,14 @@ dsh plugin --profile web add "github:idoall/dsh-notify"
 git clone https://github.com/idoall/dsh-notify.git
 cd dsh-notify
 npm install
-npm run build
 dsh plugin --profile web add "link:$(pwd)"
 ```
 
 重启 DSH，刷新 Web UI。客户端半边把设置卡片挂到 `settings.section`、浮层挂到 `shell.overlay`；宿主半边通过 `cordis.patch.yml` 挂载。
 
-> **命名提醒**：npm 上的 `dsh-notify` 属于**另一位作者**（一个 Windows 托盘通知插件）。本插件没有发布到 npm——请只按上面的 GitHub 或本地克隆方式安装，避免 `dsh plugin add dsh-notify` 装错成别人的插件。
+> **命名提醒**：无 scope 的 npm 名 `dsh-notify` 属于**另一位作者**（一个 Windows 托盘通知插件）。本插件发布为 **`@idoall/dsh-notify`**——请务必带 scope 安装，因为裸的 `dsh plugin add dsh-notify` 会装成别人的插件。
+>
+> 只有「发布用的包名」带 scope。插件的内部身份——cordis 名、`dsh-notify` 挂载 id、`/plugins/dsh-notify/*` 路由——都保持原来的短名，profile 配置与设置项不受影响。
 
 ## 使用
 
@@ -100,10 +108,11 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布：插件 **`0.2.1`** 已在 DeepSeek Harness **`0.1.6-alpha.1`** 上验证。
+当前发布：插件 **`0.2.2`** 已在 DeepSeek Harness **`0.1.6-alpha.1`** 上验证。
 
 | 插件 | 已验证的 DeepSeek Harness |
 | --- | --- |
+| `0.2.2` | `0.1.6-alpha.1` |
 | `0.2.1` | `0.1.6-alpha.1` |
 | `0.2.0` | `0.1.6-alpha.1` |
 | `0.1.2` | `0.1.6-alpha.1` |
@@ -121,7 +130,7 @@ dsh plugin --profile web add "link:$(pwd)"
 ## 卸载
 
 ```sh
-dsh plugin --profile web remove dsh-notify
+dsh plugin --profile web remove @idoall/dsh-notify
 ```
 
 卸载**不会**删除任何会留下来的东西：已上传的提示音与 `settings.json`（提示音、Toast 位置、子任务开关）在你自己 profile patch 指定的数据目录（`config.dataDir`）里，要清空就删掉那个目录。通知记录从不落盘，所以没有历史要清。
@@ -133,9 +142,23 @@ npm install
 npm run verify     # typecheck + 测试 + 构建 + 打包检查
 npm run test       # node --test test/*.test.js
 npm run build      # dist/index.js、dist/client.js
+npm run pack:check # 发布前置条件 + 客户端注册 id 校验
 ```
 
 仓库包含宿主半边（`src/index.js`、`src/core.js`、`src/buffer.js`、`src/sounds.js`、`src/sound-choices.js`）、客户端半边（`src/client.js`）以及一套零依赖测试（`test/`）。`dist/` 是构建产物，不入库。
+
+### 发版
+
+发版由 tag 驱动。改 `package.json` 的 `version`、把 CHANGELOG 里 `Unreleased` 段落成正式版本、在 `release-notes/v<版本>.md` 写好双语说明，然后推 tag：
+
+```sh
+git tag v0.2.2
+git push origin v0.2.2
+```
+
+`.github/workflows/release.yml` 会先校验 tag 与 `package.json` 版本一致，再跑 `npm run verify`、打包，通过 GitHub Actions OIDC 发布到 npm（不需要长期令牌；`repository.url` 必须与本仓库一致；版本已存在时跳过而不是报错），最后创建带 `.tgz` 与 sha256 的 GitHub Release。
+
+发布前需要在 npmjs.com 给 `@idoall/dsh-notify` 配置 **trusted publisher**：填本仓库、workflow 文件名必须正好是 `release.yml`，并且要勾选允许直接 `npm publish`（2026-09-03 之后新建的连接默认只允许暂存发布）。
 
 ## 许可证
 

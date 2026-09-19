@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Release version gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+      - name: Require tag to match package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+  package:
+    name: Plugin package
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - name: Pack plugin
+        run: |
+          npm pack
+          # A scoped package packs as <scope>-<name>-<version>.tgz.
+          sha256sum *dsh-notify-*.tgz > dsh-notify-plugin.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin-package
+          path: |
+            *dsh-notify-*.tgz
+            dsh-notify-plugin.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish npm package
+    needs: package
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin-package
+          path: release-assets
+      - name: Publish npm package
+        run: |
+          package="$(find "$GITHUB_WORKSPACE/release-assets" -maxdepth 1 -type f -name '*dsh-notify-*.tgz' -print -quit)"
+          test -n "$package"
+          version="${GITHUB_REF_NAME#v}"
+          published="$(npm view "@idoall/dsh-notify@$version" version 2>/dev/null || true)"
+          if [ "$published" = "$version" ]; then
+            echo "@idoall/dsh-notify@$version is already published; leaving the immutable npm release unchanged."
+            exit 0
+          fi
+          # Trusted publishing (OIDC): do not set NODE_AUTH_TOKEN — npm CLI 11.5.1+
+          # exchanges the GitHub OIDC token itself. The npmjs.com trusted publisher
+          # must name this repository (idoall/dsh-notify), this workflow filename
+          # (release.yml), and allow a direct `npm publish`, not stage publish only.
+          npm publish "$package" --access public
+
+  github-release:
+    name: GitHub release
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Releases in this repository are hand-written and bilingual, so prefer
+          # release-notes/v<version>.md over generated notes when it exists.
+          if [ -f "release-notes/$GITHUB_REF_NAME.md" ]; then
+            notes=(--notes-file "release-notes/$GITHUB_REF_NAME.md")
+          else
+            notes=(--generate-notes)
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              "${notes[@]}" \
+              --title "$GITHUB_REF_NAME"
+          fi

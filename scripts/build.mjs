@@ -17,7 +17,8 @@ const result = await build({
   write: false,
   legalComments: 'none',
 });
+const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 const body = result.outputFiles[0].text;
-const registration = `window.__ModuleLoader__.load({\n  id: 'dsh-notify',\n  factory: (require) => {\n    var module = { exports: {} };\n    var exports = module.exports;\n${body.split('\n').map((line) => `    ${line}`).join('\n')}\n    return module.exports;\n  },\n});\n`;
+const registration = `window.__ModuleLoader__.load({\n  id: ${JSON.stringify(manifest.name)},\n  factory: (require) => {\n    var module = { exports: {} };\n    var exports = module.exports;\n${body.split('\n').map((line) => `    ${line}`).join('\n')}\n    return module.exports;\n  },\n});\n`;
 await writeFile('dist/client.js', registration, 'utf8');
-console.log('Built Host modules and the DSH lazy-CJS client bundle.');
+console.log(`Built Host modules and the DSH lazy-CJS client bundle for ${manifest.name}.`);
