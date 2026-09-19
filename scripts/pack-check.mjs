@@ -8,11 +8,22 @@ const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 if (manifest.main !== './dist/index.js' || manifest.exports?.['./client'] !== './dist/client.js') throw new Error('package exports do not expose Host and client builds');
 if (manifest.dsh?.client?.platform !== 'web' || manifest.dsh?.bundle?.patch !== './cordis.patch.yml') throw new Error('missing dsh client/bundle declarations');
 // Publishing preconditions. npm OIDC validates repository.url against the GitHub
-// repository, a scoped package needs public access, and the README screenshots
-// only render on the package page when assets/ ships inside the tarball.
+// repository and a scoped package needs public access.
 if (manifest.private === true || manifest.publishConfig?.access !== 'public') throw new Error('manifest is not publishable as a public scoped package');
-if (!Array.isArray(manifest.files) || !manifest.files.includes('assets')) throw new Error('manifest files must ship assets/ for the README screenshots');
 if (manifest.repository?.url !== 'git+https://github.com/idoall/dsh-notify.git') throw new Error('repository.url must exactly match the GitHub repository for npm OIDC provenance');
+// npm rewrites the READMEs' relative image paths onto this repository's raw URLs
+// (https://raw.githubusercontent.com/idoall/dsh-notify/HEAD/<path>), so those files
+// must stay committed here; shipping them inside the tarball changes nothing on npm.
+for (const readme of ['README.md', 'README.zh.md']) {
+  for (const [, src] of (await readFile(readme, 'utf8')).matchAll(/<img[^>]+src="(?!https?:)([^"]+)"/g)) {
+    const target = src.replace(/^\.\//, '');
+    try {
+      await access(target);
+    } catch {
+      throw new Error(`${readme} references ${src}, which is not in the repository — npm serves README images from this repository's raw URLs`);
+    }
+  }
+}
 // The bundle patch mounts by Node-resolvable package name, so it must track the manifest.
 const patchName = /^\s*name:\s*(.+)$/m.exec(await readFile('cordis.patch.yml', 'utf8'))?.[1]?.trim().replace(/^['"]|['"]$/g, '');
 if (patchName !== manifest.name) throw new Error(`cordis.patch.yml mounts ${patchName} but package.json is ${manifest.name}`);
