@@ -1,6 +1,6 @@
 {
   "name": "@idoall/dsh-notify",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "DSH web plugin: in-page task notifications for DeepSeek Harness — a stacking top-right toast (answer buttons, live action state, background-tab flash and a WebAudio cue that also plays while the page is hidden). Live delivery only: no history, no service worker, no web push, no OS notification matrix.",
   "main": "./dist/index.js",
@@ -11,7 +11,6 @@
   },
   "files": [
     "dist",
-    "assets",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",

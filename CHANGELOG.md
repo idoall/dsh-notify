@@ -4,13 +4,26 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-19
+
+The first release published by CI: the `v0.2.3` tag is built, packed and pushed to npm by GitHub Actions through OIDC, which is also what attaches the package's provenance attestation. `0.2.2` had been published by hand, so it carries none.
+
+### Changed
+
+- **`assets/` no longer ships inside the npm tarball.** npm renders the README's relative images from this repository's raw URLs (`https://raw.githubusercontent.com/idoall/dsh-notify/HEAD/assets/*.png`), so the four screenshots keep working on the package page without carrying ~176 KB in every install. `npm run pack:check` now verifies instead that every relative README image exists in the repository.
+- CI runs on `actions/checkout@v7` and `actions/setup-node@v7`, which clears GitHub's Node 20 deprecation notice for the workflow's actions.
+
+### Fixed
+
+- The 0.2.2 entry claimed the README screenshots render because `assets/` ships in the tarball. They render because npm rewrites the relative paths onto GitHub raw URLs.
+
 ## [0.2.2] - 2026-09-19
 
 Published to npm as **`@idoall/dsh-notify`**, with a tag-driven release pipeline. Nothing about the plugin's behaviour changes: the cordis name, the mount id, the `/plugins/dsh-notify/*` routes and every CSS class keep their short spelling, so profile config and the test suite are untouched.
 
 ### Added
 
-- **npm releases.** The package publishes as `@idoall/dsh-notify`. The unscoped `dsh-notify` name belongs to another author's Windows tray plugin, so the scope is what keeps `dsh plugin add dsh-notify` from pulling the wrong package. `package.json` drops `private`, declares `publishConfig.access: public`, and now ships `assets/` so the README screenshots render on the npm package page.
+- **npm releases.** The package publishes as `@idoall/dsh-notify`. The unscoped `dsh-notify` name belongs to another author's Windows tray plugin, so the scope is what keeps `dsh plugin add dsh-notify` from pulling the wrong package. `package.json` drops `private` and declares `publishConfig.access: public`.
 - **`.github/workflows/release.yml`.** A `v*` tag gates on the `package.json` version, runs `npm run verify`, packs the plugin, publishes through GitHub Actions OIDC (no long-lived token; a version that is already on npm is skipped instead of failing), and creates the GitHub Release with the tarball and its sha256. `release-notes/v<version>.md` supplies the bilingual notes whenever it exists.
 - **`.github/dependabot.yml`**: monthly grouped npm maintenance plus GitHub Actions updates.
 
@@ -18,7 +31,7 @@ Published to npm as **`@idoall/dsh-notify`**, with a tag-driven release pipeline
 
 - **`cordis.patch.yml` mounts `@idoall/dsh-notify`** — the Node-resolvable package name — while the mount `id` stays `dsh-notify`.
 - **The client bundle registers under `@idoall/dsh-notify`.** `scripts/build.mjs` derives the `__ModuleLoader__.load({id})` id from `package.json` instead of hardcoding it, because DSH identifies a browser module by its manifest package name.
-- **`scripts/pack-check.mjs` also asserts the publish preconditions**: `private` unset, public scoped access, `assets/` shipped, `repository.url` matching the GitHub repository, and both `cordis.patch.yml` and the client registration id tracking `package.json`'s name.
+- **`scripts/pack-check.mjs` also asserts the publish preconditions**: `private` unset, public scoped access, `repository.url` matching the GitHub repository, every relative README image present in the repository, and both `cordis.patch.yml` and the client registration id tracking `package.json`'s name.
 - Installing from a local clone no longer needs a manual `npm run build`: `npm install` builds through `prepare`, and `prepack` rebuilds before packing or publishing.
 - README and README.zh document the scoped install name, the npm badge and the release flow.
 
