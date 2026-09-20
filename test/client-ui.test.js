@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -116,6 +116,23 @@ test('a notification that knows its turn reveals exactly that turn, and gives up
   assert.equal(revealTurn(undefined, { document: empty })(), undefined);
 });
 
+test('a notification navigation reveals the selected session in the host-owned sidebar after its render commits', () => {
+  const scrolled = []; const scheduled = [];
+  let selected = null;
+  const doc = { querySelector: (selector) => { assert.equal(selector, '[role="treeitem"][aria-selected="true"]'); return selected; } };
+  const stop = revealSelectedSidebarSession({ document: doc, attempts: 3, intervalMs: 5, setTimer: (fn) => { scheduled.push(fn); return scheduled.length; }, clearTimer: () => {} });
+  assert.equal(typeof stop, 'function');
+  scheduled.shift()();
+  assert.equal(scheduled.length, 1, 'it waits for the host to commit the new selected row');
+  selected = { scrollIntoView: (options) => scrolled.push(options) };
+  scheduled.shift()();
+  assert.deepEqual(scrolled, [{ block: 'center', inline: 'nearest', behavior: 'smooth' }]);
+  stop();
+  const cancelled = []; const later = revealSelectedSidebarSession({ document: doc, setTimer: (fn) => { cancelled.push(fn); return 9; }, clearTimer: () => {} });
+  later(); cancelled.shift()();
+  assert.equal(scrolled.length, 1, 'cancelling before commit does not scroll a stale sidebar row');
+});
+
 test('the tab attention indicator flashes only for a background tab with unread records, and restores everything', () => {
   let ticks = null; const cleared = [];
   const icon = { href: 'https://dsh.test/favicon.ico', getAttribute: () => 'https://dsh.test/favicon.ico' };
@@ -187,6 +204,12 @@ test('each card is pushed down by the measured heights above it', () => {
   assert.deepEqual(toastStackPlan({ heights: [0, 0] }).map((slot) => slot.offsetY), [0, 12]);
   assert.deepEqual(toastStackPlan({ heights: [60, 40], gap: 8 }).map((slot) => slot.offsetY), [0, 68]);
   assert.deepEqual(toastStackPlan(), []);
+});
+test('a folded pile bottom-aligns complete older cards under equal exposed edges', () => {
+  assert.equal(TOAST_STACK_COLLAPSED_PEEK, 18);
+  assert.deepEqual(collapsedStackPlan({ heights: [100, 80, 70, 60, 50] }).map((slot) => slot.offsetY), [0, 38, 66, 94, 122]);
+  assert.equal(TOAST_ATTENTION_MS, 4000, 'attention is a short visual cue, not a dismissal duration');
+  assert.match(CLIENT_CSS, /data-style=strong\]\[data-attention=true\]/, 'only the enhanced presentation draws the attention bar');
 });
 test('the window is as tall as the cards it holds, plus a peek when there are more', () => {
   // Five fit: the window is exactly those five, and there is nothing to scroll to.

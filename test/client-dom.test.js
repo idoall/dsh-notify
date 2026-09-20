@@ -435,51 +435,20 @@ function fakeSessions(ids = ['s1']) {
   };
 }
 
-test('the corner is a window five cards tall, and the rest wait below the fold', async (t) => {
+test('the corner folds a newest-first pile and keeps every card for expansion', async (t) => {
   const sandbox = await mountStackSandbox(t);
   for (const n of [1, 2, 3, 4, 5]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(sandbox.count(), 5, 'five notifications, five cards');
+  assert.equal(sandbox.count(), 5, 'every notification remains mounted');
   assert.deepEqual(sandbox.titles(), ['任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)'], 'each card is pushed down by the ones above it');
-  assert.equal(sandbox.badge(), null, 'nothing is out of sight yet');
-  assert.equal(sandbox.overflow(), 'false', 'so there is nothing to scroll to');
-  // jsdom lays nothing out, so the heights the window is built from are all 0 here: what is being
-  // checked is the arithmetic (four gaps for five cards), not a pixel size. client-ui.test.js covers
-  // the measured case.
-  assert.equal(sandbox.windowHeight(), `${TOAST_STACK_GAP * 4}px`, 'the window is as tall as the cards it holds');
+  assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'true');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(18px)', 'translateY(36px)', 'translateY(54px)', 'translateY(72px)'], 'unmeasured cards preserve equal 18px lips until the browser measures them');
+  assert.equal(sandbox.windowHeight(), '58px', 'the folded frame reserves three exposed 18px edges');
+  assert.equal(sandbox.badge(), null, 'the pile communicates its depth visually instead of with a queue badge');
 
-  sandbox.push(burstRecord(6));
-  await sandbox.tick();
-  assert.equal(sandbox.count(), 6, 'the sixth card is rendered, not thrown away');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)'], 'and takes its slot below the window');
-  assert.equal(sandbox.overflow(), 'true', 'the window says there is more');
-  assert.equal(sandbox.badge(), '+6', 'and the front card counts the whole queue, not what is hidden');
-  assert.equal(sandbox.windowHeight(), `${TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`, 'the window grows by a peek so the next card shows its edge');
-  assert.equal(sandbox.contentHeight(), `${TOAST_STACK_GAP * 5}px`, 'while the content is every card, which is what makes scrolling possible');
-
-  // The count is a button for the times a wheel is not at hand: it jumps to the other end of the queue.
-  const scrolls = [];
-  sandbox.scrollTo((options) => scrolls.push(options));
-  await sandbox.click(document.querySelector('.dsh-notify-count'));
-  assert.deepEqual(scrolls, [{ top: 0, behavior: 'smooth' }], 'with everything already in view, the count scrolls back to the top');
-});
-
-test('the pointer cannot resize the stack, so nothing flickers when it crosses a gap', async (t) => {
-  const sandbox = await mountStackSandbox(t);
-  for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
-  assert.equal(sandbox.count(), 8, 'eight cards');
-  assert.equal(sandbox.badge(), '+8', 'the count is the queue, not what is hidden behind it');
-  const before = { height: sandbox.windowHeight(), content: sandbox.contentHeight(), transforms: sandbox.transforms(), titles: sandbox.titles() };
-
-  // Every boundary event a browser fires while the pointer moves across the stack: onto a card, from a
-  // card into the 12px gap (the card leaves, the container does not), and off the stack entirely.
-  await sandbox.pointer(sandbox.nodes()[0], 'pointerover', null);
-  await sandbox.pointer(sandbox.nodes()[0], 'pointerout', sandbox.stack());
-  await sandbox.pointer(sandbox.nodes()[1], 'pointerover', sandbox.nodes()[0]);
-  await sandbox.pointer(sandbox.stack(), 'pointerout', document.body);
-  await sandbox.wait(300);   // longer than the old 120ms hover grace, so a collapse would have landed
-  assert.deepEqual({ height: sandbox.windowHeight(), content: sandbox.contentHeight(), transforms: sandbox.transforms(), titles: sandbox.titles() }, before, 'the window is exactly where it was');
-  assert.equal(sandbox.badge(), '+8', 'and the whole queue is still counted');
+  await sandbox.pointer(sandbox.stack(), 'pointerover');
+  assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'false', 'entering the pile expands it');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)'], 'the same cards expand into their complete slots without being recreated');
+  assert.equal(sandbox.count(), 5, 'expansion does not discard cards');
 });
 
 test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
@@ -595,7 +564,7 @@ test('an approval the host settles does retire its card', async (t) => {
   assert.equal(sandbox.count(), 0, 'the host decided it, so the card stops asking');
 });
 
-test('nothing is dropped: every card keeps its slot, and the window scrolls to it', async (t) => {
+test('nothing is dropped: every card expands from the folded pile into its own slot', async (t) => {
   const sandbox = await mountStackSandbox(t);
   const live = () => sandbox.nodes().filter((node) => node.getAttribute('data-leaving') !== 'true');
   // One card that waits on the user, then a burst of finished work on top of it.
@@ -604,35 +573,20 @@ test('nothing is dropped: every card keeps its slot, and the window scrolls to i
   assert.equal(live().length, 1);
   for (const n of [2, 3, 4, 5, 6, 7]) { sandbox.push(burstRecord(n)); await sandbox.tick(); }
 
-  // Seven cards in the page, in one column: waiting work first, then the newest finished ones. The
-  // window is five cards tall, so the last two are simply further down that column.
-  assert.equal(live().length, 7, 'every card is in the stack');
+  assert.equal(live().length, 7, 'every card remains in the stack');
   assert.deepEqual(sandbox.titles(), ['需要回复', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2']);
-  assert.equal(sandbox.badge(), '+7', 'the front card says how many there are in the page');
-  assert.equal(sandbox.overflow(), 'true');
+  assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'true');
+  assert.equal(sandbox.badge(), null, 'the folded edges replace the old queue counter');
+  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(18px)', 'translateY(36px)', 'translateY(54px)', 'translateY(72px)', 'translateY(90px)', 'translateY(108px)']);
+
+  await sandbox.pointer(sandbox.stack(), 'pointerover');
+  assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'false');
   assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)', 'translateY(72px)']);
 
-  // Scrolling is the only way past the window, and it stays a scroll: the count is not a disclosure.
-  // jsdom has no layout, so the scroll geometry is stated here instead of measured.
-  const stack = sandbox.stack();
-  Object.defineProperty(stack, 'scrollHeight', { configurable: true, value: 600 });
-  Object.defineProperty(stack, 'clientHeight', { configurable: true, value: 400 });
-  Object.defineProperty(stack, 'scrollTop', { configurable: true, writable: true, value: 0 });
-  const scrolls = [];
-  sandbox.scrollTo((options) => scrolls.push(options));
-  await sandbox.click(document.querySelector('.dsh-notify-count'));
-  assert.deepEqual(scrolls, [{ top: 600, behavior: 'smooth' }], 'at the top, the count goes down to the rest of the queue');
-  stack.scrollTop = 200;
-  await sandbox.click(document.querySelector('.dsh-notify-count'));
-  assert.deepEqual(scrolls.at(-1), { top: 0, behavior: 'smooth' }, 'and at the end of it, the count comes back up');
-
-  // A card that leaves takes only itself out of the queue, and the ones below move up a slot.
   await sandbox.click(sandbox.closer(0));
   await sandbox.wait(320);
-  assert.equal(live().length, 6, 'the queue drops from seven to six');
-  assert.equal(sandbox.badge(), '+6');
-  assert.deepEqual(sandbox.titles(), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2'], 'the next finished card moves up into the freed slot');
-  assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)']);
+  assert.equal(live().length, 6, 'closing removes only the selected card');
+  assert.deepEqual(sandbox.titles(), ['任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2'], 'the next finished card moves into the freed slot');
 });
 
 
@@ -672,11 +626,11 @@ test('a batch delivered by one poll arrives whole, measured before it is ever vi
   assert.equal(sandbox.count(), 8, 'the whole batch is on screen, not one card per poll');
   assert.deepEqual(sandbox.titles(), ['任务完成 8', '任务完成 7', '任务完成 6', '任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'],
     'with the newest still on top');
-  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * step}px)`),
-    'every card got its measured slot, so none of them overlap');
-  assert.equal(sandbox.windowHeight(), `${cardHeight * 5 + TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`, 'the window is five real cards plus the peek');
-  assert.equal(sandbox.contentHeight(), `${cardHeight * 8 + TOAST_STACK_GAP * 7}px`, 'and the content behind it is all eight');
-  assert.equal(sandbox.badge(), '+8', 'the count still belongs to the whole queue');
+  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * 18}px)`),
+    'the complete cards are folded under equal 18px exposed edges');
+  assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'true');
+  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4}px`, 'the folded stack is fully measured before its first visible paint');
+  assert.equal(sandbox.badge(), null, 'the visual pile replaces the old queue count');
 });
 
 test('the settings self-test paints finished too: the corner is measured before it is shown', async (t) => {
@@ -686,10 +640,10 @@ test('the settings self-test paints finished too: the corner is measured before 
   // therefore still a hidden popover. This is the click the user reported the flash from.
   await sandbox.local(createLocalSelfTestBatch({ count: 8, randomUUID: () => 'self-test' }));
   assert.equal(sandbox.count(), 8, 'eight cards from one self-test');
-  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * step}px)`),
-    'no two cards share a slot, so nothing shows as stacked edges');
-  assert.equal(sandbox.windowHeight(), `${cardHeight * 5 + TOAST_STACK_GAP * 4 + TOAST_STACK_PEEK}px`);
-  assert.equal(sandbox.badge(), '+8');
+  assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * 18}px)`),
+    'the self-test gets the same equal-edge folded treatment');
+  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4}px`);
+  assert.equal(sandbox.badge(), null);
 });
 
 test('a card whose session is gone stays put and says why', async (t) => {

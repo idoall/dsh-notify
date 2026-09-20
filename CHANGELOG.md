@@ -4,18 +4,33 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-## [0.2.3] - 2026-09-19
+## [0.3.0] - 2026-09-20
 
-The first release published by CI: the `v0.2.3` tag is built, packed and pushed to npm by GitHub Actions through OIDC, which is also what attaches the package's provenance attestation. `0.2.2` had been published by hand, so it carries none.
+### Added
+
+- **Presentation preferences.** Persisted Enhanced (default) and Soft notification styles, plus a persisted collapsed-stack preference.
+- **A preview-first notification self-test.** Send one local Completed, Confirm, Failed, or Info example; replay all four, fold the active examples, or clear them. Tests never affect a real task or send a system notification.
+- **Storefront screenshot manifest.** `screenshots.json` explicitly declares the current product screenshots for plugin directories and marketplaces.
 
 ### Changed
 
-- **`assets/` no longer ships inside the npm tarball.** npm renders the README's relative images from this repository's raw URLs (`https://raw.githubusercontent.com/idoall/dsh-notify/HEAD/assets/*.png`), so the four screenshots keep working on the package page without carrying ~176 KB in every install. `npm run pack:check` now verifies instead that every relative README image exists in the repository.
-- CI runs on `actions/checkout@v7` and `actions/setup-node@v7`, which clears GitHub's Node 20 deprecation notice for the workflow's actions.
+- **The default multi-toast experience is now a collapsed pile.** The newest card remains fully readable on top; older complete cards expose equal 18px lower edges beneath it. Pointer entry or keyboard focus expands the pile without discarding cards.
+- **The notification settings interface was redesigned** around display preferences, sound, task reminders, and visual preview controls. Desktop self-test state buttons are compact in one row; narrow screens reflow them to two columns.
+- **README and README.zh are rewritten** to describe the current notification behavior, controls, queue limit, and mobile layout. All screenshots now show the current UI.
 
 ### Fixed
 
-- The 0.2.2 entry claimed the README screenshots render because `assets/` ships in the tarball. They render because npm rewrites the relative paths onto GitHub raw URLs.
+- Clicking a notification that opens a session now also reveals the selected session row in the left sidebar, including when it belongs to an off-screen workspace.
+- Enhanced local preview examples carry their real state tone rather than rendering as neutral gray.
+
+## [0.2.3] - 2026-09-19 (tagged, not published)
+
+`v0.2.3` was tagged with release-workflow and packaging-maintenance changes, but its npm OIDC trusted-publisher step did not publish `@idoall/dsh-notify@0.2.3`. The latest published npm version remains `0.2.2`; do not treat this tag as an npm release.
+
+### Changed
+
+- `assets/` no longer ships inside the npm tarball; npm renders relative README images from this repository's raw GitHub URLs instead.
+- CI moves to `actions/checkout@v7` and `actions/setup-node@v7`.
 
 ## [0.2.2] - 2026-09-19
 
@@ -141,6 +156,9 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.3.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.0
+[0.2.3]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.3
+[0.2.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.2
 [0.2.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.1
 [0.2.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.0
 [0.1.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.1.2

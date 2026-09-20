@@ -221,14 +221,15 @@ test('/config persists the user own preferences to the profile directory', async
   const initial = JSON.parse((await invoke(config, request({ path: '/plugins/dsh-notify/config', headers: browserHeaders }))).body);
   assert.equal(initial.storage.records, 'memory', 'records never persist, and the page is told so');
   assert.equal(initial.storage.preferences, 'file');
-  assert.deepEqual({ sound: initial.sound, toastPosition: initial.toastPosition }, { sound: 'chime', toastPosition: 'conversation' });
+  assert.deepEqual({ sound: initial.sound, toastPosition: initial.toastPosition, notificationStyle: initial.notificationStyle, stackCollapsed: initial.stackCollapsed }, { sound: 'chime', toastPosition: 'conversation', notificationStyle: 'strong', stackCollapsed: true });
 
-  const patched = await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: { sound: 'alert', toastPosition: 'viewport', subtaskNotify: true } }));
+  const patched = await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: { sound: 'alert', toastPosition: 'viewport', notificationStyle: 'soft', stackCollapsed: false, subtaskNotify: true } }));
   assert.equal(patched.statusCode, 200);
-  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'alert', toastPosition: 'viewport', subtaskNotify: true });
+  assert.deepEqual(JSON.parse(await readFile(join(dir, 'settings.json'), 'utf8')), { sound: 'alert', toastPosition: 'viewport', notificationStyle: 'soft', stackCollapsed: false, subtaskNotify: true });
 
   const rejected = await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: { readRetentionDays: 7 } }));
   assert.equal(rejected.statusCode, 400, 'a setting that only served the deleted history list is not accepted');
+  for (const invalid of [{ notificationStyle: 'loud' }, { notificationStyle: true }, { stackCollapsed: 'true' }, { stackCollapsed: null }]) assert.equal((await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: invalid }))).statusCode, 400, 'style choices are explicit and typed');
   const reloaded = JSON.parse((await invoke(config, request({ path: '/plugins/dsh-notify/config', headers: browserHeaders }))).body);
   assert.equal(reloaded.sound, 'alert');
   await runtime();
