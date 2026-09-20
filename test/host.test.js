@@ -342,6 +342,20 @@ test('an interactive pause and its post-decision work yield one completion notif
   await runtime();
 });
 
+test('an answered ordinary question that directly ends work still announces one completion', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'question-finishes-session', header: {} };
+  const agent = { session };
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 12, callId: 'question-1', name: 'ask_user_question', arguments: '{}' } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 12, message: { content: [{ type: 'tool-result', toolCallId: 'question-1' }] } } });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 12, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:question-finishes-session:12'));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'a directly settled user question must not erase the task completion notification');
+  await runtime();
+});
+
 test('a turn that ends expires leftover open records so they cannot shadow later notifications', async (t) => {
   const { listeners, runtime } = await fixture(t);
   const session = { id: 'leftover-session', header: {} };
