@@ -22,7 +22,7 @@
 
 > DSH Notify is a DeepSeek Harness community plugin. It registers only a settings section and an in-page overlay; it does not modify DSH source.
 
-When a session really stops, fails, asks a question, or needs approval, a card appears in the top-right corner of the current page. Intermediate goal rounds and queued follow-up turns stay quiet. Everything happens in the page you already have open: there is no service worker, web push, host OS notification, or notification history.
+When a session really stops, fails, asks a question, or needs approval, a card appears in the top-right corner of the current page. A green **Task completed** card follows DSH's native `agent/status: idle` transition — the same state that stops the session-tree spinner — rather than the earlier moment when text first looks complete. Intermediate goal rounds and queued follow-up turns stay quiet. Everything happens in the page you already have open: there is no service worker, web push, host OS notification, or notification history.
 
 <p align="center">
   <img src="./assets/toast.png" width="70%" alt="Enhanced notification stack: the newest error card is fully visible and earlier blue, amber and green cards expose equal lower edges">
@@ -35,6 +35,7 @@ When a session really stops, fails, asks a question, or needs approval, a card a
 - **Direct, traceable navigation.** Clicking a card opens its session and the exact originating turn. After the host selects that session, the selected row is smoothly revealed in the left session tree, even when it lives in a different off-screen workspace. A card stays put with an explanation if navigation cannot succeed.
 - **Answer in the toast.** A pending question or approval renders the same compatible options as the composer. Execution approvals and plan reviews share DSH's amber decision colour; ordinary questions remain blue. In-card and composer answers share the same host interaction.
 - **Sound and background attention.** Built-in WebAudio cues and validated custom uploads play only after a card is admitted to an enabled visual Toast queue, including while the page is hidden. One polling batch produces one cue. A background tab with unseen notifications receives a temporary bell prefix and favicon attention marker.
+- **Completion means native idle, once per task.** A green card waits until DSH reports the owning Agent as `idle`, matching the session-tree spinner instead of guessing from a rendered answer or an elapsed timer. A plan review and an execution approval are control gates, so their temporary idle pause does not create an extra completion card; the later work turn supplies the one card. An ordinary question is different: if its answer directly finishes the task, that same turn still produces one green card. If work resumes, the prior candidate is cancelled and only the final native-idle transition is announced.
 - **Task-noise control.** Subtask, background-job, and workflow completion notifications are off by default.
 - **No history by design.** Notification records are held only in the open page's in-memory queue. Settled history is never replayed after a refresh or overlay remount; an interaction that is still open when the host can report it is restored silently.
 
@@ -84,7 +85,7 @@ Reload the profile or restart DSH only when its plugin host has not hot-reloaded
 | Toast position | conversation top-right | Anchors the overlay to the chat column and follows sidebar layout changes. |
 | Notification style | **Enhanced** | Enhanced uses clear status colours and a short attention bar; Soft uses a quieter presentation. |
 | Collapse multiple notifications | **on** | From two cards onward, show the newest card fully and stack older cards below it; hover or focus expands them. |
-| In-page sound | **on** | Plays a cue for each new toast, including while DSH is in a background tab. Built-ins: chime, ping, alert, silent; custom uploads are supported. |
+| In-page sound | **on** | Plays one cue when a polling batch admits one or more new visible Toasts, including while DSH is in a background tab. Built-ins: chime, ping, alert, silent; custom uploads are supported. |
 | Subtask / background completion | **off** | Enables notifications for subagents, background jobs, and workflows, which can otherwise be noisy. |
 | Preview and self-test | — | Sends page-local examples only: **Completed**, **Confirm**, **Failed**, **Info**, replay all four styles, fold the active examples, or clear them. No test sends a system notification or changes a real task. |
 
@@ -92,10 +93,11 @@ Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, n
 
 ## Compatibility
 
-Current release target: plugin **`0.3.1`** verified against DeepSeek Harness **`0.1.6-alpha.1`**.
+Current release target: plugin **`0.3.2`** verified against DeepSeek Harness **`0.1.6-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.3.2` | `0.1.6-alpha.1` |
 | `0.3.1` | `0.1.6-alpha.1` |
 | `0.3.0` | `0.1.6-alpha.1` |
 | `0.2.2` | `0.1.6-alpha.1` |
@@ -132,8 +134,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.

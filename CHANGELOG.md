@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-20
+
+### Fixed
+
+- **Completion now follows DSH's native idle state.** A completed Toast is not emitted when a response first appears or after an arbitrary timer. `turn/end` only creates a candidate; the card is delivered when the owning Agent reports `agent/status: idle`, the same state that stops the native session-tree spinner. A new `running` transition cancels an earlier candidate, so goal continuation, queued work, and tool follow-ups cannot announce completion too early or strand a missing notification.
+- **One continuous task receives one green completion card.** Plan reviews and execution approvals are control gates, not finished tasks. Their transient idle pause no longer adds a green Toast before the user decides and the task resumes; the later non-interactive work turn is the sole completion delivery. This removes the duplicate same-session “任务完成” cards that could appear seconds apart after approval or plan review.
+- **A direct answer no longer loses completion.** Ordinary `ask_user_question` is intentionally distinguished from a plan review or execution approval. When the user answer itself finishes a task and no follow-up turn starts, the native-idle transition still sends exactly one green completion Toast. If work resumes, the pending candidate is cancelled and the final work turn remains the only notification.
+
+### Verified
+
+- Host lifecycle regression coverage confirms a completion is withheld while DSH is native `running` and emitted exactly once only after native `idle`.
+- A plan-review pause followed by its approved work emits one completion card, not two.
+- An ordinary question whose answer directly finishes work emits one completion card rather than none.
+- Full verification passed: static source checks, **84 automated tests**, build, and package precondition checks.
+
 ## [0.3.1] - 2026-09-20
 
 ### Fixed
@@ -168,6 +183,8 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.3.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.2
+[0.3.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.1
 [0.3.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.0
 [0.2.3]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.3
 [0.2.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.2.2
