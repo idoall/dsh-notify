@@ -690,16 +690,22 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     measureAll();
     return () => { try { element.hidePopover?.(); } catch { /* already detached */ } };
   }, [anyCard]);
-  /** A new card takes its place in the queue: waiting work first, then newest first. Nothing is dropped. */
-  const showToast = (record) => {
-    if (!record?.eventId) return;
-    if (globalThis.document?.hidden) unseen.current.add(record.eventId);
-    toasted.current.add(record.eventId);
+  /** A new card takes its place in the queue: waiting work first, then newest first. */
+  const showToast = (record, { playSound = true } = {}) => {
+    if (!record?.eventId) return false;
     const incoming = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false, attention: true }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
     const next = queueCards(incoming);
+    const admitted = next.some((card) => card.record.eventId === record.eventId);
     for (const card of incoming) if (!next.includes(card)) forget(card.record.eventId);   // only the runaway-stream cap can reach this
     commit(next);
-    void soundPlayer.play();
+    // A cue promises that a notification is available on this page. Do not mark an evicted delivery
+    // as seen: a later poll can present it after a pending card frees a slot. Nor play for a card that
+    // could not enter the bounded queue, or when the user deliberately turned visual toasts off.
+    if (!admitted) return false;
+    toasted.current.add(record.eventId);
+    if (globalThis.document?.hidden) unseen.current.add(record.eventId);
+    if (playSound && toastConfig.toastEnabled && toastConfig.toastPosition !== 'off') void soundPlayer.play();
+    return true;
   };
   React.useEffect(() => {
     const local = (event) => { if (event?.detail?.localOnly) { setForcedCollapsed(false); setExpanded(false); showToast(event.detail); } };
@@ -737,10 +743,18 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     const seen = toasted.current;
     const ids = new Set(state.records.map((record) => record.eventId));
     for (const id of seen) if (!ids.has(id)) seen.delete(id);   // keep the set bounded by live records
-    // The first poll of a page is what the host still had buffered: history the user was not there for.
-    // It is never replayed as a stack of old cards — but it is that snapshot which gets marked seen,
-    // not the empty state that precedes it.
-    if (!primed.current) { primed.current = true; for (const id of ids) seen.add(id); return; }
+    // The first poll is normally buffered history, so settled outcomes never replay as a stack of old
+    // cards after a reload. Open interactions are different: they still require action right now. If
+    // the overlay remounts while an approval/question/plan review is waiting, keeping it silent leaves
+    // the only actionable notification stranded in the sidebar. Restore those cards, but do not replay
+    // their sound merely because the page mounted.
+    if (!primed.current) {
+      primed.current = true;
+      const waiting = toastOrder(state.records).filter((record) => record?.phase === 'open');
+      for (const record of waiting.reverse()) showToast(record, { playSound: false });
+      for (const id of ids) seen.add(id);
+      return;
+    }
     // A record that is already on screen can arrive again. Exactly ONE repeat is news: the record was
     // waiting on the user and the host has now settled it (an approval, asked and then decided), which
     // retires the card. Every other repeat — a host that re-sends what it has already delivered, a
@@ -759,7 +773,11 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     // trickle in one card per poll — and it is the batch, not the single event, that is worth seeing all
     // at once. Oldest first, because showing a card puts it on top: the newest still ends up highest.
     const fresh = toastOrder(state.records).filter((record) => !seen.has(record.eventId));
-    for (const record of fresh.reverse()) showToast(record);
+    // One poll often carries a burst of parallel completions. Add every admissible card, but emit one
+    // cue for the visible notification batch rather than sounding once for each card hidden in its pile.
+    let admitted = false;
+    for (const record of fresh.reverse()) admitted = showToast(record, { playSound: false }) || admitted;
+    if (admitted && toastConfig.toastEnabled && toastConfig.toastPosition !== 'off') void soundPlayer.play();
   }, [state.records, state.primed]);
   // The tab flash is the only signal left for something that arrived while the page was in the
   // background: the cards wait for the user, and the title says so until the tab is looked at.

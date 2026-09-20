@@ -26,17 +26,20 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
     fetch: async (url) => {
       if (String(url).includes('/pull?')) {
         const prime = { eventId: 'prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
-        const live = { eventId: 'live', mergeKey: 'turn:live', kind: 'completed', sessionId: 's1', title: '任务完成', body: '新事件', at: 2, unread: true, phase: 'settled' };
+        const live = [
+          { eventId: 'live-1', mergeKey: 'turn:live-1', kind: 'completed', sessionId: 's1', title: '任务完成', body: '新事件 1', at: 2, unread: true, phase: 'settled' },
+          { eventId: 'live-2', mergeKey: 'turn:live-2', kind: 'completed', sessionId: 's1', title: '任务完成', body: '新事件 2', at: 3, unread: true, phase: 'settled' },
+        ];
         pulls += 1;
         // The store may pull more than once while mounting; every mount pull stays a silent reset.
-        return response(releaseLive ? { seq: 2, items: [prime, live] } : { seq: 1, items: [prime] });
+        return response(releaseLive ? { seq: 3, items: [prime, ...live] } : { seq: 1, items: [prime] });
       }
       return response({});
     },
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ sound: 'chime', soundEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, sound: 'chime', soundEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
 
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
   // jsdom reports hidden=true by default, which is exactly the condition the hidden-mute rule checks.
@@ -53,13 +56,26 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
   releaseLive = true;
   await act(async () => { await pullTimer(); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
-  assert.ok(document.querySelector('aside.dsh-notify-toast'), 'the live record is toasted');
-  assert.deepEqual(started, [880, 1318.5], 'a live toast plays the configured built-in cue');
+  assert.equal(document.querySelectorAll('aside.dsh-notify-toast').length, 2, 'every record from one live delivery is toasted');
+  assert.deepEqual(started, [880, 1318.5], 'a live delivery batch plays one configured built-in cue');
 
   setToastConfig({ sound: 'custom:ding.mp3' });
   await act(async () => { publishLocalSelfTest({ eventId: 'local-1', localOnly: true, kind: 'completed', title: '任务完成', body: '自定义音' }); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
   assert.deepEqual(audioSrc, ['/plugins/dsh-notify/sound?name=ding.mp3'], 'a custom choice plays the uploaded file');
+
+  const notesBeforeVisualOff = started.length;
+  setToastConfig({ toastPosition: 'off', toastEnabled: true, sound: 'chime', soundEnabled: true });
+  await act(async () => { publishLocalSelfTest({ eventId: 'local-off', localOnly: true, kind: 'completed', title: '任务完成', body: '页面通知已关闭' }); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  assert.equal(document.querySelector('aside.dsh-notify-toast'), null, 'an off visual notification renders no card');
+  assert.equal(started.length, notesBeforeVisualOff, 'an off visual notification must not play an automatic sound');
+
+  setToastConfig({ toastPosition: 'conversation', toastEnabled: false });
+  await act(async () => { publishLocalSelfTest({ eventId: 'local-disabled', localOnly: true, kind: 'completed', title: '任务完成', body: '页面通知已禁用' }); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  assert.equal(document.querySelector('aside.dsh-notify-toast'), null, 'a disabled visual notification renders no card');
+  assert.equal(started.length, notesBeforeVisualOff, 'a disabled visual notification must not play an automatic sound');
 });
 
 test('a question toast closes itself when the answer happens elsewhere', async (t) => {
@@ -142,7 +158,7 @@ test('an unanswered record never starves later toasts, and every record is toast
     addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: release ? 2 : 1, items: release ? items : [] }) : response({}),
+    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: release ? 2 : 1, items: release ? items : [staleApproval] }) : response({}),
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -157,7 +173,7 @@ test('an unanswered record never starves later toasts, and every record is toast
   const Overlay = components.get('shell.overlay');
   await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-  assert.equal(document.querySelector('aside.dsh-notify-toast'), null, 'history never toasts on load, even when it contains an open record');
+  assert.match(document.querySelector('aside.dsh-notify-toast')?.textContent ?? '', /需要审批/, 'a still-open approval is restored after a page/overlay remount');
 
   release = true; items = [completion, staleApproval];
   await act(async () => { await pullTimer(); });
