@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-20
+
+### Fixed
+
+- **Sound now matches visible delivery.** Automatic audio plays only when a notification is admitted to an enabled visual Toast queue. A poll batch produces one cue rather than one cue per record, and a rejected card remains eligible for a later delivery attempt.
+- **Open interaction recovery.** After the Toast overlay remounts, still-open approvals, questions, and plan reviews are restored silently. Settled history stays suppressed, preventing completed messages from replaying.
+- **Approval-colour consistency.** Plan-review notifications now use the same amber approval colour as execution approvals. Ordinary questions remain blue.
+
+### Verified
+
+- A live pending-interaction acceptance confirmed the native pending marker, Toast, sound, Toast navigation, and automatic left-sidebar reveal together; clearing the interaction cleared its pending delivery state.
+
 ## [0.3.0] - 2026-09-20
 
 ### Added
