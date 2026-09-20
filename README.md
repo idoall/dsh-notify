@@ -33,10 +33,10 @@ When a session really stops, fails, asks a question, or needs approval, a card a
 - **Enhanced or soft toast styling.** The default **Enhanced** style gives each notification a clear status colour and a short four-second attention bar; the bar is attention only, not a dismissal timer. **Soft** is a lower-key alternative. A card remains until you close it, open its session, or complete an in-card answer.
 - **A collapsible page-local stack.** With **Collapse multiple notifications** enabled (the default), the second card and onward form a pile: the newest card is fully readable on top, while earlier cards remain complete underneath and expose equal `18px` lower edges. Pointer entry or keyboard focus expands the pile. The page keeps up to 50 live cards; pending actions are prioritised before ordinary cards, then newer cards come first.
 - **Direct, traceable navigation.** Clicking a card opens its session and the exact originating turn. After the host selects that session, the selected row is smoothly revealed in the left session tree, even when it lives in a different off-screen workspace. A card stays put with an explanation if navigation cannot succeed.
-- **Answer in the toast.** A pending question or approval renders the same compatible options as the composer. In-card and composer answers share the same host interaction.
-- **Sound and background attention.** Built-in WebAudio cues and validated custom uploads play for new toasts, including while the page is hidden. A background tab with unseen notifications receives a temporary bell prefix and favicon attention marker.
+- **Answer in the toast.** A pending question or approval renders the same compatible options as the composer. Execution approvals and plan reviews share DSH's amber decision colour; ordinary questions remain blue. In-card and composer answers share the same host interaction.
+- **Sound and background attention.** Built-in WebAudio cues and validated custom uploads play only after a card is admitted to an enabled visual Toast queue, including while the page is hidden. One polling batch produces one cue. A background tab with unseen notifications receives a temporary bell prefix and favicon attention marker.
 - **Task-noise control.** Subtask, background-job, and workflow completion notifications are off by default.
-- **No history by design.** Notification records are held only in the open page's in-memory queue. Refreshing the page clears them; an unopened page is not replayed a backlog.
+- **No history by design.** Notification records are held only in the open page's in-memory queue. Settled history is never replayed after a refresh or overlay remount; an interaction that is still open when the host can report it is restored silently.
 
 ## Quick start
 
@@ -92,10 +92,11 @@ Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, n
 
 ## Compatibility
 
-Current release target: plugin **`0.3.0`** verified against DeepSeek Harness **`0.1.6-alpha.1`**.
+Current release target: plugin **`0.3.1`** verified against DeepSeek Harness **`0.1.6-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness |
 | --- | --- |
+| `0.3.1` | `0.1.6-alpha.1` |
 | `0.3.0` | `0.1.6-alpha.1` |
 | `0.2.2` | `0.1.6-alpha.1` |
 | `0.2.1` | `0.1.6-alpha.1` |
