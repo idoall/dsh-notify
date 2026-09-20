@@ -93,14 +93,14 @@ test('Host declares no hard service injection and exports a DSH config schema', 
   assert.equal(typeof Config, 'function');
 });
 
-test('session/event turns approvals and finished turns into records, and waterfalls always delegate', async (t) => {
+test('session/event records approvals without mislabelling their interactive turn as completed, and waterfalls always delegate', async (t) => {
   const { listeners, records } = await fixture(t);
-  listeners.get('session/event')({ id: 'session-1', header: {} }, { type: 'approval/asked', data: { id: 'approval-1', toolName: 'bash' } });
+  listeners.get('session/event')({ id: 'session-1', header: {} }, { type: 'approval/asked', data: { id: 'approval-1', toolName: 'bash', turn: 2 } });
   listeners.get('session/event')({ id: 'session-1', header: {} }, { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } });
   listeners.get('session/event')({ id: 'sub', header: { origin: 'subagent' } }, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } });
-  await waitUntil(() => records().length >= 2);
+  await waitUntil(() => records().some((item) => item.mergeKey === 'approval:approval-1'));
   assert.equal(records().some((item) => item.mergeKey === 'approval:approval-1' && item.sessionId === 'session-1'), true);
-  assert.equal(records().some((item) => item.mergeKey === 'turn:session-1:2'), true);
+  assert.equal(records().some((item) => item.mergeKey === 'turn:session-1:2'), false, 'an approval boundary is not a completed task');
   assert.equal(records().some((item) => item.sessionId === 'sub' && item.kind === 'completed'), false, 'a subagent turn is not the task finishing');
   let approvalNext = 0; let questionNext = 0;
   await listeners.get('approval/request')({}, async () => { approvalNext += 1; return 'approved'; });
@@ -318,6 +318,27 @@ test('a lifecycle-capable host announces completion only after the native agent 
   listeners.get('agent/status')({ agent, status: 'idle' });
   await waitUntil(() => records().some((record) => record.mergeKey === 'turn:native-idle-session:2'));
   assert.equal(records().filter((record) => record.mergeKey === 'turn:native-idle-session:2').length, 1, 'a later real idle still reports its own finished turn once');
+  await runtime();
+});
+
+test('an interactive pause and its post-decision work yield one completion notification', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'one-task-session', header: {} };
+  const agent = { session };
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 10, callId: 'review-1', name: 'exit_plan_mode', arguments: '{}' } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 10, message: { content: [{ type: 'tool-result', toolCallId: 'review-1' }] } } });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 10, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await settle();
+  assert.equal(records().some((record) => record.mergeKey === 'turn:one-task-session:10'), false, 'the plan-review pause is not a completed task');
+
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 11 } });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 11, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:one-task-session:11'));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'one user task gets one completed card despite its interactive pause');
   await runtime();
 });
 
