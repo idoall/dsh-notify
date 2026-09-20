@@ -298,6 +298,29 @@ test('a finished turn is only announced once the session really stops', async (t
   await runtime();
 });
 
+test('a lifecycle-capable host announces completion only after the native agent becomes idle', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'native-idle-session', header: {} };
+  const agent = { session };
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } });
+  await settle();
+  assert.equal(records().some((record) => record.mergeKey === 'turn:native-idle-session:1'), false, 'a rendered final message is not notification-complete while the native spinner is still running');
+
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:native-idle-session:1'));
+  assert.equal(records().filter((record) => record.mergeKey === 'turn:native-idle-session:1').length, 1, 'the idle transition emits exactly one completion record');
+
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'running' });
+  await settle();
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:native-idle-session:2'));
+  assert.equal(records().filter((record) => record.mergeKey === 'turn:native-idle-session:2').length, 1, 'a later real idle still reports its own finished turn once');
+  await runtime();
+});
+
 test('a turn that ends expires leftover open records so they cannot shadow later notifications', async (t) => {
   const { listeners, runtime } = await fixture(t);
   const session = { id: 'leftover-session', header: {} };
