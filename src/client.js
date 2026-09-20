@@ -743,10 +743,18 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     const seen = toasted.current;
     const ids = new Set(state.records.map((record) => record.eventId));
     for (const id of seen) if (!ids.has(id)) seen.delete(id);   // keep the set bounded by live records
-    // The first poll of a page is what the host still had buffered: history the user was not there for.
-    // It is never replayed as a stack of old cards — but it is that snapshot which gets marked seen,
-    // not the empty state that precedes it.
-    if (!primed.current) { primed.current = true; for (const id of ids) seen.add(id); return; }
+    // The first poll is normally buffered history, so settled outcomes never replay as a stack of old
+    // cards after a reload. Open interactions are different: they still require action right now. If
+    // the overlay remounts while an approval/question/plan review is waiting, keeping it silent leaves
+    // the only actionable notification stranded in the sidebar. Restore those cards, but do not replay
+    // their sound merely because the page mounted.
+    if (!primed.current) {
+      primed.current = true;
+      const waiting = toastOrder(state.records).filter((record) => record?.phase === 'open');
+      for (const record of waiting.reverse()) showToast(record, { playSound: false });
+      for (const id of ids) seen.add(id);
+      return;
+    }
     // A record that is already on screen can arrive again. Exactly ONE repeat is news: the record was
     // waiting on the user and the host has now settled it (an approval, asked and then decided), which
     // retires the card. Every other repeat — a host that re-sends what it has already delivered, a

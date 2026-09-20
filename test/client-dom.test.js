@@ -158,7 +158,7 @@ test('an unanswered record never starves later toasts, and every record is toast
     addEventListener: dom.window.addEventListener.bind(dom.window), removeEventListener: dom.window.removeEventListener.bind(dom.window), dispatchEvent: dom.window.dispatchEvent.bind(dom.window),
     innerWidth: 1024, IS_REACT_ACT_ENVIRONMENT: true,
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
-    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: release ? 2 : 1, items: release ? items : [] }) : response({}),
+    fetch: async (url) => String(url).includes('/pull?') ? response({ seq: release ? 2 : 1, items: release ? items : [staleApproval] }) : response({}),
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -173,7 +173,7 @@ test('an unanswered record never starves later toasts, and every record is toast
   const Overlay = components.get('shell.overlay');
   await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-  assert.equal(document.querySelector('aside.dsh-notify-toast'), null, 'history never toasts on load, even when it contains an open record');
+  assert.match(document.querySelector('aside.dsh-notify-toast')?.textContent ?? '', /需要审批/, 'a still-open approval is restored after a page/overlay remount');
 
   release = true; items = [completion, staleApproval];
   await act(async () => { await pullTimer(); });
