@@ -177,6 +177,22 @@ export async function apply(ctx, config = {}) {
   // A live user-questions/request has no source-proven causal callId, therefore
   // this host must not infer one from an arrival queue or FIFO ordering.
   const pendingToolCalls = new Map();
+  // A plan review, approval, or question ends a control boundary, not the user's task. Its turn can
+  // briefly reach native idle before the answer wakes the follow-up turn; do not announce that pause
+  // as a separate completion.
+  const interactiveTurns = new Map();
+  const markInteractiveTurn = (sessionId, turn) => {
+    if (!Number.isSafeInteger(turn) || turn <= 0) return;
+    let turns = interactiveTurns.get(sessionId);
+    if (!turns) { turns = new Set(); interactiveTurns.set(sessionId, turns); }
+    turns.add(turn);
+  };
+  const consumeInteractiveTurn = (sessionId, turn) => {
+    const turns = interactiveTurns.get(sessionId);
+    if (!turns || !turns.delete(turn)) return false;
+    if (!turns.size) interactiveTurns.delete(sessionId);
+    return true;
+  };
   const pendingFor = (sessionId) => {
     let calls = pendingToolCalls.get(sessionId);
     if (!calls) { calls = new Set(); pendingToolCalls.set(sessionId, calls); }
@@ -308,6 +324,7 @@ export async function apply(ctx, config = {}) {
     const sessionId = session?.id;
     if (Number.isSafeInteger(data.turn) && data.turn > 0) liveTurns.set(sessionId, data.turn);
     if (event?.type === 'tool/call' && data.callId && (data.name === 'ask_user_question' || data.name === 'exit_plan_mode')) {
+      markInteractiveTurn(sessionId, turnOf(sessionId, data));
       pendingFor(sessionId).add(data.callId);
       const interaction = reducer.question({ sessionId, callId: data.callId, intent: data.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(data.name, data.arguments), turn: turnOf(sessionId, data) });
       safely(() => dispatch(interaction));
@@ -326,8 +343,10 @@ export async function apply(ctx, config = {}) {
     safely(async () => {
       // Work resumed: whatever turn end is still pending for this session was not the end of the task.
       if (event?.type === 'turn/start' || event?.type === 'tool/call') cancelCompletion(sessionId);
-      if (event?.type === 'approval/asked') await dispatch(reducer.approvalAsked({ ...data, turn: turnOf(sessionId, data) }, sessionId));
-      else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome));
+      if (event?.type === 'approval/asked') {
+         markInteractiveTurn(sessionId, turnOf(sessionId, data));
+         await dispatch(reducer.approvalAsked({ ...data, turn: turnOf(sessionId, data) }, sessionId));
+      } else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome));
       else if (event?.type === 'turn/end') {
         const error = pendingErrors.get(`${sessionId}:${data.turn}`);
         pendingErrors.delete(`${sessionId}:${data.turn}`);
@@ -335,7 +354,11 @@ export async function apply(ctx, config = {}) {
         // leftover whose decision event was never observed, and one leftover used to shadow every
         // later toast. Persist the expiry before the completion notification.
         for (const stale of reducer.expireOpenForSession(sessionId)) await dispatch(stale);
-        deferCompletion(sessionId, { sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) });
+        // An interactive turn may become idle while it waits for the user's decision. That is a real
+         // native pause, but not a second completed task; the post-decision work gets the sole green card.
+         if (!consumeInteractiveTurn(sessionId, data.turn)) {
+           deferCompletion(sessionId, { sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) });
+         }
       }
     });
   });
