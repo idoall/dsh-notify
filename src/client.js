@@ -3,6 +3,8 @@ import { BUILTIN_SOUNDS, SOUND_LABELS, SOUND_PRESETS, parseSoundChoice } from '.
 
 const BASE = '/plugins/dsh-notify';
 const LOCAL_TEST_EVENT = 'dsh-notify:self-test-local';
+const LOCAL_TEST_CLEAR_EVENT = 'dsh-notify:self-test-clear';
+const LOCAL_TEST_FOLD_EVENT = 'dsh-notify:self-test-fold';
 export const inject = ['slots'];
 const HISTORY_PAGE = 20;
 const ACK_ALL_CAP = 50;
@@ -96,7 +98,7 @@ export function watchToastAnchor(onChange, { document: doc = globalThis.document
  * SAME set as the two neighbouring rows: ui-settings-general's `.trigger:hover` and dsh-mobile's
  * `.dsh-mobile-control__trigger:hover/:active/:focus-visible` (inline style would out-rank `:hover`).
  */
-export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-width:640px;min-width:0;padding:4px 0;color:var(--dsw-alias-label-primary)}
+export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:15px;max-width:790px;min-width:0;padding:4px 0;color:var(--dsw-alias-label-primary)}
 .dsh-notify-heading{font-size:16px;font-weight:650;margin:0}
 .dsh-notify-card{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;min-width:0;padding:16px 18px}
 /* The rhythm inside a card. It has to be scoped to the settings section, because as a bare
@@ -140,7 +142,9 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
 .dsh-notify-result[data-tone=passed]{color:var(--dsw-alias-state-success-primary,#16a36a)}
 .dsh-notify-result[data-tone=failed]{color:var(--dsw-alias-state-error-primary,#dc2626)}
 .dsh-notify-result[data-tone=active]{color:var(--dsw-alias-state-business-primary)}
-@media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-settings .dsh-notify-toggle input{flex:0 0 22px;height:22px;max-width:22px;min-height:22px;min-width:22px;width:22px}}`;
+.dsh-notify-settings{gap:15px;max-width:790px}.dsh-notify-heading{font-size:26px;letter-spacing:-.4px;line-height:1.25}.dsh-notify-settings-head{align-items:flex-start;display:flex;gap:16px;justify-content:space-between}.dsh-notify-settings-intro{color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.55;margin:8px 0 0}.dsh-notify-settings-status{align-items:center;background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 10%,var(--dsw-alias-bg-layer-2));border:1px solid color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 40%,var(--dsw-alias-border-l2));border-radius:999px;color:var(--dsw-alias-state-success-primary,#07865a);display:flex;font-size:12px;gap:7px;line-height:1;padding:8px 10px;white-space:nowrap}.dsh-notify-settings-status::before{background:currentColor;border-radius:50%;content:"";height:7px;width:7px}.dsh-notify-card{border-radius:13px;box-shadow:0 2px 7px rgb(29 41 57 / 6%);padding:19px 20px}.dsh-notify-card-head{align-items:flex-start;display:flex;gap:12px;margin-bottom:17px}.dsh-notify-card-icon{align-items:center;background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#315ee8) 10%,var(--dsw-alias-bg-layer-2));border-radius:9px;color:var(--dsw-alias-state-business-primary,#315ee8);display:flex;flex:none;font-size:16px;height:31px;justify-content:center;width:31px}.dsh-notify-card-head .dsh-notify-card-title{font-size:15px}.dsh-notify-card-head .dsh-notify-hint{margin-top:4px}.dsh-notify-rows{border-top:1px solid var(--dsw-alias-border-l2)}.dsh-notify-setting-row{align-items:center;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex;gap:16px;min-width:0;padding:15px 0}.dsh-notify-setting-row:last-child{border-bottom:0;padding-bottom:0}.dsh-notify-setting-copy{flex:1;min-width:0}.dsh-notify-setting-label{font-size:13px;font-weight:650}.dsh-notify-setting-help{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55;margin:3px 0 0}.dsh-notify-setting-field{align-items:center;border-bottom:1px solid var(--dsw-alias-border-l2);display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 210px;padding:15px 0}.dsh-notify-setting-field:last-child{border-bottom:0;padding-bottom:0}.dsh-notify-segmented{background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:flex;gap:4px;padding:4px}.dsh-notify-segmented button{background:transparent;border:0;border-radius:7px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:1;font:600 12px inherit;padding:8px 11px;white-space:nowrap}.dsh-notify-segmented button[data-active=true]{background:var(--dsw-alias-bg-layer-2);box-shadow:0 1px 3px rgb(0 0 0 / 10%);color:var(--dsw-alias-state-business-primary,#315ee8)}.dsh-notify-preview{align-items:center;background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border-radius:9px;color:var(--dsw-alias-label-secondary);display:flex;font-size:12px;gap:10px;margin-top:14px;padding:12px}.dsh-notify-preview::before{background:var(--dsw-alias-state-success-primary,#07865a);border-radius:50%;box-shadow:0 0 0 3px color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 14%,transparent);content:"";flex:none;height:9px;width:9px}.dsh-notify-preview strong{color:var(--dsw-alias-label-primary);display:block;font-size:12px}.dsh-notify-settings .dsh-notify-toggle{align-items:center;cursor:default}.dsh-notify-settings .dsh-notify-toggle input{appearance:none;background:#aeb8c7;border:0;border-radius:999px;cursor:pointer;flex:0 0 42px;height:24px;margin:0;max-width:42px;min-height:24px;min-width:42px;position:relative;width:42px}.dsh-notify-settings .dsh-notify-toggle input::after{background:#fff;border-radius:50%;box-shadow:0 1px 2px rgb(0 0 0 / 22%);content:"";height:18px;left:3px;position:absolute;top:3px;transition:left .18s;width:18px}.dsh-notify-settings .dsh-notify-toggle input:checked{background:var(--dsw-alias-state-business-primary,#315ee8)}.dsh-notify-settings .dsh-notify-toggle input:checked::after{left:21px}.dsh-notify-settings .dsh-notify-toggle>span{display:none}.dsh-notify-settings .dsh-notify-card>*+*{margin-top:0}
+.dsh-notify-test-panel{display:grid;gap:14px}.dsh-notify-test-caption{font-size:13px;font-weight:650;margin:0}.dsh-notify-test-grid{display:grid;gap:8px;grid-template-columns:repeat(4,minmax(0,1fr))}.dsh-notify-test-action{align-items:center;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:9px;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;font:600 13px inherit;gap:7px;justify-content:center;min-height:40px;padding:6px 8px;white-space:nowrap}.dsh-notify-test-action:hover{background:var(--dsw-alias-button-floating-hover)}.dsh-notify-test-action::before{background:var(--dsh-test-tone,var(--dsw-alias-label-tertiary));border-radius:50%;content:"";height:8px;width:8px}.dsh-notify-test-action[data-tone=success]{--dsh-test-tone:var(--dsw-alias-state-success-primary,#07865a)}.dsh-notify-test-action[data-tone=warning]{--dsh-test-tone:var(--dsw-alias-state-warn-primary,#bc6508)}.dsh-notify-test-action[data-tone=error]{--dsh-test-tone:var(--dsw-alias-state-error-primary,#cf3044)}.dsh-notify-test-action[data-tone=info]{--dsh-test-tone:var(--dsw-alias-state-business-primary,#2862db)}.dsh-notify-test-primary{background:var(--dsw-alias-state-business-primary,#315ee8);border:0;border-radius:9px;color:#fff;cursor:pointer;font:700 13px inherit;justify-self:start;min-height:40px;min-width:238px;padding:7px 14px;width:auto}.dsh-notify-test-primary:hover{filter:brightness(1.06)}.dsh-notify-test-secondary{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:9px;color:var(--dsw-alias-label-primary);cursor:pointer;font:600 13px inherit;justify-self:start;min-height:38px;min-width:205px;padding:6px 14px;width:auto}.dsh-notify-test-secondary:hover{background:var(--dsw-alias-button-floating-hover)}
+@media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-settings .dsh-notify-toggle input{flex:0 0 42px;height:24px;max-width:42px;min-height:24px;min-width:42px;width:42px}}@media(max-width:620px){.dsh-notify-settings-head{display:block}.dsh-notify-settings-status{display:inline-flex;margin-top:14px}.dsh-notify-setting-field{grid-template-columns:1fr;gap:11px}.dsh-notify-card{padding:16px}.dsh-notify-test-grid{gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-notify-test-action{min-height:44px;padding:8px}.dsh-notify-test-primary,.dsh-notify-test-secondary{justify-self:stretch;min-width:0;width:100%}}`;
 /**
  * Toast presentation: a window anchored in the top-right corner. Each card is one row of
  * [tone icon][title + text + actions][close X]. The container is a scroll box exactly as tall as the
@@ -152,42 +156,30 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:14px;max-widt
  * the browser top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the
  * settings modal.
  */
-export const TOAST_CSS = `.dsh-notify-frame{position:fixed;z-index:1100}
+export const TOAST_CSS = `.dsh-notify-frame{position:fixed;z-index:1100;transition:height 390ms cubic-bezier(.16,1,.3,1)}
 .dsh-notify-stack{height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.dsh-notify-stack[data-collapsed=true]{overflow:hidden}
 .dsh-notify-stack-inner{pointer-events:none;position:relative}
-.dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 320ms cubic-bezier(.22,1,.36,1)}
-.dsh-notify-count{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;inset-inline-end:35px;line-height:18px;padding:0 8px;position:absolute;top:13px;z-index:2}
+.dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 360ms cubic-bezier(.16,1,.3,1)}
+.dsh-notify-stack[data-collapsed=true] .dsh-notify-slot{transition:top 340ms cubic-bezier(.22,.88,.38,1),transform 340ms cubic-bezier(.22,.88,.38,1)}
+.dsh-notify-count{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;inset-inline-end:35px;line-height:18px;padding:0 8px;position:absolute;top:13px;z-index:102}
 .dsh-notify-count:hover{color:var(--dsw-alias-label-primary)}
-.dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:var(--dsw-elevation-panel,0 6px 20px rgb(0 0 0 / 18%));box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:10px;margin:0;overflow:hidden;padding:12px 34px 12px 12px;pointer-events:auto;position:relative;width:100%}
+.dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:11px;box-shadow:0 2px 7px rgb(29 41 57 / 10%),0 1px 2px rgb(29 41 57 / 6%);box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:11px;margin:0;overflow:hidden;padding:14px 34px 17px 14px;pointer-events:auto;position:relative;width:100%}
+.dsh-notify-toast[data-style=strong]{background:color-mix(in srgb,var(--dsh-notify-tone) 7%,var(--dsw-alias-bg-layer-2));border-color:color-mix(in srgb,var(--dsh-notify-tone) 62%,var(--dsw-alias-border-l2))}
+.dsh-notify-toast[data-style=soft]{box-shadow:0 2px 7px rgb(29 41 57 / 7%),0 1px 2px rgb(29 41 57 / 4%)}
 .dsh-notify-toast[data-leaving=true]{animation:dsh-notify-card-out 200ms ease-in forwards;pointer-events:none}
+.dsh-notify-toast[data-style=strong][data-attention=true]::after{background:var(--dsh-notify-tone);bottom:0;content:"";height:4px;inset-inline:0;position:absolute;transform-origin:left;animation:dsh-notify-attention 4000ms linear forwards}
 @keyframes dsh-notify-card-in{0%{opacity:0;transform:translateY(-10px) scale(.9)}62%{opacity:1;transform:translateY(0) scale(1.02)}100%{opacity:1;transform:none}}
 @keyframes dsh-notify-card-out{to{opacity:0;transform:translateX(115%)}}
+@keyframes dsh-notify-attention{to{transform:scaleX(0);opacity:0}}
 @keyframes dsh-notify-spin{to{transform:rotate(360deg)}}
 .dsh-notify-toast-icon{color:var(--dsw-alias-label-tertiary,#7a8494);flex:none;margin-top:1px}
+.dsh-notify-toast[data-tone=success]{--dsh-notify-tone:var(--dsw-alias-state-success-primary,#07865a)}.dsh-notify-toast[data-tone=error]{--dsh-notify-tone:var(--dsw-alias-state-error-primary,#cf3044)}.dsh-notify-toast[data-tone=warning]{--dsh-notify-tone:var(--dsw-alias-state-warn-primary,#bc6508)}.dsh-notify-toast[data-tone=info]{--dsh-notify-tone:var(--dsw-alias-state-business-primary,#2862db)}.dsh-notify-toast[data-tone=neutral]{--dsh-notify-tone:var(--dsw-alias-label-tertiary,#6f7c91)}
+.dsh-notify-toast[data-style=strong] .dsh-notify-toast-icon{color:var(--dsh-notify-tone)}.dsh-notify-toast[data-style=soft][data-tone=success] .dsh-notify-toast-icon{color:var(--dsh-notify-tone)}.dsh-notify-toast[data-style=soft][data-tone=error] .dsh-notify-toast-icon{color:var(--dsh-notify-tone)}.dsh-notify-toast[data-style=soft][data-tone=warning] .dsh-notify-toast-icon{color:var(--dsh-notify-tone)}.dsh-notify-toast[data-style=soft][data-tone=info] .dsh-notify-toast-icon{color:var(--dsh-notify-tone)}
 .dsh-notify-toast-icon[data-spin=true]{animation:dsh-notify-spin .9s linear infinite}
-.dsh-notify-toast[data-tone=success] .dsh-notify-toast-icon{color:var(--dsw-alias-state-success-primary,#16a36a)}
-.dsh-notify-toast[data-tone=error] .dsh-notify-toast-icon{color:var(--dsw-alias-state-error-primary,#dc2626)}
-.dsh-notify-toast[data-tone=warning] .dsh-notify-toast-icon{color:var(--dsw-alias-state-warn-primary,#d97706)}
-.dsh-notify-toast[data-tone=info] .dsh-notify-toast-icon{color:var(--dsw-alias-state-business-primary,#2563eb)}
-.dsh-notify-toast-body{display:grid;gap:2px;min-width:0;flex:1 1 auto}
-.dsh-notify-toast-head{align-items:center;display:flex;gap:6px;min-width:0}
-.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);flex:1 1 auto;font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dsh-notify-toast-time{color:var(--dsw-alias-label-tertiary,#7a8494);flex:none;font-size:11px;font-variant-numeric:tabular-nums;line-height:1.4;white-space:nowrap}
-.dsh-notify-toast-title{font-size:13px;font-weight:650;line-height:1.45}
-.dsh-notify-toast-text{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
-.dsh-notify-toast-answers{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.dsh-notify-toast-answer{background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;cursor:pointer;font:inherit;font-size:12px;line-height:26px;max-width:100%;min-height:28px;overflow:hidden;padding:0 10px;text-overflow:ellipsis;touch-action:manipulation;white-space:nowrap}
-.dsh-notify-toast-answer:hover{background:var(--dsw-alias-button-floating-hover)}
-.dsh-notify-toast-answer:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
-.dsh-notify-toast-answer[data-variant=quiet]{background:transparent;color:var(--dsw-alias-label-secondary)}
-.dsh-notify-toast-answer:disabled{cursor:progress;opacity:.6}
-.dsh-notify-toast-error{color:var(--dsw-alias-state-error-primary,#dc2626);font-size:11px;line-height:1.45}
-.dsh-notify-toast-hint{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.45}
-.dsh-notify-toast-close{align-items:center;background:transparent;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;font-size:15px;height:22px;inset-inline-end:6px;justify-content:center;line-height:1;padding:0;position:absolute;top:6px;width:22px}
-.dsh-notify-toast-close:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}
-.dsh-notify-toast-close:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
-@media (hover:none) and (pointer:coarse){.dsh-notify-toast{padding:12px 44px 12px 12px}.dsh-notify-toast-close{font-size:17px;height:32px;width:32px}}
-@media (prefers-reduced-motion:reduce){.dsh-notify-toast{animation:none}.dsh-notify-toast[data-leaving=true]{animation:none}.dsh-notify-slot{transition:none}.dsh-notify-toast-icon[data-spin=true]{animation:none}}`;
+.dsh-notify-toast-body{display:grid;gap:2px;min-width:0;flex:1 1 auto}.dsh-notify-toast-head{align-items:center;display:flex;gap:6px;min-width:0}.dsh-notify-toast-source{color:var(--dsw-alias-label-tertiary,#7a8494);flex:1 1 auto;font-size:11px;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh-notify-toast-time{color:var(--dsw-alias-label-tertiary,#7a8494);flex:none;font-size:11px;font-variant-numeric:tabular-nums;line-height:1.4;white-space:nowrap}.dsh-notify-toast-title{font-size:14px;font-weight:700;line-height:1.45}.dsh-notify-toast-text{color:var(--dsw-alias-label-primary);font-size:12px;line-height:1.6;margin:5px 0 0;overflow-wrap:anywhere}.dsh-notify-toast[data-style=soft] .dsh-notify-toast-text{color:var(--dsw-alias-label-secondary)}.dsh-notify-toast-answers{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}.dsh-notify-toast-answer{background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;cursor:pointer;font:inherit;font-size:12px;line-height:26px;max-width:100%;min-height:28px;overflow:hidden;padding:0 10px;text-overflow:ellipsis;touch-action:manipulation;white-space:nowrap}.dsh-notify-toast-answer:hover{background:var(--dsw-alias-button-floating-hover)}.dsh-notify-toast-answer:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}.dsh-notify-toast-answer[data-variant=quiet]{background:transparent;color:var(--dsw-alias-label-secondary)}.dsh-notify-toast-answer:disabled{cursor:progress;opacity:.6}.dsh-notify-toast-error{color:var(--dsw-alias-state-error-primary,#dc2626);font-size:11px;line-height:1.45}.dsh-notify-toast-hint{color:var(--dsw-alias-label-secondary);font-size:11px;line-height:1.45}.dsh-notify-toast-close{align-items:center;background:transparent;border:0;border-radius:6px;color:var(--dsw-alias-label-secondary);cursor:pointer;display:inline-flex;font-size:18px;height:27px;inset-inline-end:5px;justify-content:center;line-height:1;padding:0;position:absolute;top:5px;width:27px}.dsh-notify-toast-close:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}.dsh-notify-toast-close:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
+@media (hover:none) and (pointer:coarse){.dsh-notify-toast{padding:14px 44px 17px 14px}.dsh-notify-toast-close{font-size:18px;height:32px;width:32px}}
+@media (prefers-reduced-motion:reduce){.dsh-notify-toast,.dsh-notify-toast[data-leaving=true]{animation:none}.dsh-notify-toast[data-attention=true]::after{display:none}.dsh-notify-frame,.dsh-notify-slot,.dsh-notify-stack[data-collapsed=true] .dsh-notify-slot{transition:none}.dsh-notify-toast-icon[data-spin=true]{animation:none}}`;
 export const CLIENT_CSS = `${SETTINGS_CSS}\n${TOAST_CSS}`;
 export function installClientStyles({ document: doc = globalThis.document } = {}) {
   const head = doc?.head;
@@ -201,9 +193,15 @@ export function installClientStyles({ document: doc = globalThis.document } = {}
 
 export function layoutFor({ width = 1024, coarse = false } = {}) { return { narrow: width < 760, hitTarget: coarse ? 44 : 32 }; }
 /** A page-local notification, used by the settings self-test: it never touches the host. */
-export function createLocalSelfTestRecord({ now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
+export function createLocalSelfTestRecord({ tone = 'success', now = Date.now(), randomUUID = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2) } = {}) {
   const id = `self-test:${randomUUID()}`;
-  return { eventId: id, mergeKey: id, kind: 'test', title: '自测：页面浮层', body: '只显示在当前页面，不会发送系统通知', at: now, phase: 'settled', localOnly: true };
+  const examples = {
+    success: { kind: 'completed', title: '程序修复已完成', body: '验证通过。提醒条结束后，这条通知仍会保留。' },
+    warning: { kind: 'approval', title: '需要你确认下一步', body: '修复方案已准备好，请确认后再继续。' },
+    error: { kind: 'failed', title: '验证未通过', body: '发现一项阻断问题，请查看错误详情后再重试。' },
+    info: { kind: 'question', title: '后台任务有新结果', body: '代码检查结果已返回，报告已就绪。' },
+  };
+  return { ...(examples[tone] ?? examples.success), eventId: id, mergeKey: id, at: now, phase: 'settled', localOnly: true };
 }
 /**
  * One of each tone and of the kinds that actually reach a page, so a single click shows what the
@@ -241,6 +239,8 @@ export function createLocalSelfTestBatch({ count = SELF_TEST_BATCH.length, now =
 export function publishLocalSelfTest(record, dispatch = (event) => globalThis.dispatchEvent(event)) {
   dispatch(typeof CustomEvent === 'function' ? new CustomEvent(LOCAL_TEST_EVENT, { detail: record }) : { type: LOCAL_TEST_EVENT, detail: record });
 }
+export function clearLocalSelfTests(dispatch = (event) => globalThis.dispatchEvent(event)) { dispatch(typeof Event === 'function' ? new Event(LOCAL_TEST_CLEAR_EVENT) : { type: LOCAL_TEST_CLEAR_EVENT }); }
+export function foldLocalSelfTests(dispatch = (event) => globalThis.dispatchEvent(event)) { dispatch(typeof Event === 'function' ? new Event(LOCAL_TEST_FOLD_EVENT) : { type: LOCAL_TEST_FOLD_EVENT }); }
 function validSessionId(value) { return typeof value === 'string' && value.length > 0 && value.length <= 256 && /^[A-Za-z0-9._:-]+$/.test(value); }
 /**
  * Reveal one turn inside the session the user just opened. The chat renders every turn as a flow item
@@ -275,6 +275,35 @@ function isMainView(sessions, sessionId) {
   if (snap?.current === sessionId) return true;
   return (snap?.byId?.[sessionId]?.retainedBy?.mainView ?? 0) > 0;
 }
+/**
+ * `openSession()` updates the main view before React has necessarily committed the matching entry in
+ * the left session tree. The tree already exposes the committed selection semantically, so do not
+ * depend on its generated CSS-module class names or on a title that may be duplicated. Wait briefly
+ * for `[role=treeitem][aria-selected=true]`, then center only that session row. This intentionally
+ * uses `scrollIntoView`: it finds the host-owned scrolling ancestor even when the sidebar structure
+ * changes, and `nearest` prevents horizontal sidebar movement.
+ */
+export function revealSelectedSidebarSession({ document: doc = globalThis.document, setTimer = globalThis.setTimeout, clearTimer = globalThis.clearTimeout, attempts = 8, intervalMs = 50 } = {}) {
+  let timer = null;
+  let cancelled = false;
+  let remaining = Math.max(1, attempts);
+  const before = doc?.querySelector?.('[role="treeitem"][aria-selected="true"]') ?? null;
+  const reveal = () => {
+    if (cancelled) return;
+    const selected = doc?.querySelector?.('[role="treeitem"][aria-selected="true"]');
+    // A row from the previous session may still be selected during React's commit. Only follow a new
+    // selected row, otherwise a cross-workspace click could scroll the sidebar to the wrong project.
+    if (selected && selected !== before) {
+      try { selected.scrollIntoView?.({ block: 'center', inline: 'nearest', behavior: 'smooth' }); } catch { /* jsdom and old DOMs */ }
+      return;
+    }
+    if (--remaining > 0) timer = setTimer?.(reveal, intervalMs);
+  };
+  // Allow the host selection render to commit first; scrolling a previous selected row is worse than
+  // waiting one frame when a notification crosses workspaces.
+  timer = setTimer?.(reveal, 80);
+  return () => { cancelled = true; if (timer !== null) clearTimer?.(timer); };
+}
 export async function navigateNotificationRecord(record, { sessions, uiWorkspace, acknowledge } = {}) {
   const sessionId = record?.sessionId;
   // A record with nowhere to go — a self-test artefact (`sessionId: null`), or a session that has
@@ -301,6 +330,7 @@ export async function navigateNotificationRecord(record, { sessions, uiWorkspace
       return { status: 'navigation-failed' };
     }
     if (!isMainView(sessions, sessionId)) return { status: 'navigation-failed' };
+    revealSelectedSidebarSession();
     if (Number.isSafeInteger(record.turn) && record.turn > 0) revealTurn(record.turn);
     await acknowledge?.(record);
     return { status: 'acknowledged' };
@@ -382,7 +412,7 @@ export function toastIcon(tone, status = 'idle') {
   if (tone === 'info') return React.createElement('svg', shared, React.createElement('circle', { cx: 10, cy: 10, r: 7 }), React.createElement('path', { d: 'M10 9.2v4M10 6.7h.01' }));
   return React.createElement('svg', shared, React.createElement('path', { d: 'M10 3.2a4.3 4.3 0 0 0-4.3 4.3c0 3.2-1.2 4.2-1.2 4.2h11s-1.2-1-1.2-4.2A4.3 4.3 0 0 0 10 3.2z' }), React.createElement('path', { d: 'M8.6 14.4a1.6 1.6 0 0 0 2.8 0' }));
 }
-let toastConfig = { toastPosition: 'conversation', toastEnabled: true, soundEnabled: true, sound: 'chime' };
+let toastConfig = { toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, soundEnabled: true, sound: 'chime' };
 export function createSoundPlayer({ audio = globalThis, AudioContextClass, AudioElementClass } = {}) {
   let context = null; let unlocked = false; const elements = new Set();
   // Resolved lazily: the bundle may be evaluated before the page exposes these, and tests inject fakes.
@@ -500,6 +530,10 @@ export const TOAST_STACK_GAP = 12;
 /** How much of the next card shows below the window: the affordance that there is more to scroll to. */
 export const TOAST_STACK_PEEK = 10;
 export const TOAST_QUEUE_MAX = 50;
+/** In collapsed mode each older card exposes exactly this much of its lower edge. */
+export const TOAST_STACK_COLLAPSED_PEEK = 18;
+/** A just-arrived card gets one short attention sweep; it never controls dismissal. */
+export const TOAST_ATTENTION_MS = 4000;
 /** Must match the `dsh-notify-card-out` animation; the card is dropped from the DOM when it ends. */
 export const TOAST_EXIT_MS = 200;
 export const TOAST_SUCCESS_MS = 900;
@@ -551,6 +585,12 @@ export function toastStackPlan({ heights = [], gap = TOAST_STACK_GAP } = {}) {
     return plan;
   });
 }
+/** A folded pile keeps complete older cards bottom-aligned behind the newest card. */
+export function collapsedStackPlan({ heights = [], peek = TOAST_STACK_COLLAPSED_PEEK } = {}) {
+  const list = (Array.isArray(heights) ? heights : []).map((height) => Number(height) || 0);
+  const first = list[0] ?? 0;
+  return list.map((height, index) => ({ offsetY: index === 0 ? 0 : first + (index * peek) - height }));
+}
 /**
  * The corner is a window, not a pile. `visible` cards fit — measured, not assumed, because a card with
  * a body and answer buttons is not the height of a one-line one — and everything older waits below
@@ -570,7 +610,7 @@ export function stackWindow({ heights = [], visible = TOAST_STACK_VISIBLE, gap =
   return { total: list.length, hidden, windowHeight: windowHeight + (hidden > 0 ? peek : 0), contentHeight: sum(list), overflow: hidden > 0 };
 }
 function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
-  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
+  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [expanded, setExpanded] = React.useState(false); const [forcedCollapsed, setForcedCollapsed] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);
@@ -655,16 +695,18 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     if (!record?.eventId) return;
     if (globalThis.document?.hidden) unseen.current.add(record.eventId);
     toasted.current.add(record.eventId);
-    const incoming = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
+    const incoming = [{ record, status: 'idle', error: null, lastLabel: null, leaving: false, attention: true }, ...cardsRef.current.filter((card) => card.record.eventId !== record.eventId)];
     const next = queueCards(incoming);
     for (const card of incoming) if (!next.includes(card)) forget(card.record.eventId);   // only the runaway-stream cap can reach this
     commit(next);
     void soundPlayer.play();
   };
   React.useEffect(() => {
-    const local = (event) => { if (event?.detail?.localOnly) showToast(event.detail); };
-    globalThis.addEventListener?.(LOCAL_TEST_EVENT, local);
-    return () => globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local);
+    const local = (event) => { if (event?.detail?.localOnly) { setForcedCollapsed(false); setExpanded(false); showToast(event.detail); } };
+    const clearLocal = () => { for (const card of cardsRef.current) forget(card.record.eventId); commit([]); setForcedCollapsed(false); setExpanded(false); };
+    const foldLocal = () => { if (cardsRef.current.length > 1) { setExpanded(false); setForcedCollapsed(true); } };
+    globalThis.addEventListener?.(LOCAL_TEST_EVENT, local); globalThis.addEventListener?.(LOCAL_TEST_CLEAR_EVENT, clearLocal); globalThis.addEventListener?.(LOCAL_TEST_FOLD_EVENT, foldLocal);
+    return () => { globalThis.removeEventListener?.(LOCAL_TEST_EVENT, local); globalThis.removeEventListener?.(LOCAL_TEST_CLEAR_EVENT, clearLocal); globalThis.removeEventListener?.(LOCAL_TEST_FOLD_EVENT, foldLocal); };
   }, []);
   // Nothing about the stack changes on hover any more: the window is a fixed size and the rest of the
   // queue is below the fold. The mouse wheel scrolls it (the container is the scroll box), and the
@@ -785,17 +827,18 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     if (!buttons.length && !note) return null;
     return React.createElement('div', { className: 'dsh-notify-toast-answers' }, buttons, note);
   };
-  const cardView = (card, plan) => {
+  const cardView = (card, plan, index) => {
     const record = card.record; const status = card.status;
     const tone = status === 'error' ? 'error' : status === 'success' ? 'success' : toastTone(record.kind);
     const source = sessionLabel(sessions, record.sessionId);
     const stamp = toastTime(record.at);
     // The slot is absolutely positioned and moved by its transform; that is what lets the cards below
     // a new one slide down instead of jumping.
-    const slotStyle = { transform: `translateY(${plan.offsetY}px)` };
+    const pileHidden = collapsed && index > 0;
+    const slotStyle = { transform: `translateY(${plan.offsetY}px)`, zIndex: 100 - (index < 0 ? 99 : index) };
     return React.createElement('div', { key: record.eventId, className: 'dsh-notify-slot', style: slotStyle },
-      React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': 'polite', className: 'dsh-notify-toast', 'data-tone': tone, 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
-        onClick: () => { if (!card.leaving) void activate(card); } },
+      React.createElement('aside', { ref: measure(record.eventId), role: 'status', 'aria-live': pileHidden ? 'off' : 'polite', 'aria-hidden': pileHidden ? 'true' : undefined, inert: pileHidden ? '' : undefined, className: 'dsh-notify-toast', 'data-tone': tone, 'data-style': toastConfig.notificationStyle === 'soft' ? 'soft' : 'strong', 'data-attention': card.attention ? 'true' : 'false', 'data-status': status, 'data-leaving': card.leaving ? 'true' : 'false',
+        onAnimationEnd: (event) => { if (event.animationName === 'dsh-notify-attention' && card.attention) patchCard(record.eventId, { attention: false }); }, onClick: () => { if (!card.leaving) void activate(card); } },
         toastIcon(tone, status),
         React.createElement('div', { className: 'dsh-notify-toast-body' },
           React.createElement('span', { className: 'dsh-notify-toast-head' },
@@ -815,8 +858,14 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   // timer takes the node away.
   const liveCards = cards.filter((card) => !card.leaving);
   const liveHeights = liveCards.map((card) => heights.current.get(card.record.eventId) ?? 0);
-  const plans = toastStackPlan({ heights: liveHeights });
-  const frame = stackWindow({ heights: liveHeights, visible: narrow ? TOAST_STACK_VISIBLE_NARROW : TOAST_STACK_VISIBLE });
+  const collapsed = (forcedCollapsed || toastConfig.stackCollapsed !== false) && !expanded && liveCards.length > 1;
+  const expandedPlans = toastStackPlan({ heights: liveHeights });
+  const firstHeight = liveHeights[0] ?? 0;
+  const collapsedPlans = collapsedStackPlan({ heights: liveHeights });
+  const expandedFrame = stackWindow({ heights: liveHeights, visible: narrow ? TOAST_STACK_VISIBLE_NARROW : TOAST_STACK_VISIBLE });
+  const collapsedHeight = firstHeight + (Math.min(Math.max(0, liveCards.length - 1), 3) * TOAST_STACK_COLLAPSED_PEEK) + 4;
+  const frame = collapsed ? { total: liveCards.length, hidden: Math.max(0, liveCards.length - 4), windowHeight: collapsedHeight, contentHeight: collapsedHeight, overflow: false } : expandedFrame;
+  const plans = collapsed ? collapsedPlans : expandedPlans;
   const planById = new Map(liveCards.map((card, index) => [card.record.eventId, plans[index]]));
   // Remember where every live card sits: a card that leaves slides out from where the user last saw it,
   // not from wherever the column happens to have moved on to.
@@ -829,9 +878,9 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   return React.createElement('div', { ref: frameRef, popover: 'manual', className: 'dsh-notify-frame',
     style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
     queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,
-    React.createElement('div', { ref: stackRef, className: 'dsh-notify-stack', 'data-overflow': frame.overflow ? 'true' : 'false' },
+    React.createElement('div', { ref: stackRef, className: 'dsh-notify-stack', 'data-overflow': frame.overflow ? 'true' : 'false', 'data-collapsed': collapsed ? 'true' : 'false', onPointerEnter: () => { if (collapsed) setExpanded(true); }, onFocusCapture: () => { if (collapsed) setExpanded(true); } },
       React.createElement('div', { className: 'dsh-notify-stack-inner', style: { height: `${frame.contentHeight}px` } },
-        rendered.map((card) => cardView(card, planById.get(card.record.eventId) ?? slots.current.get(card.record.eventId) ?? { offsetY: frame.contentHeight })))));
+        rendered.map((card) => cardView(card, planById.get(card.record.eventId) ?? slots.current.get(card.record.eventId) ?? { offsetY: frame.contentHeight }, liveCards.findIndex((live) => live.record.eventId === card.record.eventId))))));
 }
 export function sessionLabel(sessions, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return null;
@@ -896,20 +945,22 @@ export function resultTone(status) {
 }
 const action = (label, onClick, extra = {}) => React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick, ...extra }, label);
 const hint = (children) => React.createElement('p', { className: 'dsh-notify-hint' }, children);
-/** The one self-test that still means something: does a page-level card actually appear here? */
+/** Page-only visual checks: each button uses the same ToastOverlay path as a real delivered record. */
 export function NotificationSelfTests() {
   const [state, setState] = React.useState(null);
-  const fireOne = () => { publishLocalSelfTest(createLocalSelfTestRecord()); setState({ status: 'passed', reason: '页面浮层已渲染（一条）' }); };
-  const fire = (count) => { for (const record of createLocalSelfTestBatch({ count })) publishLocalSelfTest(record); setState({ status: 'passed', reason: `页面浮层已渲染（${Math.min(count, SELF_TEST_BATCH.length)} 条）` }); };
-  return React.createElement('section', { className: 'dsh-notify-card', 'aria-label': '通知自测' },
-    React.createElement('h3', { className: 'dsh-notify-card-title' }, '自测'),
-    hint('只有页面里这一条通道：右上角浮层 + 提示音 + 后台标签页闪动。这里发出的卡片只渲染在当前页面，不会外发系统通知。'),
-    React.createElement('div', { className: 'dsh-notify-actions' },
-      action('测试一条', fireOne),
-      action(`测试 ${TOAST_STACK_VISIBLE} 条`, () => fire(TOAST_STACK_VISIBLE)),
-      action(`测试 ${SELF_TEST_BATCH.length} 条`, () => fire(SELF_TEST_BATCH.length))),
-    hint(`「测试 ${TOAST_STACK_VISIBLE} 条」正好填满角上那一窗；「测试 ${SELF_TEST_BATCH.length} 条」多出 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条，角上仍然只占一窗的高度，前面那张卡右上角显示总数「+${SELF_TEST_BATCH.length}」，在通知区里向下滚动就能看到剩下的 ${SELF_TEST_BATCH.length - TOAST_STACK_VISIBLE} 条。`),
-    state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, `${state.status}: ${state.reason}`) : null);
+  const single = (tone) => { publishLocalSelfTest(createLocalSelfTestRecord({ tone })); setState({ status: 'passed', reason: `已发送${({ success: '完成', warning: '确认', error: '失败', info: '信息' })[tone]}模拟通知` }); };
+  const replayAll = () => { clearLocalSelfTests(); for (const record of createLocalSelfTestBatch({ count: 4 })) publishLocalSelfTest(record); setState({ status: 'passed', reason: '已重播四种状态与增强版提醒动效' }); };
+  const fold = () => { foldLocalSelfTests(); setState({ status: 'passed', reason: '已切换通知堆叠；移入通知区即可展开' }); };
+  const clear = () => { clearLocalSelfTests(); setState({ status: 'passed', reason: '已清空本页模拟通知' }); };
+  const testButton = (tone, label) => React.createElement('button', { type: 'button', className: 'dsh-notify-test-action', 'data-tone': tone, onClick: () => single(tone) }, label);
+  return React.createElement('div', { className: 'dsh-notify-test-panel', 'aria-label': '通知自测' },
+    React.createElement('p', { className: 'dsh-notify-test-caption' }, '点击发送一条模拟通知'),
+    React.createElement('div', { className: 'dsh-notify-test-grid' }, testButton('success', '完成'), testButton('warning', '确认'), testButton('error', '失败'), testButton('info', '信息')),
+    React.createElement('button', { type: 'button', className: 'dsh-notify-test-primary', onClick: replayAll }, '查看四种状态 / 重播动效'),
+    React.createElement('button', { type: 'button', className: 'dsh-notify-test-secondary', onClick: fold }, '折叠通知为一摞'),
+    React.createElement('button', { type: 'button', className: 'dsh-notify-test-secondary', onClick: clear }, '清空通知，先看文档'),
+    hint('所有测试通知只渲染在当前页面，不发送系统通知，也不影响真实任务。增强版会显示对应状态色和短暂提醒条。'),
+    state ? React.createElement('p', { className: 'dsh-notify-result', role: 'status', 'data-tone': resultTone(state.status) }, state.reason) : null);
 }
 function SettingsSection() {
   const [config, setConfig] = React.useState(null); const [status, setStatus] = React.useState('正在加载…');
@@ -938,30 +989,22 @@ function SettingsSection() {
     void loadSounds();
   }, []);
   const update = async (patch) => { setToastConfig(patch); try { const next = await fetchJson('/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }); setConfig(next); setStatus('设置已保存'); } catch { setStatus('设置保存失败'); } };
+  const card = (icon, title, description, content) => React.createElement('div', { className: 'dsh-notify-card' }, React.createElement('div', { className: 'dsh-notify-card-head' }, React.createElement('span', { className: 'dsh-notify-card-icon', 'aria-hidden': true }, icon), React.createElement('div', null, React.createElement('h3', { className: 'dsh-notify-card-title' }, title), hint(description))), content);
+  const copy = (label, description) => React.createElement('div', { className: 'dsh-notify-setting-copy' }, React.createElement('div', { className: 'dsh-notify-setting-label' }, label), React.createElement('p', { className: 'dsh-notify-setting-help' }, description));
+  const toggle = (label, description, checked, onChange, ariaLabel) => React.createElement('div', { className: 'dsh-notify-setting-row' }, copy(label, description), React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked, onChange, 'aria-label': ariaLabel }), React.createElement('span', null, label)));
+  const style = config?.notificationStyle === 'soft' ? 'soft' : 'strong'; const collapsed = config?.stackCollapsed !== false;
   return React.createElement('section', { className: 'dsh-notify-settings', 'aria-label': '通知设置' },
-    React.createElement('h2', { className: 'dsh-notify-heading' }, '通知'),
-    React.createElement('p', { className: 'dsh-notify-status', role: 'status', 'data-tone': statusTone(status) }, status),
-    config && React.createElement('div', { className: 'dsh-notify-card' },
-      React.createElement('h3', { className: 'dsh-notify-card-title' }, '提示通道'),
-      React.createElement('label', { className: 'dsh-notify-field' }, React.createElement('span', null, 'Toast位置'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': 'Toast位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（默认）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭（什么都不提示）'))),
-      hint('浮层只是页内提示。关掉之后不再弹卡、也不再闪动标签页——「任务完成时告诉我」这件事就没有别的通道了。'),
-      React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked: Boolean(config.subtaskNotify), onChange: (event) => update({ subtaskNotify: event.target.checked }) }), React.createElement('span', null, '子任务 / 后台任务完成时通知')),
-      hint('默认关闭：每个子代理、后台任务结束都会各弹一条（标题常常是命令原文），开久了会很乱。需要时再打开。'),
-      hint('不保存历史：卡片就是你看到的那一条，关掉即结束。页面没打开时发生的通知不会补发——这是去掉存储换来的简化。')),
-    config && React.createElement(NotificationSelfTests),
-    config && React.createElement('div', { className: 'dsh-notify-card' },
-      React.createElement('h3', { className: 'dsh-notify-card-title' }, '提示音'),
-      React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked: config.soundEnabled !== false, onChange: (event) => update({ soundEnabled: event.target.checked }) }), React.createElement('span', null, '页内提示音（窗口不在最前也会响）')),
-      React.createElement('label', { className: 'dsh-notify-field' }, React.createElement('span', null, '声音'),
-        React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '提示音', value: config.sound || 'chime', onChange: (event) => update({ sound: event.target.value }) },
-          BUILTIN_SOUNDS.map((id) => React.createElement('option', { key: id, value: id }, SOUND_LABELS[id] ?? id)),
-          ...customSounds.map((sound) => React.createElement('option', { key: `custom:${sound.name}`, value: `custom:${sound.name}` }, `自定义：${sound.name}`)))),
-      React.createElement('div', { className: 'dsh-notify-actions' },
-        React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick: () => { void soundPlayer.unlock().then(() => soundPlayer.play(config.sound || 'chime', { enabled: true })).then((result) => setSoundNotice(result?.reason === 'locked' ? '浏览器要求先点一下页面才能出声：请再点一次「试听」' : result?.played ? '已试听' : `没出声（${result?.reason || 'unknown'}）`)); } }, '试听'),
-        React.createElement('label', { className: 'dsh-notify-action', style: { cursor: 'pointer' } }, '上传声音…', React.createElement('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.wav,.ogg,.flac', style: { display: 'none' }, onChange: (event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSound(file); } }))),
-      hint('窗口不在最前、标签在后台时也会响——这是「浏览器被别的应用挡住」时唯一能提醒你的方式。内置音由浏览器合成（不下载任何文件）；自定义音上传到本 profile 的数据目录，重装插件不会丢。上传上限 1 MB，仅支持 mp3 / m4a / aac / wav / ogg / flac。'),
-      soundNotice ? React.createElement('p', { className: 'dsh-notify-result', role: 'status' }, soundNotice) : null,
-      customSounds.length > 0 && React.createElement('div', { className: 'dsh-notify-actions' }, customSounds.map((sound) => React.createElement('button', { key: sound.name, type: 'button', className: 'dsh-notify-action', 'data-variant': 'danger', onClick: () => void removeSound(sound.name) }, `删除 ${sound.name}`)))));
+    React.createElement('div', { className: 'dsh-notify-settings-head' }, React.createElement('div', null, React.createElement('div', { className: 'dsh-notify-eyebrow' }, 'NOTIFICATIONS'), React.createElement('h2', { className: 'dsh-notify-heading' }, '通知'), React.createElement('p', { className: 'dsh-notify-settings-intro' }, '决定什么时候提醒你，以及通知在页面中如何显示。')), React.createElement('p', { className: 'dsh-notify-settings-status', role: 'status' }, status)),
+    config && card('◉', '通知显示', '显示位置、视觉样式与多条通知的呈现方式。', React.createElement(React.Fragment, null,
+      React.createElement('div', { className: 'dsh-notify-rows' },
+        React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知位置', '默认出现在会话区右上角，不遮住侧栏。'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '通知位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（推荐）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭页面通知'))),
+        React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知样式', '增强版使用清晰状态色与短暂提醒条；柔和版更接近当前风格。'), React.createElement('div', { className: 'dsh-notify-segmented', role: 'group', 'aria-label': '通知样式' }, ...['strong', 'soft'].map((value) => React.createElement('button', { key: value, type: 'button', 'data-active': style === value ? 'true' : 'false', onClick: () => update({ notificationStyle: value }) }, value === 'strong' ? '增强版' : '柔和版')))),
+        toggle('多条通知折叠显示', '有多条未关闭通知时，最新一条完整显示，其余通知在下方等距露边；移入后展开。', collapsed, (event) => update({ stackCollapsed: event.target.checked }), '多条通知折叠显示')),
+      React.createElement('div', { className: 'dsh-notify-preview' }, React.createElement('span', null, React.createElement('strong', null, `${style === 'strong' ? '增强版' : '柔和版'} · 折叠显示${collapsed ? '已开启' : '已关闭'}`), collapsed ? '状态色清晰，提醒条结束后通知仍会保留。' : '多条通知会依次完整显示。')))),
+    config && card('♬', '提示音', '在你阅读其他内容或切到后台时，用声音提醒你有新结果。', React.createElement(React.Fragment, null, React.createElement('div', { className: 'dsh-notify-rows' }, toggle('页内提示音', '窗口不在最前、标签在后台时也会播放。', config.soundEnabled !== false, (event) => update({ soundEnabled: event.target.checked }), '页内提示音'), React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('提示音', '可试听、上传或删除自定义声音。'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '提示音', value: config.sound || 'chime', onChange: (event) => update({ sound: event.target.value }) }, BUILTIN_SOUNDS.map((id) => React.createElement('option', { key: id, value: id }, SOUND_LABELS[id] ?? id)), ...customSounds.map((sound) => React.createElement('option', { key: `custom:${sound.name}`, value: `custom:${sound.name}` }, `自定义：${sound.name}`))))), React.createElement('div', { className: 'dsh-notify-actions', style: { marginTop: '15px' } }, action('试听', () => { void soundPlayer.unlock().then(() => soundPlayer.play(config.sound || 'chime', { enabled: true })).then((result) => setSoundNotice(result?.reason === 'locked' ? '浏览器要求先点一下页面才能出声：请再点一次「试听」' : result?.played ? '已试听' : `没出声（${result?.reason || 'unknown'}）`)); }), React.createElement('label', { className: 'dsh-notify-action', style: { cursor: 'pointer' } }, '上传声音…', React.createElement('input', { type: 'file', accept: 'audio/*,.mp3,.m4a,.wav,.ogg,.flac', style: { display: 'none' }, onChange: (event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void uploadSound(file); } }))), soundNotice ? React.createElement('p', { className: 'dsh-notify-result', role: 'status' }, soundNotice) : null, customSounds.length > 0 && React.createElement('div', { className: 'dsh-notify-actions' }, customSounds.map((sound) => action(`删除 ${sound.name}`, () => void removeSound(sound.name), { 'data-variant': 'danger' }))))),
+    config && card('✓', '任务提醒', '选择哪些任务结果会主动出现在你的通知列表中。', React.createElement('div', { className: 'dsh-notify-rows' }, toggle('子任务 / 后台任务完成时通知', '默认关闭。开启后，每个子代理或后台任务结束时都会通知你。', Boolean(config.subtaskNotify), (event) => update({ subtaskNotify: event.target.checked }), '子任务 / 后台任务完成时通知'))),
+    config && card('↗', '预览与自测', '仅在当前页面展示模拟通知，不发送系统通知，也不影响真实任务。', React.createElement(NotificationSelfTests)));
+
 }
 export const CLIENT_COMPOSITION = Object.freeze({ service: 'slots', modules: Object.freeze(['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general']), seats: Object.freeze(['settings.section', 'shell.overlay']) });
 export function mountNotifyClient({ slots, sessions, uiWorkspace, getSessions, getUiSession, getUiWorkspace } = {}) {

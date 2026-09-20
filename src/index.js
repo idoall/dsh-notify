@@ -33,7 +33,7 @@ export function jobNotification(snapshot = {}) {
   const outcome = JOB_STATUS_LABEL[status] ?? status;
   return { title: failed ? '后台任务失败' : '后台任务结束', body: readable ? label : (outcome || undefined) };
 }
-const DEFAULT_SETTINGS = Object.freeze({ verbosity: 'normal', toastPosition: 'conversation', toastEnabled: true, subtaskNotify: false, soundEnabled: true, sound: 'chime' });
+const DEFAULT_SETTINGS = Object.freeze({ verbosity: 'normal', toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, subtaskNotify: false, soundEnabled: true, sound: 'chime' });
 const SETTING_KEYS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 /**
  * Only the settings this version knows about are adopted — or written back. A file left by an older
@@ -41,6 +41,21 @@ const SETTING_KEYS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
  * plugin would then hand straight back to the page.
  */
 const pickSettings = (value = {}) => Object.fromEntries(Object.entries(value ?? {}).filter(([key]) => SETTING_KEYS.includes(key)));
+function validSettingsPatch(value = {}) {
+  if ('notificationStyle' in value && !['strong', 'soft'].includes(value.notificationStyle)) return false;
+  if ('stackCollapsed' in value && typeof value.stackCollapsed !== 'boolean') return false;
+  if ('toastEnabled' in value && typeof value.toastEnabled !== 'boolean') return false;
+  if ('subtaskNotify' in value && typeof value.subtaskNotify !== 'boolean') return false;
+  if ('soundEnabled' in value && typeof value.soundEnabled !== 'boolean') return false;
+  if ('verbosity' in value && !['normal', 'detailed'].includes(value.verbosity)) return false;
+  if ('toastPosition' in value && !['conversation', 'viewport', 'off'].includes(value.toastPosition)) return false;
+  if ('sound' in value && (typeof value.sound !== 'string' || value.sound.length > 96)) return false;
+  return true;
+}
+function normalizeSettings(value = {}) {
+  const picked = pickSettings(value);
+  return Object.fromEntries(Object.entries(picked).filter(([key, setting]) => validSettingsPatch({ [key]: setting })));
+}
 
 function contextService(ctx, name) {
   const explicit = ctx?.get?.(name);
@@ -153,7 +168,7 @@ export async function apply(ctx, config = {}) {
   // only thing that outlives the process.
   const buffer = createBuffer();
   const preferences = createSettings({ dataDir: config.dataDir, keys: SETTING_KEYS });
-  const settings = { ...DEFAULT_SETTINGS, ...pickSettings(preferences.get()) };
+  const settings = { ...DEFAULT_SETTINGS, ...normalizeSettings(preferences.get()) };
   const reducer = new EventReducer(() => Date.now());
   const diagnostics = { eventErrors: 0, services: {} };
   const sounds = createSoundLibrary({ dataDir: config.dataDir });
@@ -429,8 +444,7 @@ export async function apply(ctx, config = {}) {
     registerSensitive(lifecycleCtx, webServer, connection, '/config', ['GET', 'POST'], async (req, res) => {
       if (req.method === 'GET') { sendJson(res, 200, { ...settings, storage: preferences.status }); return; }
       const { value } = await readJson(req);
-      if (schemaStatus(value, SETTING_KEYS) !== 200
-        || ('sound' in value && typeof value.sound === 'string' && value.sound.length > 96)) { sendJson(res, 400, { error: 'invalid config' }); return; }
+      if (schemaStatus(value, SETTING_KEYS) !== 200 || !validSettingsPatch(value)) { sendJson(res, 400, { error: 'invalid config' }); return; }
       Object.assign(settings, value);
       preferences.set(pickSettings(value));
       sendJson(res, 200, { ...settings, storage: preferences.status });

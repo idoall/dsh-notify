@@ -36,38 +36,30 @@ test('the self-test card only exercises the page: one button, no host request', 
 
   assert.ok(document.querySelector('[aria-label="通知自测"]'), 'the card is there');
   assert.equal(document.querySelector('[aria-label="A 页面里"]'), null, 'the old dimension grid is gone with the host self-tests');
-  const one = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试一条');
-  const windowed = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试 5 条');
-  const overflowing = [...document.querySelectorAll('button')].find((node) => node.textContent === '测试 8 条');
-  assert.ok(one && windowed && overflowing, 'the three self-test buttons are offered');
-  const button = one;
+  const completed = [...document.querySelectorAll('button')].find((node) => node.textContent === '完成');
+  const replay = [...document.querySelectorAll('button')].find((node) => node.textContent === '查看四种状态 / 重播动效');
+  const folded = [...document.querySelectorAll('button')].find((node) => node.textContent === '折叠通知为一摞');
+  const clear = [...document.querySelectorAll('button')].find((node) => node.textContent === '清空通知，先看文档');
+  assert.ok(completed && replay && folded && clear, 'the demo-style state, replay, fold, and clear controls are offered');
+  const button = completed;
   const before = requests;   // the overlay polls on its own; only the click must stay silent
   await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const toast = document.querySelector('aside[role="status"]');
   assert.ok(toast, 'the page toast is the only thing this test can prove');
-  assert.match(toast.textContent, /自测：页面浮层/);
+  assert.match(toast.textContent, /程序修复已完成/);
+  assert.equal(toast.getAttribute('data-tone'), 'success', 'the enhanced success self-test carries a real status tone instead of neutral gray');
   assert.equal(requests, before, 'a page test never talks to the host');
   assert.equal(document.querySelector('section[aria-label="通知历史"]'), null, 'and there is no history panel to look in');
 
-  // The window-sized group is what "the stack is full" looks like: five readable cards, nothing out of
-  // sight — the single test card from above is the sixth, so one card sits below the fold.
-  await act(async () => { windowed.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-  const flat = [...document.querySelectorAll('aside[role="status"]')];
-  assert.equal(flat.filter((node) => node.getAttribute('data-leaving') !== 'true').length, 6, 'the single card and the five');
-  assert.equal(document.querySelector('.dsh-notify-count').textContent, '+6', 'the count is the whole queue');
-  assert.equal(document.querySelector('.dsh-notify-stack').getAttribute('data-overflow'), 'true', 'one card is below the fold');
-
-  // The overflowing group is the one that answers "what if there are more than the window can show".
-  const beforeBatch = requests;
-  await act(async () => { overflowing.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  await act(async () => { replay.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
   const all = [...document.querySelectorAll('aside[role="status"]')];
   const live = all.filter((node) => node.getAttribute('data-leaving') !== 'true');
-  assert.equal(live.length, 14, 'every card the groups fired is in the stack');
-  assert.equal(document.querySelector('.dsh-notify-count').textContent, '+14', 'and the front card counts all of them');
-  assert.equal(all.length - live.length, 0, 'nothing is thrown away to make room');
-  assert.equal(requests, beforeBatch, 'a page test never talks to the host, however many it fires');
-
-  // Every tone the groups carry is on one of those cards.
+  assert.equal(live.length, 4, 'replay clears prior examples and renders exactly the four status examples');
   const tones = all.map((node) => node.getAttribute('data-tone'));
-  for (const tone of ['success', 'warning', 'info', 'error', 'neutral']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
+  for (const tone of ['success', 'warning', 'info', 'error']) assert.ok(tones.includes(tone), `the group covers the ${tone} tone`);
+  await act(async () => { folded.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  assert.equal(document.querySelector('.dsh-notify-stack').getAttribute('data-collapsed'), 'true', 'the fold control uses the approved piled presentation');
+  await act(async () => { clear.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+  assert.equal(document.querySelectorAll('aside[role="status"]').length, 0, 'clear removes page-local examples only');
+  assert.equal(requests, before, 'a page test never talks to the host, however many it fires');
 });
