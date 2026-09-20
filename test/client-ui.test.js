@@ -33,7 +33,7 @@ test('toast anchors to the conversation column so it clears the right sidebar, n
 });
 test('toast tone maps every kind to one icon/progress colour family', () => {
   assert.equal(toastTone('completed'), 'success'); assert.equal(toastTone('failed'), 'error');
-  assert.equal(toastTone('approval'), 'warning'); assert.equal(toastTone('question'), 'info'); assert.equal(toastTone('plan-review'), 'info');
+  assert.equal(toastTone('approval'), 'warning'); assert.equal(toastTone('question'), 'info'); assert.equal(toastTone('plan-review'), 'warning');
   assert.equal(toastTone('job-end'), 'neutral'); assert.equal(toastTone('test'), 'neutral'); assert.equal(toastTone('unknown-kind'), 'neutral');
   assert.equal(toastTone(undefined), 'neutral');
   for (const tone of ['success', 'error', 'warning', 'info', 'neutral']) assert.equal(typeof toastIcon(tone), 'object', `tone ${tone} needs an icon`);

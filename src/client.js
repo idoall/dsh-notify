@@ -397,7 +397,9 @@ function useNotificationState() {
   return state;
 }
 export function toastOrder(records = []) { return [...records.filter((record) => record?.phase === 'open'), ...records.filter((record) => record?.phase !== 'open')]; }
-const TOAST_TONE_BY_KIND = Object.freeze({ approval: 'warning', question: 'info', 'plan-review': 'info', completed: 'success', failed: 'error', 'job-end': 'neutral', 'workflow-end': 'neutral', test: 'neutral' });
+// DSH reserves amber for an interaction that explicitly needs the user's decision. A plan review is
+// an approval gate too, so it shares that colour with execution approval; ordinary questions stay blue.
+const TOAST_TONE_BY_KIND = Object.freeze({ approval: 'warning', question: 'info', 'plan-review': 'warning', completed: 'success', failed: 'error', 'job-end': 'neutral', 'workflow-end': 'neutral', test: 'neutral' });
 export function toastTone(kind) { return TOAST_TONE_BY_KIND[kind] ?? 'neutral'; }
 /** 20px line-art icon per tone (react-toastify's per-result icon, drawn in the DSH stroke style). */
 export function toastIcon(tone, status = 'idle') {
