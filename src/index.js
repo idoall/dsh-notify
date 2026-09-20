@@ -9,8 +9,9 @@ export const name = 'dsh-notify';
 export const inject = [];
 export const Config = z.object({
   dataDir: z.string().description('Absolute path to the profile-owned dsh-notify data directory.'),
-  // 0 restores the old "notify on every finished turn" behaviour.
-  completionGraceMs: z.number().step(1).min(0).max(600_000).default(8_000).description('How long a finished turn must stay quiet before it counts as a finished task (ms).'),
+  // Compatibility switch for old hosts/tests without `agent/status`; current DSH releases use the
+  // authoritative idle transition instead of guessing completion from elapsed time.
+  completionGraceMs: z.number().step(1).min(0).max(600_000).default(8_000).description('Legacy fallback for hosts without agent lifecycle status; current DSH releases notify on authoritative idle.'),
 });
 export { EventReducer, PLAN_REVIEW_FALLBACK, sanitizeBody, validateRequest } from './core.js';
 export { createBuffer, createSettings, BUFFER_LIMIT } from './buffer.js';
@@ -202,15 +203,16 @@ export async function apply(ctx, config = {}) {
   };
   const safely = (work) => { Promise.resolve().then(work).catch(() => { diagnostics.eventErrors += 1; }); };
   /**
-   * A turn ending is not the task finishing. With goals, queued prompts or an agent that keeps
-   * working, one job produces several turns — and therefore several "任务完成" toasts, which is
-   * exactly the noise the user could not reconcile. So a notifiable turn end is *deferred*: if the
-   * session starts working again inside the grace window (which is what a goal round does), nothing is
-   * recorded at all; if a goal is engaged, nothing is recorded until that goal ends.
+   * A turn boundary only says that one response has ended. DSH's native sidebar stays busy until the
+   * owning Agent enters `idle`; that lifecycle transition is the authority for a completed task. The
+   * old elapsed-time heuristic could disagree with the spinner and, worse, leave a goal-held candidate
+   * stranded forever. Keep the timer solely as a compatibility fallback for pre-lifecycle hosts.
    */
   const completionGraceMs = Number.isSafeInteger(config.completionGraceMs) ? config.completionGraceMs : 8_000;
   const deferredCompletions = new Map();   // sessionId -> { payload, timer }
-  const engagedGoals = new Set();          // sessionIds whose goal loop is still running
+  const engagedGoals = new Set();          // only used for a legacy host without agent/status
+  const agentStatuses = new Map();         // sessionId -> 'idle' | 'running'
+  const statusCapable = new Set();         // sessions for which the Host has emitted agent/status
   const clearDeferred = (sessionId) => { const entry = deferredCompletions.get(sessionId); if (entry?.timer) clearTimeout(entry.timer); };
   const flushCompletion = async (sessionId) => {
     const entry = deferredCompletions.get(sessionId);
@@ -229,8 +231,13 @@ export async function apply(ctx, config = {}) {
   const deferCompletion = (sessionId, payload) => {
     const existing = deferredCompletions.get(sessionId);
     if (existing?.timer) clearTimeout(existing.timer);
-    // An engaged goal holds the payload with no timer: the announcement waits for the goal to end.
-    // Grace 0 is the old "every finished turn" behaviour and flushes immediately.
+    // Current DSH: wait for exactly the same idle state that clears the native sidebar spinner.
+    if (statusCapable.has(sessionId)) {
+      deferredCompletions.set(sessionId, { payload, timer: null });
+      if (agentStatuses.get(sessionId) === 'idle') void flushCompletion(sessionId).catch(() => { diagnostics.eventErrors += 1; });
+      return;
+    }
+    // Legacy DSH has no status lifecycle: retain the old grace behaviour as a safe fallback.
     if (engagedGoals.has(sessionId)) {
       deferredCompletions.set(sessionId, { payload, timer: null });
       return;
@@ -284,6 +291,18 @@ export async function apply(ctx, config = {}) {
   const liveTurns = new Map();
   const turnOf = (sessionId, event) => (Number.isSafeInteger(event?.turn) && event.turn > 0 ? event.turn : liveTurns.get(sessionId));
 
+  // `agent/status: idle` is the public DSH signal that no driver remains scheduled or active. It
+  // matches the native session spinner, so completion Toasts cannot precede the sidebar state.
+  ctx?.on?.('agent/status', ({ agent, status } = {}) => {
+    const sessionId = sessionIdOf(agent);
+    if (typeof sessionId !== 'string' || sessionId === '') return;
+    if (status !== 'idle' && status !== 'running') return;
+    statusCapable.add(sessionId);
+    agentStatuses.set(sessionId, status);
+    if (status === 'running') { cancelCompletion(sessionId); return; }
+    safely(() => flushCompletion(sessionId));
+  });
+
   ctx?.on?.('session/event', (session, event) => {
     const data = event?.data ?? {};
     const sessionId = session?.id;
@@ -325,15 +344,13 @@ export async function apply(ctx, config = {}) {
   // the past is not news, so a rebuild would only re-announce an approval the user can already see in
   // the DSH UI, and it would do it on every session open.
   ctx?.on?.('approval/request', (request, next) => { try { /* live reason is non-authoritative */ } catch { diagnostics.eventErrors += 1; } return next(); });
-  // A goal loop keeps starting rounds after each turn ends, so a completion is not news until the goal
-  // itself is done. `goal` is omitted from the payload exactly when there is no goal for the session.
+  // Older Hosts may not publish agent/status. Keep goal awareness only for that legacy fallback;
+  // lifecycle-capable Hosts flush on native `idle`, not when a separate goal bookkeeping event arrives.
   ctx?.on?.('goal/activation-changed', (payload) => safely(async () => {
     const sessionId = sessionIdOf(payload?.sessionId) ?? payload?.sessionId;
-    if (typeof sessionId !== 'string' || sessionId === '') return;
+    if (typeof sessionId !== 'string' || sessionId === '' || statusCapable.has(sessionId)) return;
     if (payload?.goal) {
       engagedGoals.add(sessionId);
-      // A goal engaging after a turn ended holds that announcement: the loop is still working, so the
-      // pending payload waits for the goal to finish instead of firing on the grace timer.
       const entry = deferredCompletions.get(sessionId);
       if (entry?.timer) { clearTimeout(entry.timer); entry.timer = null; }
       return;
