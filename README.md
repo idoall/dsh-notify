@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
+  <img src="https://img.shields.io/badge/DSH-0.1.7--rc.1-4B6BFB" alt="DSH 0.1.7-rc.1">
 </p>
 
 <p align="center">English | <a href="README.zh.md">中文</a></p>
@@ -45,7 +45,7 @@ Requirements:
 
 - DeepSeek Harness with a Web profile
 - Node.js 20 or newer
-- Verified DeepSeek Harness version: `0.1.6-alpha.1`
+- Verified DeepSeek Harness version: `0.1.7-rc.1`
 
 Install from npm into your Web profile:
 
@@ -93,17 +93,22 @@ Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, n
 
 ## Compatibility
 
-Current release target: plugin **`0.3.2`** verified against DeepSeek Harness **`0.1.6-alpha.1`**.
+Current release: plugin **`0.3.3`** is verified against DeepSeek Harness **`0.1.7-rc.1`**.
 
-| Plugin | Verified DeepSeek Harness |
-| --- | --- |
-| `0.3.2` | `0.1.6-alpha.1` |
-| `0.3.1` | `0.1.6-alpha.1` |
-| `0.3.0` | `0.1.6-alpha.1` |
-| `0.2.2` | `0.1.6-alpha.1` |
-| `0.2.1` | `0.1.6-alpha.1` |
-| `0.2.0` | `0.1.6-alpha.1` |
-| `0.1.2` | `0.1.6-alpha.1` |
+| Plugin | Verified DeepSeek Harness | What that version is |
+| --- | --- | --- |
+| **`0.3.3`** | `0.1.7-rc.1` | Adapts to DSH 0.1.7: job completions follow `jobs.events.subscribe`, tool results read the flattened tool-role message, in-toast answers read `uiSession.sessionStatus`, and `@deepseek-ai/schemastery` is a peer |
+| `0.3.2` | `0.1.6-alpha.1` | Completion follows native `agent/status: idle`; one green card per continuous task |
+| `0.3.1` | `0.1.6-alpha.1` | Sound matches visible delivery; open interactions recover after overlay remount |
+| `0.3.0` | `0.1.6-alpha.1` | Enhanced/soft styles, collapsed stack, and page-local self-test |
+| `0.2.2` | `0.1.6-alpha.1` | Latest published npm `latest` until `0.3.3` is released |
+| `0.2.1` | `0.1.6-alpha.1` | — |
+| `0.2.0` | `0.1.6-alpha.1` | — |
+| `0.1.2` | `0.1.6-alpha.1` | — |
+
+- **`0.3.3` supports the DSH `0.1.7` line only.** DSH `0.1.7` removed `jobs.onJobDone`, flattened tool-result identity onto the tool-role message, and replaced `uiSession.pendingInteractions` with the unified `sessionStatus` snapshot. On an older DSH — including `0.1.6-alpha.1` — stay on plugin **`0.3.2`**.
+- Two declarations make the `0.1.7` line load at all: `dsh.engines.dsh` and every `@deepseek-ai/dsh-*` peer declare `>=0.1.7-rc.1 <0.2.0`. DSH `0.1.7-rc.1` refuses an incompatible bundle at profile load, so a range that excluded the running release would silently drop the plugin.
+- `@deepseek-ai/schemastery` is a **peer**, not a plain dependency: DSH 0.1.7 resolves only a linked plugin's peer dependencies from the running installation, so a `link:` install of this directory would otherwise fail to import the Host half.
 
 The layout is also checked at a 390px mobile viewport: the settings controls reflow and the toast becomes full-width without falling behind the mobile sidebar.
 
@@ -134,8 +139,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.3.3
+git push origin v0.3.3
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.

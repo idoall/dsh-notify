@@ -51,9 +51,17 @@ test('a toast only offers answers it can honestly send, and uses the official ba
   assert.equal(toastAnswer({ kind: 'completed' }, question()), null, 'only question/plan-review notifications are answerable');
   assert.equal(toastAnswer(record, null), null); assert.equal(toastAnswer(record, { questions: [{ id: 'q1', options: [{ label: 'a' }] }] }), null, 'no answer() means no buttons');
   assert.equal(toastAnswer({ kind: 'plan-review' }, question()).id, 'q1', 'a plan review is answered the same way');
-  const pending = new Map([['s1', { questions: [] }]]);
-  assert.equal(pendingInteractionFor(pending, 's1').questions.length, 0);
-  assert.equal(pendingInteractionFor(pending, 's2'), null); assert.equal(pendingInteractionFor(null, 's1'), null); assert.equal(pendingInteractionFor(pending, undefined), null);
+  // DSH 0.1.7: the map is the Session status snapshot, so the interaction is nested under
+  // `pendingInteraction`. The older map that held the interaction directly is still read.
+  const interaction = { questions: [], answer: async () => {} };
+  const statuses = new Map([['s1', { running: false, pendingInteraction: interaction, completionUnread: false }]]);
+  assert.equal(pendingInteractionFor(statuses, 's1'), interaction);
+  assert.equal(pendingInteractionFor(statuses, 's2'), null, 'a session with no status has no interaction');
+  assert.equal(pendingInteractionFor(new Map([['s1', { running: false }]]), 's1'), null, 'a status without an interaction is not one');
+  assert.equal(pendingInteractionFor(new Map([['s1', { questions: [] }]]), 's1'), null, 'a value that is neither shape is not an interaction');
+  const legacy = { questions: [], answer: async () => {} };
+  assert.equal(pendingInteractionFor(new Map([['s1', legacy]]), 's1'), legacy, 'the pre-0.1.7 map still resolves');
+  assert.equal(pendingInteractionFor(null, 's1'), null); assert.equal(pendingInteractionFor(statuses, undefined), null);
 });
 
 test('every notification can name its session, and never goes anonymous', () => {

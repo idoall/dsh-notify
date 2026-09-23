@@ -14,8 +14,14 @@ for (const file of source.filter((item) => item.endsWith('.js'))) {
 const host = await readFile('src/index.js', 'utf8');
 if (!host.includes('export const inject = [];') || !host.includes("ctx?.on?.('session/event'")) throw new Error('Host API seam is not wired');
 if (!host.includes("kind: 'exact'") || !host.includes('connection.requestRejection(req)')) throw new Error('authenticated raw route seam is not wired');
+// The DSH 0.1.7 seams: one job event stream (the pre-0.1.7 `onJobDone` listener is gone from the registry)
+// and a tool result flattened onto its tool-role message (the nested `tool-result` content block is gone).
+if (!host.includes('registry?.events?.subscribe')) throw new Error('the DSH 0.1.7 job event stream is not wired');
+if (!host.includes('message.toolCallId')) throw new Error('the flattened tool/result seam is not wired');
 const client = await readFile('src/client.js', 'utf8');
 if (!client.includes("slots.inject('settings.section'") || !client.includes("slots.inject('shell.overlay'")) throw new Error('client slots are not wired');
+// DSH 0.1.7 publishes pending interactions through the unified Session status snapshot.
+if (!client.includes('ui?.sessionStatus')) throw new Error('the DSH 0.1.7 Session status seam is not wired');
 // The plugin keeps no history: nothing may write an ack, an epoch or a persisted record. (buffer.js
 // is exempt because it is the file that explains, in prose, why those concepts are gone.)
 const buffer = await readFile('src/buffer.js', 'utf8');

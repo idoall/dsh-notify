@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm 版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.1.6--alpha.1-4B6BFB" alt="DSH 0.1.6-alpha.1">
+  <img src="https://img.shields.io/badge/DSH-0.1.7--rc.1-4B6BFB" alt="DSH 0.1.7-rc.1">
 </p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
@@ -45,7 +45,7 @@
 
 - 带 Web profile 的 DeepSeek Harness
 - Node.js 20 或更新
-- 已验证的 DeepSeek Harness：`0.1.6-alpha.1`
+- 已验证的 DeepSeek Harness：`0.1.7-rc.1`
 
 从 npm 安装：
 
@@ -93,17 +93,22 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布目标：插件 **`0.3.2`** 已在 DeepSeek Harness **`0.1.6-alpha.1`** 上验证。
+当前发布：插件 **`0.3.3`** 已在 DeepSeek Harness **`0.1.7-rc.1`** 上验证。
 
-| 插件 | 已验证的 DeepSeek Harness |
-| --- | --- |
-| `0.3.2` | `0.1.6-alpha.1` |
-| `0.3.1` | `0.1.6-alpha.1` |
-| `0.3.0` | `0.1.6-alpha.1` |
-| `0.2.2` | `0.1.6-alpha.1` |
-| `0.2.1` | `0.1.6-alpha.1` |
-| `0.2.0` | `0.1.6-alpha.1` |
-| `0.1.2` | `0.1.6-alpha.1` |
+| 插件 | 已验证的 DeepSeek Harness | 这一版是什么 |
+| --- | --- | --- |
+| **`0.3.3`** | `0.1.7-rc.1` | 适配 DSH 0.1.7：后台任务完成走 `jobs.events.subscribe`，工具结果读取扁平化后的 tool-role 消息，卡片内回答读取 `uiSession.sessionStatus`，`@deepseek-ai/schemastery` 改为 peer |
+| `0.3.2` | `0.1.6-alpha.1` | 完成通知跟随原生 `agent/status: idle`；连续任务只发一张绿色卡 |
+| `0.3.1` | `0.1.6-alpha.1` | 提示音与可见投递对齐；浮层重挂载后恢复未处理交互 |
+| `0.3.0` | `0.1.6-alpha.1` | 增强/柔和样式、折叠堆叠、页内自测 |
+| `0.2.2` | `0.1.6-alpha.1` | 在 `0.3.3` 发布前仍是 npm `latest` |
+| `0.2.1` | `0.1.6-alpha.1` | — |
+| `0.2.0` | `0.1.6-alpha.1` | — |
+| `0.1.2` | `0.1.6-alpha.1` | — |
+
+- **`0.3.3` 只支持 DSH `0.1.7` 线。** DSH `0.1.7` 移除了 `jobs.onJobDone`，把工具结果身份扁平化到 tool-role 消息上，并用统一的 `sessionStatus` 快照替换了 `uiSession.pendingInteractions`。更早的 DSH（含 `0.1.6-alpha.1`）请继续用插件 **`0.3.2`**。
+- 两处声明决定 `0.1.7` 线能否加载：`dsh.engines.dsh` 与每一个 `@deepseek-ai/dsh-*` peer 都声明 `>=0.1.7-rc.1 <0.2.0`。DSH `0.1.7-rc.1` 会在 profile 加载时拒绝不兼容的 bundle，范围写错就会静默丢掉插件。
+- `@deepseek-ai/schemastery` 是 **peer**，不是普通依赖：DSH 0.1.7 只会把 **link 形态**插件的 peer 解析到当前安装；若仍写成普通依赖，`link:` 安装的 Host 半会导入失败。
 
 同时在 390px 手机视口检查：设置控件会重排，Toast 会满宽显示且不会被移动端侧栏遮挡。
 
@@ -134,8 +139,8 @@ npm run pack:check # 发布前置条件 + 客户端注册校验
 发版由 tag 驱动。更新 `package.json`、将对应 CHANGELOG 段落移出 `Unreleased`、编写 `release-notes/v<版本>.md` 后，推送发版提交与 tag：
 
 ```sh
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.3.3
+git push origin v0.3.3
 ```
 
 发版工作流会运行 `npm run verify`、打包插件、通过 npm trusted publishing（OIDC）发布，并创建附带 tarball 与 sha256 的 GitHub Release。

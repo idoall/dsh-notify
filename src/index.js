@@ -333,12 +333,17 @@ export async function apply(ctx, config = {}) {
       return;
     }
     if (event?.type === 'tool/result') {
-      const result = data.message?.content?.find?.((block) => block?.type === 'tool-result');
-      const callId = result?.toolCallId;
+      // DSH 0.1.7 flattened the tool result onto the tool-role message (`message.toolCallId` and
+      // `message.isError`); the nested `tool-result` content block this used to read is gone. The message
+      // is the authoritative shape, and the old nested block stays only as a fallback so an older host
+      // keeps settling its interactions.
+      const message = data.message ?? {};
+      const nested = message.content?.find?.((block) => block?.type === 'tool-result');
+      const callId = message.toolCallId ?? nested?.toolCallId;
       if (!callId) return; // Unlinked records cannot be guessed closed by an uncorrelated result.
       removePending(sessionId, callId);
-      const outcome = result?.isError || data.outcome === 'abort' ? 'abort' : 'settled';
-      const existing = reducer.questionResult({ sessionId, callId, outcome });
+      const failed = message.isError === true || nested?.isError === true || data.outcome === 'abort';
+      const existing = reducer.questionResult({ sessionId, callId, outcome: failed ? 'abort' : 'settled' });
       if (existing) safely(() => dispatch(existing));
       return;
     }
@@ -448,6 +453,17 @@ export async function apply(ctx, config = {}) {
     workflowOwners.delete(info.id);
     safely(() => dispatch(reducer.upsert({ kind: 'workflow-end', mergeKey: `wf:${info.id}`, ...(sessionId ? { sessionId } : {}), title: info.meta?.name || '工作流结束', body: result.error || result.stopReason, phase: 'settled', outcome: result.stopReason })));
   });
+  /**
+   * One settled job becomes one card. DSH 0.1.7 consolidated the registry into a single event stream whose
+   * terminal event is `settled`, and a settlement that released a live waiter was already handed to that
+   * caller, so only the unawaited ones are news for a human. The older `onJobDone` listener, which delivered
+   * the terminal snapshot with its owning Agent, is kept for a host that still has it.
+   */
+  const onJobSettled = (job) => {
+    if (!subtasksWanted() || !job) return;
+    if (job.status === 'running' || job.status === 'stopping') return;
+    safely(() => dispatch(reducer.upsert({ kind: 'job-end', mergeKey: `job:${job.id}`, ...(typeof job.owner === 'string' && job.owner !== '' ? { sessionId: job.owner } : {}), ...jobNotification(job), phase: 'settled', outcome: job.status })));
+  };
   const onJobDone = (snapshot, owner) => {
     if (!subtasksWanted()) return;
     safely(() => dispatch(reducer.upsert({ kind: 'job-end', mergeKey: `job:${snapshot?.id}`, sessionId: snapshot?.ownerSession ?? sessionIdOf(owner), ...jobNotification(snapshot ?? {}), phase: 'settled', outcome: snapshot?.status })));
@@ -462,10 +478,22 @@ export async function apply(ctx, config = {}) {
    */
   let jobListenerAttached = false;
   const attachJobs = (registry) => {
-    if (jobListenerAttached || typeof registry?.onJobDone !== 'function') return false;
+    if (jobListenerAttached) return false;
+    // Current DSH: one lifecycle stream, subscribed with an explicit owner filter. This plugin observes
+    // every owner because a profile-level mount is the only composition that can see all sessions.
+    if (typeof registry?.events?.subscribe === 'function') {
+      jobListenerAttached = true;
+      registry.events.subscribe({ owners: 'all' }, (event) => {
+        if (event?.type !== 'settled' || event.awaited === true) return;
+        onJobSettled(event.job);
+      });
+      diagnostics.services.jobs = 'events';
+      return true;
+    }
+    if (typeof registry?.onJobDone !== 'function') return false;
     jobListenerAttached = true;
     registry.onJobDone(onJobDone);
-    diagnostics.services.jobs = 'injected';
+    diagnostics.services.jobs = 'onJobDone';
     return true;
   };
   if (typeof ctx?.inject === 'function') { try { ctx.inject(['jobs'], (jobCtx) => { attachJobs(jobCtx?.jobs); }); } catch { /* no registry in this composition */ } }
