@@ -82,8 +82,10 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
   let root; let mounted; let pullTimer;
   const listeners = new Set(); let pendingMap = new Map();
+  // DSH 0.1.7 publishes pending interactions through the unified Session status snapshot, so each map
+  // value is a `SessionStatus` and the interaction itself is nested under `pendingInteraction`.
   const observable = { getSnapshot: () => pendingMap, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } };
-  const publish = (next) => { pendingMap = next; for (const listener of listeners) listener(); };
+  const publish = (next) => { pendingMap = new Map([...next].map(([sessionId, interaction]) => [sessionId, { pendingInteraction: interaction }])); for (const listener of listeners) listener(); };
   const calls = [];
   const earlier = { eventId: 'turn:prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
   const question = (callId, phase) => ({ eventId: `question:s1:${callId}`, mergeKey: `question:s1:${callId}`, kind: 'question', sessionId: 's1', title: '需要回复', body: '要不要继续？', at: 2, unread: true, phase });
@@ -117,7 +119,7 @@ test('a question toast closes itself when the answer happens elsewhere', async (
   const sessions = { binding: () => ({}), open: () => true, list: { getSnapshot: () => ({ current: 's1', byId: { s1: { id: 's1' } } }) } };
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ pendingInteractions: observable }) });
+  mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ sessionStatus: observable }) });
   root = createRoot(document.getElementById('root'));
   const Overlay = components.get('shell.overlay');
   const settle = async (ms = 30) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); }); };
@@ -196,8 +198,10 @@ test('a pending question can be answered straight from the toast and stays in sy
   const answered = []; const calls = [];
   const listeners = new Set();
   let pendingMap = new Map();
+  // DSH 0.1.7 publishes pending interactions through the unified Session status snapshot, so each map
+  // value is a `SessionStatus` and the interaction itself is nested under `pendingInteraction`.
   const observable = { getSnapshot: () => pendingMap, subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); } };
-  const publish = (next) => { pendingMap = next; for (const listener of listeners) listener(); };
+  const publish = (next) => { pendingMap = new Map([...next].map(([sessionId, interaction]) => [sessionId, { pendingInteraction: interaction }])); for (const listener of listeners) listener(); };
   const earlier = { eventId: 'turn:prime', mergeKey: 'turn:prime', kind: 'completed', sessionId: 's1', title: '任务完成', body: '预热', at: 1, unread: true, phase: 'settled' };
   const questionRecord = { eventId: 'question:s1:call-1', mergeKey: 'question:s1:call-1', kind: 'question', sessionId: 's1', title: '需要回复', body: '通道范围：要怎么处理？', at: 2, unread: true, phase: 'open' };
   const values = {
@@ -219,7 +223,7 @@ test('a pending question can be answered straight from the toast and stays in sy
   const sessions = { binding: () => ({}), open: (id) => { calls.push(`open:${id}`); return true; }, list: { getSnapshot: () => ({ current: 's1', ids: ['s1'], byId: { s1: { id: 's1', displayTitle: '通知插件改造' } } }) } };
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ pendingInteractions: observable }) });
+  mounted = mountNotifyClient({ slots, sessions, getUiSession: () => ({ sessionStatus: observable }) });
   root = createRoot(document.getElementById('root'));
   const Overlay = components.get('shell.overlay');
   await act(async () => { root.render(React.createElement(Overlay, components.get('shell.overlay:props'))); });
@@ -395,7 +399,7 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
   }
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { if (options.inject) components.set(`${options.name}:props`, options.inject()); components.set(options.name, Component); return () => components.delete(options.name); } };
-  mounted = mountNotifyClient({ slots, ...(sessions ? { sessions } : {}), getUiSession: () => ({ pendingInteractions: observable }) });
+  mounted = mountNotifyClient({ slots, ...(sessions ? { sessions } : {}), getUiSession: () => ({ sessionStatus: observable }) });
   root = createRoot(document.getElementById('root'));
   const wait = async (ms) => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, ms)); }); };
   await act(async () => { root.render(React.createElement(components.get('shell.overlay'), components.get('shell.overlay:props'))); });
@@ -407,7 +411,8 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
     // The settings self-test goes through the page-local event, not the poll: same corner, same commit.
     local: async (records) => { await act(async () => { for (const record of records) publishLocalSelfTest(record); }); },
     setHidden: async (value) => { hidden.value = value; await act(async () => { document.dispatchEvent(new dom.window.Event('visibilitychange')); }); },
-    publish: (next) => { pendingMap = next; for (const listener of listeners) listener(); },
+    // One published pending interaction is wrapped into the 0.1.7 Session status snapshot shape.
+    publish: (next) => { pendingMap = new Map([...next].map(([sessionId, interaction]) => [sessionId, { pendingInteraction: interaction }])); for (const listener of listeners) listener(); },
     tick: async () => { await act(async () => { await pullTimer(); }); await wait(20); },
     wait,
     nodes,

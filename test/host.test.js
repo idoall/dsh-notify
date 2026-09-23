@@ -31,7 +31,9 @@ async function fixture(t, rejection, config = {}) {
   const routes = new Map();
   const webServer = { register(route) { const key = `${route.kind}:${route.path}`; if (routes.has(key)) throw new Error(`duplicate ${key}`); routes.set(key, route); return () => routes.delete(key); } };
   const connection = { requestRejection: typeof rejection === 'function' ? rejection : () => rejection };
-  const jobs = { onJobDone(handler) { return register('job/done', handler); } };
+  // Current DSH: one job event stream. `events.subscribe(filter, listener)` is the 0.1.7 seam; `onJobDone`
+  // is the pre-0.1.7 listener this plugin still falls back to.
+  const jobs = { events: { subscribe(filter, handler) { return register('job/settled', (job) => handler({ type: 'settled', job, cause: 'producer', awaited: false })); } } };
   const ctx = {
     get(name) { return { webServer, connection, jobs }[name]; },
     on(name, handler) { return register(name, handler); },
@@ -124,13 +126,28 @@ test('a live tool/call is the authoritative question source and closes on its ow
   await waitUntil(() => records().some((record) => record.mergeKey === 'question:question-session:call-2'));
   assert.equal(records().find((record) => record.mergeKey === 'question:question-session:call-2').kind, 'plan-review');
 
-  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { content: [{ type: 'tool-result', toolCallId: 'call-2' }] } } });
+  // DSH 0.1.7 flattened the result onto the tool-role message: `message.toolCallId` is the link.
+  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { toolCallId: 'call-2', isError: false } } });
   await waitUntil(() => records().find((record) => record.mergeKey === 'question:question-session:call-2').phase === 'settled');
   assert.equal(records().find((record) => record.mergeKey === 'question:question-session:call-1').phase, 'open', 'a reverse result must not close the other call');
   // An uncorrelated result can never close anything.
-  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { content: [{ type: 'tool-result' }] } } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { content: [{ type: 'text', text: 'no call id here' }] } } });
   await settle();
   assert.equal(records().find((record) => record.mergeKey === 'question:question-session:call-1').phase, 'open');
+  // A failed result settles as an abort.
+  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { toolCallId: 'call-1', isError: true } } });
+  await waitUntil(() => records().find((record) => record.mergeKey === 'question:question-session:call-1').phase === 'expired');
+  assert.equal(records().find((record) => record.mergeKey === 'question:question-session:call-1').outcome, 'abort');
+  await runtime();
+});
+
+test('a pre-0.1.7 nested tool-result block still closes its interaction', async (t) => {
+  const { listeners, records, runtime } = await fixture(t);
+  const session = { id: 'legacy-result-session', header: {} };
+  listeners.get('session/event')(session, { type: 'tool/call', data: { callId: 'legacy-1', name: 'ask_user_question', arguments: '{}' } });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'question:legacy-result-session:legacy-1'));
+  listeners.get('session/event')(session, { type: 'tool/result', data: { message: { content: [{ type: 'tool-result', toolCallId: 'legacy-1' }] } } });
+  await waitUntil(() => records().find((record) => record.mergeKey === 'question:legacy-result-session:legacy-1').phase === 'settled');
   await runtime();
 });
 
@@ -327,7 +344,7 @@ test('an interactive pause and its post-decision work yield one completion notif
   const agent = { session };
   listeners.get('agent/status')({ agent, status: 'running' });
   listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 10, callId: 'review-1', name: 'exit_plan_mode', arguments: '{}' } });
-  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 10, message: { content: [{ type: 'tool-result', toolCallId: 'review-1' }] } } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 10, message: { toolCallId: 'review-1', isError: false } } });
   listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 10, reason: { kind: 'completed' } } });
   listeners.get('agent/status')({ agent, status: 'idle' });
   await settle();
@@ -348,7 +365,7 @@ test('an answered ordinary question that directly ends work still announces one 
   const agent = { session };
   listeners.get('agent/status')({ agent, status: 'running' });
   listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 12, callId: 'question-1', name: 'ask_user_question', arguments: '{}' } });
-  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 12, message: { content: [{ type: 'tool-result', toolCallId: 'question-1' }] } } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 12, message: { toolCallId: 'question-1', isError: false } } });
   listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 12, reason: { kind: 'completed' } } });
   listeners.get('agent/status')({ agent, status: 'idle' });
   await waitUntil(() => records().some((record) => record.mergeKey === 'turn:question-finishes-session:12'));
@@ -391,11 +408,13 @@ test('/config only adopts the settings this version has, whatever the file on di
   await runtime();
 });
 
-test('the job registry is reached through ctx.inject, since a reflective read is not guaranteed', async (t) => {
+test('the job registry is reached through ctx.inject, and 0.1.7 is read through its event stream', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-jobs-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const listeners = new Map();
-  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => listeners.delete('job/done'); } };
+  const filters = [];
+  // DSH 0.1.7: one lifecycle stream; the terminal event is `settled` and carries the JobView.
+  const jobs = { events: { subscribe(filter, handler) { filters.push(filter); listeners.set('job/settled', handler); return () => listeners.delete('job/settled'); } } };
   const routes = new Map();
   // A real Cordis profile context: services are declared, not readable as plain properties.
   const ctx = {
@@ -406,20 +425,54 @@ test('the job registry is reached through ctx.inject, since a reflective read is
     emit() {},
   };
   const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0, webServer: undefined });
-  assert.equal(runtime.diagnostics.services.jobs, 'injected', 'the injected seam is the one that takes');
+  assert.equal(runtime.diagnostics.services.jobs, 'events', 'the injected seam is the one that takes');
+  assert.deepEqual(filters, [{ owners: 'all' }], 'a profile-level mount must observe every owner');
+
+  const settled = (job, over = {}) => listeners.get('job/settled')({ type: 'settled', job, cause: 'producer', awaited: false, ...over });
 
   // Off by default: a background job finishing is not news.
-  listeners.get('job/done')({ id: 'job-off', status: 'completed', label: 'pnpm build', ownerSession: 's1' }, { session: { id: 's1' } });
+  settled({ id: 'job-off', kind: 'bash', status: 'completed', label: 'pnpm build', owner: 's1' });
   await settle();
   assert.equal(runtime.buffer.size, 0, 'subtask noise stays off until the user asks for it');
 
   runtime.preferences.set({ subtaskNotify: true });
-  listeners.get('job/done')({ id: 'job-1', status: 'completed', label: 'pnpm build', ownerSession: 'session-1' }, { session: { id: 'session-1' } });
+  settled({ id: 'job-1', kind: 'bash', status: 'completed', label: 'pnpm build', owner: 'session-1' });
   await waitUntil(() => runtime.buffer.size >= 1);
-  const [record] = runtime.buffer.pull().items;
+  const first = runtime.buffer.pull();
+  const [record] = first.items;
   assert.equal(record.kind, 'job-end'); assert.equal(record.title, '后台任务结束'); assert.equal(record.body, 'pnpm build');
   assert.equal(record.sessionId, 'session-1', 'the notification knows which session the job belonged to');
+
+  // A settlement that released a waiting caller was already handed to that caller, so it is not news.
+  settled({ id: 'job-awaited', kind: 'bash', status: 'completed', label: 'pnpm test', owner: 'session-1' }, { awaited: true });
+  await settle();
+  assert.deepEqual(runtime.buffer.pull({ since: first.seq }).items, [], 'an awaited settlement must not raise a second card');
+
+  // Only the terminal event is a notification: progress and registration are not.
+  for (const type of ['registered', 'progress', 'stopping', 'removed', 'output']) listeners.get('job/settled')({ type, id: 'job-x', job: { id: 'job-x', status: 'running' } });
+  await settle();
+  assert.deepEqual(runtime.buffer.pull({ since: first.seq }).items, [], 'a non-settled job event never becomes a card');
   void routes;
+});
+
+test('a pre-0.1.7 registry still reports through onJobDone', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-jobs-legacy-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const listeners = new Map();
+  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => listeners.delete('job/done'); } };
+  const ctx = {
+    inject(names, callback) { if (names.includes('jobs')) callback({ jobs }); return () => {}; },
+    get() { return undefined; },
+    on() { return () => {}; },
+    effect(setup) { return setup(); },
+    emit() {},
+  };
+  const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0, webServer: undefined });
+  assert.equal(runtime.diagnostics.services.jobs, 'onJobDone', 'the older listener is the fallback, not the primary');
+  runtime.preferences.set({ subtaskNotify: true });
+  listeners.get('job/done')({ id: 'job-legacy', status: 'completed', label: 'pnpm build', ownerSession: 's1' }, { session: { id: 's1' } });
+  await waitUntil(() => runtime.buffer.size >= 1);
+  assert.equal(runtime.buffer.pull().items[0].sessionId, 's1');
 });
 
 test('a composition with no job registry says so instead of failing silently', async (t) => {
@@ -434,12 +487,12 @@ test('a plain test double still resolves the registry reflectively', async (t) =
   const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-reflect-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const listeners = new Map();
-  const jobs = { onJobDone(handler) { listeners.set('job/done', handler); return () => {}; } };
+  const jobs = { events: { subscribe(_filter, handler) { listeners.set('job/settled', handler); return () => {}; } } };
   const ctx = { get(name) { return name === 'jobs' ? jobs : undefined; }, on() { return () => {}; }, effect(setup) { return setup(); }, emit() {} };
   const runtime = await apply(ctx, { dataDir: dir, completionGraceMs: 0 });
   assert.equal(runtime.diagnostics.services.jobs, 'reflected');
   runtime.preferences.set({ subtaskNotify: true });
-  listeners.get('job/done')({ id: 'job-2', status: 'failed', label: 'go test ./...', ownerSession: 's2' }, undefined);
+  listeners.get('job/settled')({ type: 'settled', cause: 'producer', awaited: false, job: { id: 'job-2', kind: 'bash', status: 'failed', label: 'go test ./...', owner: 's2' } });
   await waitUntil(() => runtime.buffer.size >= 1);
   assert.equal(runtime.buffer.pull().items[0].kind, 'job-end');
   assert.equal(runtime.buffer.pull().items[0].title, '后台任务失败');

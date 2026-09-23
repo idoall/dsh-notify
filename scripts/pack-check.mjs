@@ -7,6 +7,50 @@ for (const file of required) await access(file);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
 if (manifest.main !== './dist/index.js' || manifest.exports?.['./client'] !== './dist/client.js') throw new Error('package exports do not expose Host and client builds');
 if (manifest.dsh?.client?.platform !== 'web' || manifest.dsh?.bundle?.patch !== './cordis.patch.yml') throw new Error('missing dsh client/bundle declarations');
+// DSH 0.1.7 refuses an incompatible bundle at profile load, and dshmarket derives its host verdict from
+// `engines.dsh` plus every `@deepseek-ai/dsh-*` peer, so these declarations decide whether the plugin
+// loads at all. Keep one requirement, stated once, and let the verified list name only releases the
+// requirement admits.
+if (manifest.dsh?.manifestVersion !== 1) throw new Error('dsh.manifestVersion must be 1');
+const dshRange = manifest.dsh?.engines?.dsh;
+if (typeof dshRange !== 'string' || !/^>=\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)? <\d+\.\d+\.\d+$/.test(dshRange)) {
+  throw new Error(`dsh.engines.dsh must be a ">=<version> <<version>" requirement, received ${JSON.stringify(dshRange)}`);
+}
+const [, floor, ceiling] = /^>=(\S+) <(\S+)$/.exec(dshRange);
+const dshPeers = Object.entries(manifest.peerDependencies ?? {}).filter(([name]) => /^@deepseek-ai\/dsh(?:-|$)/.test(name));
+if (dshPeers.length === 0) throw new Error('no @deepseek-ai/dsh-* peer declares the running host the plugin binds to');
+for (const [name, range] of dshPeers) if (range !== dshRange) throw new Error(`peer ${name} is ${range} but dsh.engines.dsh is ${dshRange}; one requirement, one statement`);
+const verified = manifest.dsh?.compatibility?.dshReleases;
+if (verified === null || typeof verified !== 'object' || Array.isArray(verified) || Object.keys(verified).length === 0) {
+  throw new Error('dsh.compatibility.dshReleases must name at least one verified release');
+}
+const rank = (version) => {
+  const [, major, minor, patch, pre = ''] = /^(\d+)\.(\d+)\.(\d+)(-.+)?$/.exec(version) ?? [];
+  if (major === undefined) throw new Error(`dsh.compatibility.dshReleases has a non-semver key ${JSON.stringify(version)}`);
+  // A release with a prerelease tag sorts below the same release without one.
+  return [Number(major), Number(minor), Number(patch), pre === '' ? 1 : 0, pre];
+};
+const compare = (left, right) => {
+  const [a, b] = [rank(left), rank(right)];
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] === b[index]) continue;
+    return a[index] > b[index] ? 1 : -1;
+  }
+  return 0;
+};
+for (const [release, verdict] of Object.entries(verified)) {
+  if (verdict !== 'compatible') throw new Error(`dsh.compatibility.dshReleases lists ${release} as ${JSON.stringify(verdict)}; only a verified release is declared`);
+  if (compare(release, floor) < 0 || compare(release, ceiling) >= 0) throw new Error(`dsh.compatibility.dshReleases names ${release}, which dsh.engines.dsh ${dshRange} does not admit`);
+}
+const releases = Object.keys(verified);
+const lowest = releases.reduce((minimum, release) => (compare(release, minimum) < 0 ? release : minimum));
+if (lowest !== floor) throw new Error(`the lowest verified release must be the dsh.engines.dsh floor ${floor}, received ${lowest}`);
+// `@deepseek-ai/schemastery` is a peer, not a plain dependency: DSH 0.1.7 resolves only a linked plugin's
+// peer dependencies from the running installation, so a `link:` install would otherwise fail to import the
+// Host half. The devDependency copy serves this repository's own tests.
+if (manifest.dependencies?.['@deepseek-ai/schemastery'] !== undefined) throw new Error('@deepseek-ai/schemastery must not be a plain dependency');
+if (manifest.peerDependencies?.['@deepseek-ai/schemastery'] === undefined) throw new Error('@deepseek-ai/schemastery must be a peer');
+if (manifest.devDependencies?.['@deepseek-ai/schemastery'] === undefined) throw new Error('@deepseek-ai/schemastery needs a devDependency for this repository\'s tests');
 // Publishing preconditions. npm OIDC validates repository.url against the GitHub
 // repository and a scoped package needs public access.
 if (manifest.private === true || manifest.publishConfig?.access !== 'public') throw new Error('manifest is not publishable as a public scoped package');

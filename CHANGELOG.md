@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-24
+
+### Changed
+
+- **Adapted to DeepSeek Harness `0.1.7-rc.1`.** Background-job completions now subscribe to the consolidated `jobs.events` stream (`settled`, unawaited only) instead of the removed `onJobDone` listener. Tool-result settlement reads `message.toolCallId` / `message.isError` on the flattened tool-role message. In-toast answers read the unified `uiSession.sessionStatus` snapshot, where the answerable interaction is nested under `pendingInteraction`.
+- **Declared DSH compatibility as a load-time requirement.** `dsh.manifestVersion`, `dsh.engines.dsh`, and every `@deepseek-ai/dsh-*` peer now state `>=0.1.7-rc.1 <0.2.0`, so DSH 0.1.7-rc.1 can refuse an incompatible bundle at profile load. `@deepseek-ai/schemastery` moves from a plain dependency to a peer (with a matching devDependency) so a `link:` install resolves it from the running installation.
+
+### Verified
+
+- Host jobs coverage confirms the 0.1.7 event stream, awaited settlements stay silent, and the pre-0.1.7 `onJobDone` listener remains a fallback.
+- Flattened `tool/result` messages close the matching interaction; a nested pre-0.1.7 `tool-result` block still does.
+- Client pending-interaction coverage reads both the 0.1.7 Session status snapshot and the older map.
+- Live `link:` install on DSH `0.1.7-rc.1` hot-mounted without restarting: Host routes answered, the client bundle registered, **Settings → Notifications** rendered, and a four-tone self-test produced the collapsed overlay stack above the settings modal.
+- Full verification passed: static source checks, **86 automated tests**, build, and package precondition checks.
+
 ## [0.3.2] - 2026-09-20
 
 ### Fixed

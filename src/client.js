@@ -923,10 +923,20 @@ export function sessionLabel(sessions, sessionId) {
  * open (the host settled it, seen through a pull), or this page watched it wait and the official
  * pending interaction is gone (answered in the composer, another browser or the official modal).
  * Never on an empty pending map alone — before the interaction arrives that means "not yet".
+ *
+ * DSH 0.1.7 publishes the pending interaction through the unified Session status snapshot, where each
+ * value nests its domain's own interaction object under `pendingInteraction`; the older
+ * `uiSession.pendingInteractions` map held that object directly. Both shapes are read, because the
+ * caller only needs the interaction itself.
  */
 export function pendingInteractionFor(pending, sessionId) {
   if (!pending || typeof pending.get !== 'function' || typeof sessionId !== 'string') return null;
-  return pending.get(sessionId) ?? null;
+  const entry = pending.get(sessionId) ?? null;
+  if (!entry) return null;
+  // A Session status always carries the `pendingInteraction` key (possibly undefined); the pre-0.1.7 map
+  // held the answerable interaction object itself.
+  if ('pendingInteraction' in entry) return entry.pendingInteraction ?? null;
+  return typeof entry.answer === 'function' ? entry : null;
 }
 /**
  * A 360px toast can only answer honestly when the request is ONE single-select question with a
@@ -1031,8 +1041,12 @@ export function mountNotifyClient({ slots, sessions, uiWorkspace, getSessions, g
   const status = { service: slots?.inject && slots?.register ? 'available' : 'unavailable', seats: {} };
   if (status.service === 'unavailable') return { status, destroy() {} };
   // Resolved lazily: the host may not expose the question surface at all, and the toast degrades to
-  // "go to the session" without it.
-  const pendingInteractions = () => getUiSession?.()?.pendingInteractions;
+  // "go to the session" without it. DSH 0.1.7 moved the answerable interaction into the unified
+  // Session status snapshot; the older dedicated map stays as the fallback for an earlier host.
+  const pendingInteractions = () => {
+    const ui = getUiSession?.();
+    return ui?.sessionStatus ?? ui?.pendingInteractions;
+  };
   const disposers = [installClientStyles(), installAudioUnlock()];
   const activate = (name, options, Component) => { status.seats[name] = 'active'; const dispose = slots.register({ name, ...options }, Component); return () => { status.seats[name] = 'waiting'; dispose?.(); }; };
   status.seats['settings.section'] = 'waiting';
