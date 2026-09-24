@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-24
+
 ### Fixed
 
 - **A failure is announced when DSH reports it.** `agent/error` used to only remember the message for the `turn/end` that was expected to follow, so a failure whose turn never ended was never announced at all. The failure now becomes a card at the error itself, and the `turn/end` that does follow derives a record with the same `fail:<session>:<turn>` identity, so it updates that card rather than adding a second one. A subagent failure stays as quiet as a subagent completion.
