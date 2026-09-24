@@ -338,6 +338,75 @@ test('a lifecycle-capable host announces completion only after the native agent 
   await runtime();
 });
 
+test('work that resumes in the same stack is not announced as a finished task', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'flap-session', header: {} };
+  const agent = { session };
+  const status = listeners.get('agent/status');
+  const event = listeners.get('session/event');
+
+  status({ agent, status: 'running' });
+  event(session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } });
+  // DSH publishes the idle transition and resumes queued work in the same synchronous stack. Nothing
+  // may be announced for the turn that just ended: the task is still running.
+  status({ agent, status: 'idle' });
+  status({ agent, status: 'running' });
+  await settle();
+  assert.equal(records().some((record) => record.mergeKey === 'turn:flap-session:1'), false, 'a task that never stopped is not a finished task');
+
+  event(session, { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } });
+  status({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:flap-session:2'));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'the turn that really ends last is announced once');
+  await runtime();
+});
+
+test('a failure is announced when DSH reports it, even if its turn never ends', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'error-without-end', header: {} };
+  const agent = { session };
+
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('agent/error')({ agent, turn: 1, error: new Error('boom') });
+  await waitUntil(() => records().length === 1);
+  const [card] = records();
+  assert.deepEqual(
+    { kind: card.kind, mergeKey: card.mergeKey, body: card.body, outcome: card.outcome },
+    { kind: 'failed', mergeKey: 'fail:error-without-end:1', body: 'boom', outcome: 'error' },
+    'the failure is delivered on the error itself, before any turn/end is known',
+  );
+  await runtime();
+});
+
+test('a failure whose turn does end stays one card', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'error-with-end', header: {} };
+  const agent = { session };
+
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('agent/error')({ agent, turn: 1, error: new Error('boom') });
+  await waitUntil(() => records().length === 1);
+  const { eventId } = records()[0];
+
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'error', error: { message: 'boom' } } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await settle();
+  await settle();
+  assert.equal(records().length, 1, 'the turn/end is an update of the card the error already delivered, not a second one');
+  assert.equal(records()[0].eventId, eventId, 'and the card keeps the identity the page has already toasted');
+  await runtime();
+});
+
+test('a subtask failure stays as quiet as a subtask completion', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'sub-error', header: { origin: 'subagent' } };
+
+  listeners.get('agent/error')({ agent: { session }, turn: 1, error: new Error('boom') });
+  await settle();
+  assert.equal(records().length, 0, 'a subagent failure is not a task failure the user asked about');
+  await runtime();
+});
+
 test('an interactive pause and its post-decision work yield one completion notification', async (t) => {
   const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
   const session = { id: 'one-task-session', header: {} };

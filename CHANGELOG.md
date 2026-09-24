@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-24
+
+### Fixed
+
+- **A failure is announced when DSH reports it.** `agent/error` used to only remember the message for the `turn/end` that was expected to follow, so a failure whose turn never ended was never announced at all. The failure now becomes a card at the error itself, and the `turn/end` that does follow derives a record with the same `fail:<session>:<turn>` identity, so it updates that card rather than adding a second one. A subagent failure stays as quiet as a subagent completion.
+- **Work that resumes in the same stack is no longer announced as a finished task.** DSH publishes `agent/status: idle` and resumes queued work in the same synchronous stack. Because every `session/event` is also handled one microtask later, the idle flush found the candidate the preceding `turn/end` had just registered and announced a task that never stopped — the `running` that cancelled it had already run. The flush now re-checks that the session is still `idle` when it runs, so the cancellation wins with no debounce window and no added latency.
+- **A card no longer waits for the next tick when the page already knows better.** The client nudges an immediate `/pull` when `sessions.list` or the Session status snapshot changes (leading-edge throttled to one nudge per 200 ms), and catches up on the spot when a hidden tab becomes visible again; the 1.5 s interval stays as the fallback. A late response can no longer move the delivery cursor backwards.
+
+### Verified
+
+- A same-stack `idle -> running` flap emits no completion card, and the turn that really ends last is announced exactly once.
+- A failure with no following `turn/end` is delivered on the error itself; a failure whose turn does end stays one card with one identity; a subagent failure stays silent.
+- Client coverage counts `/pull` requests: both session-store edges and the visible-again edge pull without the interval running.
+- All five behaviour tests were confirmed to fail against the previous implementation before the fix was restored.
+- Full verification passed: static source checks, **92 automated tests**, build, and package precondition checks.
+
 ## [0.3.3] - 2026-09-24
 
 ### Changed

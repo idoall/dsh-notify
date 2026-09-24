@@ -355,7 +355,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
  */
 async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = null } = {}) {
   const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' });
-  let root; let mounted; let pullTimer; let primed = false; let feed = [];
+  let root; let mounted; let pullTimer; let primed = false; let feed = []; let pulls = 0;
   const listeners = new Set(); let pendingMap = new Map();
   const observable = { getSnapshot: () => pendingMap, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); } };
   const values = {
@@ -366,6 +366,7 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
     setInterval: (fn) => { pullTimer = fn; return 1; }, clearInterval: () => {},
     fetch: async (url) => {
       if (!String(url).includes('/pull?')) return response({ ok: true });
+      pulls += 1;
       if (!primed) { primed = true; return response(host === 'legacy' ? { epoch: 1, cursor: 0, reset: true, items: [] } : { seq: 0, items: [] }); }
       // 'legacy': the pre-buffer host answers the old cursor protocol and re-sends everything, with no
       // sequence to advance. 'duplicate': a host whose sequence never moves, so it repeats itself too.
@@ -417,6 +418,8 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
     wait,
     nodes,
     count: () => nodes().length,
+    /** How many `/pull` requests this page has made — the only way to see a nudge without running the tick. */
+    pulls: () => pulls,
     titles: () => nodes().map((node) => node.querySelector('.dsh-notify-toast-title')?.textContent),
     transforms: () => slotsOf().map((node) => node.style.transform),
     statuses: () => nodes().map((node) => node.getAttribute('data-status')),
@@ -549,6 +552,36 @@ test('a notification that arrived in a background tab is still waiting when the 
   assert.equal(sandbox.count(), 1, 'coming back to the tab finds it waiting');
   await sandbox.wait(1200);
   assert.equal(sandbox.count(), 1, 'and looking at it is not a dismissal either');
+});
+
+test('a session state change pulls at once instead of waiting for the next tick', async (t) => {
+  const listListeners = new Set();
+  const sessions = { list: { subscribe: (listener) => { listListeners.add(listener); return () => listListeners.delete(listener); }, getSnapshot: () => ({ current: undefined, byId: {} }) } };
+  const sandbox = await mountStackSandbox(t, { sessions });
+
+  // The pending-interaction store (the 0.1.7 Session status snapshot) is the edge an approval or a
+  // question arrives on. It must not wait up to a tick and a half for the poll to come round.
+  const afterStatus = sandbox.pulls();
+  sandbox.publish([['s1', { kind: 'approval', id: 'a1' }]]);
+  await sandbox.wait(30);
+  assert.ok(sandbox.pulls() > afterStatus, 'the interaction edge pulled on its own');
+
+  // The session list is the edge a completion arrives on. Nudges are throttled, so let the first
+  // window close before asking the second store for its own pull.
+  await sandbox.wait(250);
+  const afterList = sandbox.pulls();
+  for (const listener of listListeners) listener();
+  await sandbox.wait(30);
+  assert.ok(sandbox.pulls() > afterList, 'the session-list edge pulled on its own');
+});
+
+test('returning to a visible tab pulls at once', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  await sandbox.setHidden(true);
+  const before = sandbox.pulls();
+  await sandbox.setHidden(false);
+  await sandbox.wait(30);
+  assert.ok(sandbox.pulls() > before, 'a hidden page may have missed messages, so it catches up on the spot');
 });
 
 test('a legacy host that re-sends its whole buffer cannot make a card flash and vanish', async (t) => {

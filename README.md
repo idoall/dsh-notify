@@ -93,11 +93,12 @@ Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, n
 
 ## Compatibility
 
-Current release: plugin **`0.3.3`** is verified against DeepSeek Harness **`0.1.7-rc.1`**.
+Current release: plugin **`0.3.4`** is verified against DeepSeek Harness **`0.1.7-rc.1`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
-| **`0.3.3`** | `0.1.7-rc.1` | Adapts to DSH 0.1.7: job completions follow `jobs.events.subscribe`, tool results read the flattened tool-role message, in-toast answers read `uiSession.sessionStatus`, and `@deepseek-ai/schemastery` is a peer |
+| **`0.3.4`** | `0.1.7-rc.1` | Trigger-timing fixes: a failure is delivered at `agent/error` (one card with `turn/end`), a same-stack `idle → running` flap no longer announces a finished task, and the client pulls at once on a session-state change or a visible-again tab (1.5 s interval kept as fallback) |
+| `0.3.3` | `0.1.7-rc.1` | Adapts to DSH 0.1.7: job completions follow `jobs.events.subscribe`, tool results read the flattened tool-role message, in-toast answers read `uiSession.sessionStatus`, and `@deepseek-ai/schemastery` is a peer |
 | `0.3.2` | `0.1.6-alpha.1` | Completion follows native `agent/status: idle`; one green card per continuous task |
 | `0.3.1` | `0.1.6-alpha.1` | Sound matches visible delivery; open interactions recover after overlay remount |
 | `0.3.0` | `0.1.6-alpha.1` | Enhanced/soft styles, collapsed stack, and page-local self-test |
@@ -139,7 +140,7 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.3.3
+git tag v0.3.4
 git push origin v0.3.3
 ```
 

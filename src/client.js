@@ -363,11 +363,16 @@ function mergeRecords(previous, items) {
 /** How many delivered records a page keeps: the stack shows five, and a record can be updated in place. */
 const RECORD_MEMORY = 60;
 /**
+ * Minimum gap between two store-driven pulls. The first change pulls immediately — that is the whole
+ * point — while a burst behind it waits for the interval rather than hammering the host.
+ */
+const NUDGE_GAP_MS = 200;
+/**
  * The whole transport: ask the host for everything after the sequence this page already has. The first
  * poll is a snapshot of whatever is still buffered, and the toast layer treats that snapshot as
  * history it was not there for — so loading the page never replays a pile of old notifications.
  */
-function useNotificationState() {
+function useNotificationState({ sessions, pendingInteractions } = {}) {
   const [state, setState] = React.useState({ records: [], seq: 0, primed: false, offline: false, revision: 0 });
   const warned = React.useRef(false);
   React.useEffect(() => {
@@ -388,12 +393,34 @@ function useNotificationState() {
           globalThis.console?.warn?.('[dsh-notify] the host did not report a delivery sequence — restart DSH so the current plugin is loaded; until then this page only sees records it has not seen before.');
         }
         const seq = Number.isSafeInteger(data?.seq) ? data.seq : state.seq;
-        setState((old) => ({ records: mergeRecords(old.records, Array.isArray(data?.items) ? data.items : []), seq, primed: true, offline: false, revision: old.revision + 1 }));
+        // Nudged pulls can overlap a tick, and a slow answer must never move the cursor backwards:
+        // that would hand this page records it was already given.
+        setState((old) => ({ records: mergeRecords(old.records, Array.isArray(data?.items) ? data.items : []), seq: Math.max(old.seq, seq), primed: true, offline: false, revision: old.revision + 1 }));
       } catch { if (alive) setState((old) => ({ ...old, offline: true })); }
     };
     pull(); const timer = setInterval(pull, 1500);
-    return () => { alive = false; clearInterval(timer); };
-  }, [state.seq]);
+    // The host owns the record, but this page already learns that session state changed before the
+    // next tick. Nudging a pull on those edges is what removes the up-to-1.5s wait for a card; the
+    // interval above stays as the fallback for everything a page never observes. Nudges are
+    // leading-edge throttled because `sessions.list` updates on every activity, and a pull per
+    // update would trade our idle interval for a busy loop.
+    let lastNudge = 0;
+    const nudge = () => {
+      const now = Date.now();
+      if (now - lastNudge < NUDGE_GAP_MS) return;
+      lastNudge = now;
+      void pull();
+    };
+    const offList = sessions?.list?.subscribe?.(nudge);
+    const offStatus = pendingInteractions?.subscribe?.(nudge);
+    const onVisible = () => { if (!globalThis.document?.hidden) void pull(); };
+    globalThis.document?.addEventListener?.('visibilitychange', onVisible);
+    return () => {
+      alive = false; clearInterval(timer);
+      offList?.(); offStatus?.();
+      globalThis.document?.removeEventListener?.('visibilitychange', onVisible);
+    };
+  }, [state.seq, sessions, pendingInteractions]);
   return state;
 }
 export function toastOrder(records = []) { return [...records.filter((record) => record?.phase === 'open'), ...records.filter((record) => record?.phase !== 'open')]; }
@@ -612,7 +639,7 @@ export function stackWindow({ heights = [], visible = TOAST_STACK_VISIBLE, gap =
   return { total: list.length, hidden, windowHeight: windowHeight + (hidden > 0 ? peek : 0), contentHeight: sum(list), overflow: hidden > 0 };
 }
 function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
-  const state = useNotificationState(); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [expanded, setExpanded] = React.useState(false); const [forcedCollapsed, setForcedCollapsed] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
+  const state = useNotificationState({ sessions, pendingInteractions }); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [expanded, setExpanded] = React.useState(false); const [forcedCollapsed, setForcedCollapsed] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);

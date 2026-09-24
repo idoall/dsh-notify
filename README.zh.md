@@ -93,11 +93,12 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布：插件 **`0.3.3`** 已在 DeepSeek Harness **`0.1.7-rc.1`** 上验证。
+当前发布：插件 **`0.3.4`** 已在 DeepSeek Harness **`0.1.7-rc.1`** 上验证。
 
 | 插件 | 已验证的 DeepSeek Harness | 这一版是什么 |
 | --- | --- | --- |
-| **`0.3.3`** | `0.1.7-rc.1` | 适配 DSH 0.1.7：后台任务完成走 `jobs.events.subscribe`，工具结果读取扁平化后的 tool-role 消息，卡片内回答读取 `uiSession.sessionStatus`，`@deepseek-ai/schemastery` 改为 peer |
+| **`0.3.4`** | `0.1.7-rc.1` | 触发时序修复：失败在 `agent/error` 时即投递（与 `turn/end` 共用同一张卡）、同栈 `idle → running` 抖动不再误报完成、客户端在会话状态变化与标签页重新可见时立即拉取（保留 1.5s 兜底） |
+| `0.3.3` | `0.1.7-rc.1` | 适配 DSH 0.1.7：后台任务完成走 `jobs.events.subscribe`，工具结果读取扁平化后的 tool-role 消息，卡片内回答读取 `uiSession.sessionStatus`，`@deepseek-ai/schemastery` 改为 peer |
 | `0.3.2` | `0.1.6-alpha.1` | 完成通知跟随原生 `agent/status: idle`；连续任务只发一张绿色卡 |
 | `0.3.1` | `0.1.6-alpha.1` | 提示音与可见投递对齐；浮层重挂载后恢复未处理交互 |
 | `0.3.0` | `0.1.6-alpha.1` | 增强/柔和样式、折叠堆叠、页内自测 |
@@ -139,7 +140,7 @@ npm run pack:check # 发布前置条件 + 客户端注册校验
 发版由 tag 驱动。更新 `package.json`、将对应 CHANGELOG 段落移出 `Unreleased`、编写 `release-notes/v<版本>.md` 后，推送发版提交与 tag：
 
 ```sh
-git tag v0.3.3
+git tag v0.3.4
 git push origin v0.3.3
 ```
 
