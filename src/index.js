@@ -318,7 +318,13 @@ export async function apply(ctx, config = {}) {
     statusCapable.add(sessionId);
     agentStatuses.set(sessionId, status);
     if (status === 'running') { cancelCompletion(sessionId); return; }
-    safely(() => flushCompletion(sessionId));
+    // Re-check the status when the deferred flush actually runs. Every `session/event` is handled
+    // through `safely` too, so a synchronous `idle -> running` flap — DSH resumes queued work in the
+    // same stack right after the idle transition — queues this flush BEFORE the turn/end handler has
+    // registered its candidate. The flush would then find that candidate and announce a task that
+    // never stopped, because the `running` that cancelled it had already run. Reading the current
+    // status here is what makes that cancellation win, with no debounce window and no added latency.
+    safely(() => { if (agentStatuses.get(sessionId) === 'idle') return flushCompletion(sessionId); });
   });
 
   ctx?.on?.('session/event', (session, event) => {
@@ -420,7 +426,22 @@ export async function apply(ctx, config = {}) {
       async (error) => { await bounded(() => settle(signal?.aborted || error?.code === 'ASK_ABORTED' ? 'abort' : 'error'), 10_000); throw error; },
     ).finally(() => signal?.removeEventListener?.('abort', abort));
   });
-  ctx?.on?.('agent/error', ({ agent, turn, error }) => { pendingErrors.set(`${sessionIdOf(agent)}:${turn}`, error); });
+  /**
+   * A failure is announced when DSH reports it, not when a later `turn/end` happens to arrive.
+   * `turn/end` was the only path before, so a failure whose turn never ended was never announced at
+   * all. The immediate record and the one `turn/end` derives (reason `error`) share the mergeKey
+   * `fail:<session>:<turn>`, so the second arrival updates the same card instead of adding one — and
+   * the error message is still carried onto that update through `pendingErrors`.
+   *
+   * A subtask failure stays as quiet as a subtask completion: `turn/end` already skips subagents.
+   */
+  ctx?.on?.('agent/error', ({ agent, turn, error }) => {
+    const sessionId = sessionIdOf(agent);
+    if (typeof sessionId !== 'string' || sessionId === '') return;
+    pendingErrors.set(`${sessionId}:${turn}`, error);
+    if (originOf(agent?.session) === 'subagent') return;
+    safely(() => dispatch(reducer.agentError({ sessionId, turn, error: error ?? '', message: error?.message })));
+  });
   // v1 user preference: subagent completion is intentionally silent. Keep the
   // historical kind schema for stored legacy records, but do not create records
   // or dispatch A/B/C/D for new subagent/end events.
