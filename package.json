@@ -65,7 +65,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/schemastery": "^3.18.4",
-    "@types/node": "^22.15.29",
+    "@types/node": "^26.6.2",
     "@types/react": "^18.3.23",
     "esbuild": "^0.25.5",
     "jsdom": "^26.1.0",
