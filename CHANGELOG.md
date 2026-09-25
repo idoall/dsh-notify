@@ -2,7 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
-## [Unreleased]
+## [0.4.0] - 2026-09-25
+
+### Added
+
+- **Online version detection in 设置 → 通知.** The settings page now shows the running version against the newest one published on npm, next to **检查更新**, GitHub, 更新日志 and 反馈 Issue — the same row the reference settings page offers. The host reads the registry through the authenticated, read-only `GET /plugins/dsh-notify/update` (six-hour cache; `?force=1` is what the button uses), compares versions with its own ~30 lines of semver arithmetic instead of adding a dependency, and never installs anything or restarts DSH: when a newer version exists the page reveals a copyable `dsh plugin --profile web add @idoall/dsh-notify@<version>` command and states that the restart is the operator's to do. An unreachable or malformed registry renders as `v<current> · 检查失败` — it never presents the running version as the newest, and a failed lookup is cached so an offline host is not asked on every page load.
+
+### Verified
+
+- Version ordering is covered for releases, prereleases (`rc.1` < `rc.2` < `rc.10` < release), build metadata, and an unparsable string that must compare as equal rather than claim an update.
+- The route reports the version read from the shipped manifest, reuses the cache on a plain reload, bypasses it on `force=1`, stays behind the auth gate (a refused request never reaches the registry), and answers `registry_unavailable` instead of failing when the registry is down.
+- The settings row is covered in jsdom: the chip wording and tone for newest/available/failed, the three repository links, the upgrade panel appearing only when there is something to install, and a clipboard-less browser reporting 复制失败 rather than claiming 已复制.
+- Full verification passed: static source checks, **108 automated tests**, build, and package precondition checks.
+- **Real-machine verification** in an isolated `DSH_HOME` under `/tmp` (the user's profile is never touched), with the plugin installed as `link:` and DSH `0.1.7-rc.2` booted: `/plugins/dsh-notify/health` answered `guiAvailable: true`, `/plugins/dsh-notify/update` returned `{"current":"0.4.0","latest":"0.3.4","hasUpdate":false,"error":null}` from the real npm registry — an older publish is correctly *not* an update, and `?force=1` produced a second real lookup — and the settings page rendered `v0.4.0 ✓ 最新` with the three repository links and no upgrade panel.
 
 ## [0.3.4] - 2026-09-24
 

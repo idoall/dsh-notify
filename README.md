@@ -37,6 +37,7 @@ When a session really stops, fails, asks a question, or needs approval, a card a
 - **Sound and background attention.** Built-in WebAudio cues and validated custom uploads play only after a card is admitted to an enabled visual Toast queue, including while the page is hidden. One polling batch produces one cue. A background tab with unseen notifications receives a temporary bell prefix and favicon attention marker.
 - **Completion means native idle, once per task.** A green card waits until DSH reports the owning Agent as `idle`, matching the session-tree spinner instead of guessing from a rendered answer or an elapsed timer. A plan review and an execution approval are control gates, so their temporary idle pause does not create an extra completion card; the later work turn supplies the one card. An ordinary question is different: if its answer directly finishes the task, that same turn still produces one green card. If work resumes, the prior candidate is cancelled and only the final native-idle transition is announced.
 - **Task-noise control.** Subtask, background-job, and workflow completion notifications are off by default.
+- **Online version detection.** The settings page shows the running version against the newest one published on npm, with **Check for updates**, GitHub, Changelog and Issues links. The check is read-only: the host asks the registry, reports, and shows a copyable upgrade command — it never installs anything and never restarts DSH. An unreachable registry renders as a failed check instead of presenting the running version as the newest.
 - **No history by design.** Notification records are held only in the open page's in-memory queue. Settled history is never replayed after a refresh or overlay remount; an interaction that is still open when the host can report it is restored silently.
 
 ## Quick start
@@ -91,13 +92,16 @@ Reload the profile or restart DSH only when its plugin host has not hot-reloaded
 
 Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, not the plugin installation. Uploads are limited to 1 MB and `mp3 / m4a / aac / wav / ogg / flac`; names must be a single path segment.
 
+Above the cards, the page shows the running version against the newest one on npm: `v0.4.0 ✓ 最新`, `v0.4.0 ➔ v0.5.0`, or `v0.4.0 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
+
 ## Compatibility
 
-Current release: plugin **`0.3.4`** is verified against DeepSeek Harness **`0.1.7-rc.1`**.
+Current release: plugin **`0.4.0`** is verified against DeepSeek Harness **`0.1.7-rc.2`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
-| **`0.3.4`** | `0.1.7-rc.1` | Trigger-timing fixes: a failure is delivered at `agent/error` (one card with `turn/end`), a same-stack `idle → running` flap no longer announces a finished task, and the client pulls at once on a session-state change or a visible-again tab (1.5 s interval kept as fallback) |
+| **`0.4.0`** | `0.1.7-rc.2` | Online version detection in 设置 → 通知: the running version against npm's newest, a manual **检查更新** (`?force=1`), repository/changelog/issues links, and a copyable upgrade command — read-only, cached, and it never installs or restarts anything |
+| `0.3.4` | `0.1.7-rc.1` | Trigger-timing fixes: a failure is delivered at `agent/error` (one card with `turn/end`), a same-stack `idle → running` flap no longer announces a finished task, and the client pulls at once on a session-state change or a visible-again tab (1.5 s interval kept as fallback) |
 | `0.3.3` | `0.1.7-rc.1` | Adapts to DSH 0.1.7: job completions follow `jobs.events.subscribe`, tool results read the flattened tool-role message, in-toast answers read `uiSession.sessionStatus`, and `@deepseek-ai/schemastery` is a peer |
 | `0.3.2` | `0.1.6-alpha.1` | Completion follows native `agent/status: idle`; one green card per continuous task |
 | `0.3.1` | `0.1.6-alpha.1` | Sound matches visible delivery; open interactions recover after overlay remount |
@@ -140,8 +144,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.3.4
-git push origin v0.3.3
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.
