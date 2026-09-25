@@ -281,6 +281,7 @@ test('raw routes are exact, check auth before business logic, and the history ro
     'exact:/plugins/dsh-notify/sound',
     'exact:/plugins/dsh-notify/sounds',
     'exact:/plugins/dsh-notify/sounds/delete',
+    'exact:/plugins/dsh-notify/update',
   ], 'only the live transport, the preferences and the sound library remain');
   const pull = routes.get('exact:/plugins/dsh-notify/pull');
   assert.equal((await invoke(pull, request({ path: '/plugins/dsh-notify/pull', headers: { origin: 'http://127.0.0.1:3080', host: '127.0.0.1:3080' } }))).statusCode, 401);
@@ -600,4 +601,55 @@ test('a finished workflow learns which session it belongs to, so its card can ju
   listeners.get('session/event')({ id: 'session-new' }, { type: 'tool-workflow/run-start', data: { runId: 'wf-4', name: 'new' } });
   await end('wf-4', 'new');
   assert.equal(record('wf-4').sessionId, 'session-new');
+});
+
+test('the version route reports what npm has against the running version, and installs nothing', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-update-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const calls = [];
+  // A publish that is unambiguously newer than whatever this repository currently ships, so bumping
+  // the version never turns this test into "no update available" by accident.
+  const published = '99.0.0';
+  const registry = async (url) => { calls.push(String(url)); return { ok: true, status: 200, json: async () => ({ version: published }) }; };
+  const { routes, runtime } = await fixture(t, undefined, { dataDir: dir, updateFetch: registry, now: () => 1_700_000_000_000 });
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(runtime.updates.currentVersion, manifest.version, 'the running version is read from the shipped manifest, not hard-coded');
+  const route = routes.get('exact:/plugins/dsh-notify/update');
+  const res = await invoke(route, request({ path: '/plugins/dsh-notify/update', headers: browserHeaders }));
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(JSON.parse(res.body), { ok: true, current: manifest.version, latest: published, hasUpdate: true, checkedAtMs: 1_700_000_000_000, error: null });
+  assert.deepEqual(calls, ['https://registry.npmjs.org/@idoall%2Fdsh-notify/latest'], 'the scoped registry document is the only thing asked');
+  // A plain reload is served from the host cache; only the button's force=1 asks the registry again.
+  await invoke(route, request({ path: '/plugins/dsh-notify/update', headers: browserHeaders }));
+  assert.equal(calls.length, 1, 'the cached answer is reused');
+  const forced = await invoke(route, request({ path: '/plugins/dsh-notify/update?force=1', headers: browserHeaders }));
+  assert.equal(calls.length, 2, '检查更新 bypasses the cache');
+  assert.equal(JSON.parse(forced.body).latest, published);
+  await runtime();
+});
+
+test('the version route stays behind the authenticated gate, and an offline host still answers', async (t) => {
+  const refusedDir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-update-gate-'));
+  const offlineDir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-update-offline-'));
+  t.after(() => rm(refusedDir, { recursive: true, force: true }));
+  t.after(() => rm(offlineDir, { recursive: true, force: true }));
+  let asked = 0;
+  const offline = async () => { asked += 1; throw Object.assign(new Error('offline'), { name: 'TimeoutError' }); };
+
+  const gated = await fixture(t, 401, { dataDir: refusedDir, updateFetch: offline });
+  const refused = await invoke(gated.routes.get('exact:/plugins/dsh-notify/update'), request({ path: '/plugins/dsh-notify/update', headers: browserHeaders }));
+  assert.equal(refused.statusCode, 401);
+  assert.equal(refused.body, 'unauthorized');
+  assert.equal(asked, 0, 'a refused request never reaches the registry');
+  await gated.runtime();
+
+  const open = await fixture(t, undefined, { dataDir: offlineDir, updateFetch: offline });
+  const res = await invoke(open.routes.get('exact:/plugins/dsh-notify/update'), request({ path: '/plugins/dsh-notify/update', headers: browserHeaders }));
+  assert.equal(res.statusCode, 200, 'an unreachable registry is a reported state, not a broken settings page');
+  const status = JSON.parse(res.body);
+  assert.equal(status.error, 'registry_unavailable');
+  assert.equal(status.hasUpdate, false, 'a failed check never claims an update');
+  assert.equal(status.latest, null);
+  assert.equal(status.current, JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version);
+  await open.runtime();
 });
