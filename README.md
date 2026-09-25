@@ -94,6 +94,10 @@ Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, n
 
 Above the cards, the page shows the running version against the newest one on npm: `v0.4.0 ✓ 最新`, `v0.4.0 ➔ v0.5.0`, or `v0.4.0 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
 
+<p align="center">
+  <img src="./assets/version-check.png" width="60%" alt="DSH notification settings with the version row: v0.4.0 newest, Check for updates, GitHub, Changelog and Issues links">
+</p>
+
 ## Compatibility
 
 Current release: plugin **`0.4.0`** is verified against DeepSeek Harness **`0.1.7-rc.2`**.

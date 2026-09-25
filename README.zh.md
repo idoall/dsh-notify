@@ -94,6 +94,10 @@ dsh plugin --profile web add "link:$(pwd)"
 
 卡片上方是版本检测行：显示当前版本与 npm 上最新版本的关系——`v0.4.0 ✓ 最新`、`v0.4.0 ➔ v0.5.0` 或 `v0.4.0 · 检查失败`。**检查更新**会强制重新查询（`GET /plugins/dsh-notify/update?force=1`，需通过鉴权）；页面加载则复用宿主 6 小时缓存。检测到新版本时，行下方会展开 `dsh plugin --profile web add @idoall/dsh-notify@<版本>` 与复制按钮——是否安装、以及随后是否重启 DSH，都由你决定。
 
+<p align="center">
+  <img src="./assets/version-check.png" width="60%" alt="DSH 通知设置中的版本检测行：v0.4.0 已是最新、检查更新、GitHub、更新日志与反馈 Issue 入口">
+</p>
+
 ## 兼容性
 
 当前发布：插件 **`0.4.0`** 已在 DeepSeek Harness **`0.1.7-rc.2`** 上验证。
