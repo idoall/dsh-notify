@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import z from '@deepseek-ai/schemastery';
 import { EventReducer, PLAN_REVIEW_FALLBACK, validateRequest } from './core.js';
 import { createBuffer, createSettings } from './buffer.js';
 import { createSoundLibrary } from './sounds.js';
 import { BUILTIN_SOUNDS, SOUND_BYTES } from './sound-choices.js';
+import { createUpdateChecker } from './update.js';
 
 export const name = 'dsh-notify';
 export const inject = [];
@@ -17,6 +19,7 @@ export { EventReducer, PLAN_REVIEW_FALLBACK, sanitizeBody, validateRequest } fro
 export { createBuffer, createSettings, BUFFER_LIMIT } from './buffer.js';
 export { createSoundLibrary } from './sounds.js';
 export { BUILTIN_SOUNDS, SOUND_BYTES, parseSoundChoice, validSoundName } from './sound-choices.js';
+export { createUpdateChecker, compareVersions, isNewer, parseVersion, PACKAGE_NAME, REGISTRY_LATEST_URL } from './update.js';
 
 const BASE = '/plugins/dsh-notify';
 const BODY_CAP = 16 * 1024;
@@ -163,6 +166,16 @@ function registerSensitive(ctx, webServer, connection, path, methods, handler) {
     },
   });
 }
+/**
+ * Read this plugin's own version for the update check. A missing package.json only means the version
+ * chip cannot compare — it must never stop the plugin from loading.
+ */
+async function readPackageVersion() {
+  try {
+    const parsed = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+    return typeof parsed?.version === 'string' && parsed.version !== '' ? parsed.version : '0.0.0';
+  } catch { return '0.0.0'; }
+}
 
 export async function apply(ctx, config = {}) {
   // No store, no history: the buffer holds what has not been delivered yet, and preferences are the
@@ -173,6 +186,15 @@ export async function apply(ctx, config = {}) {
   const reducer = new EventReducer(() => Date.now());
   const diagnostics = { eventErrors: 0, services: {} };
   const sounds = createSoundLibrary({ dataDir: config.dataDir });
+  // Online version detection: read-only and cached. `currentVersion`/`updateFetch`/`updateTtlMs` are
+  // test seams, exactly like `config.now` above — the shipped profile passes none of them.
+  const updates = createUpdateChecker({
+    currentVersion: typeof config.currentVersion === 'string' ? config.currentVersion : await readPackageVersion(),
+    fetchImpl: config.updateFetch,
+    now: config.now,
+    ttlMs: config.updateTtlMs,
+    log: (message) => { try { ctx?.logger?.debug?.(message); } catch { /* logging is never load-bearing */ } },
+  });
   // Tool call IDs remain available for authoritative replay/result handling.
   // A live user-questions/request has no source-proven causal callId, therefore
   // this host must not infer one from an arrival queue or FIFO ordering.
@@ -570,6 +592,15 @@ export async function apply(ctx, config = {}) {
       res.end(sound.bytes);
     });
     registerSensitive(lifecycleCtx, webServer, connection, '/health', 'GET', async (_req, res) => sendJson(res, 200, { storage: preferences.status, buffered: buffer.size, guiAvailable, diagnostics }));
+    /**
+     * Online version detection. Read-only: it reports what npm has, and the settings page offers a
+     * copyable command. This host never installs anything and never restarts dsh.
+     */
+    registerSensitive(lifecycleCtx, webServer, connection, '/update', 'GET', async (req, res) => {
+      const url = new URL(String(req.url ?? ''), 'http://dsh.invalid');
+      const status = await updates.check({ force: url.searchParams.get('force') === '1' });
+      sendJson(res, 200, { ok: true, ...status });
+    });
     return () => { guiAvailable = false; };
   };
   if (typeof ctx?.inject === 'function') {
@@ -583,5 +614,5 @@ export async function apply(ctx, config = {}) {
   // to a disposer (or null), never an arbitrary runtime object. Keep the
   // diagnostics surface on the callable disposer for controlled tests/tools.
   const dispose = () => {};
-  return Object.assign(dispose, { buffer, preferences, reducer, diagnostics, guiAvailable, reason: guiAvailable ? undefined : 'authenticated web routes unavailable' });
+  return Object.assign(dispose, { buffer, preferences, reducer, diagnostics, updates, guiAvailable, reason: guiAvailable ? undefined : 'authenticated web routes unavailable' });
 }

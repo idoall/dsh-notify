@@ -1,5 +1,5 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel, updateChipText, updateTone, updateCommand, UPDATE_REPO_URL } from '../src/client.js';
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');
@@ -270,4 +270,24 @@ test('a self-test group is spread over time so eight cards read as eight differe
   assert.equal(batch[0].at, 1_000_000 - 7 * SELF_TEST_STEP_MS, 'and the oldest is seven steps back');
   assert.equal(new Set(batch.map((record) => record.at)).size, 8, 'every card keeps its own moment');
   assert.deepEqual(batch.map((record) => record.eventId), batch.map((record) => record.mergeKey), 'distinct records, so they cannot merge into one card');
+});
+test('the version chip never presents a failed lookup as "newest"', () => {
+  assert.equal(updateChipText(null), '检查更新…', 'before the first answer the row says it is asking');
+  assert.equal(updateChipText({ current: '0.3.4', latest: '0.3.4', hasUpdate: false, error: null }), 'v0.3.4 ✓ 最新');
+  assert.equal(updateChipText({ current: '0.3.4', latest: '0.4.0', hasUpdate: true, error: null }), 'v0.3.4 ➔ v0.4.0', 'an available update names both versions');
+  assert.equal(updateChipText({ current: '0.3.4', latest: null, hasUpdate: false, error: 'registry_unavailable' }), 'v0.3.4 · 检查失败', 'offline says so instead of claiming the running version is the newest');
+  assert.equal(updateChipText({ current: '0.3.4', latest: '0.4.0', hasUpdate: false, error: 'registry_unavailable' }), 'v0.3.4 · 检查失败', 'a stale latest with an error is still a failed check');
+  assert.equal(updateChipText({ current: '', latest: null, hasUpdate: false, error: 'unreachable' }), 'v? · 检查失败', 'a host that answered nothing still renders a chip');
+  assert.equal(updateChipText({ current: '0.3.4', latest: null, hasUpdate: true }), 'v0.3.4 ✓ 最新', 'hasUpdate without a version to install cannot render an arrow');
+});
+test('only a real available update takes the attention colour', () => {
+  assert.equal(updateTone(null), 'idle');
+  assert.equal(updateTone({ current: '0.3.4', latest: '0.3.4', hasUpdate: false, error: null }), 'ok');
+  assert.equal(updateTone({ current: '0.3.4', latest: '0.4.0', hasUpdate: true, error: null }), 'warn');
+  assert.equal(updateTone({ current: '0.3.4', latest: null, hasUpdate: false, error: 'registry_unavailable' }), 'idle', 'a failed check is neutral, not an alarm');
+  assert.equal(updateTone({ current: '0.3.4', latest: null, hasUpdate: true, error: 'registry_unavailable' }), 'idle');
+});
+test('the upgrade command names the scoped package and is never run by this plugin', () => {
+  assert.equal(updateCommand('0.4.0'), 'dsh plugin --profile web add @idoall/dsh-notify@0.4.0');
+  assert.equal(UPDATE_REPO_URL, 'https://github.com/idoall/dsh-notify');
 });

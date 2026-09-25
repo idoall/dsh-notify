@@ -3,7 +3,7 @@ import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist', { recursive: true });
-for (const name of ['index.js', 'core.js', 'buffer.js', 'sound-choices.js', 'sounds.js']) {
+for (const name of ['index.js', 'core.js', 'buffer.js', 'sound-choices.js', 'sounds.js', 'update.js']) {
   await copyFile(`src/${name}`, `dist/${name}`);
 }
 

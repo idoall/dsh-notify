@@ -1,5 +1,6 @@
 import React from 'react';
 import { BUILTIN_SOUNDS, SOUND_LABELS, SOUND_PRESETS, parseSoundChoice } from './sound-choices.js';
+import { PACKAGE_NAME } from './update.js';
 
 const BASE = '/plugins/dsh-notify';
 const LOCAL_TEST_EVENT = 'dsh-notify:self-test-local';
@@ -144,6 +145,15 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:15px;max-widt
 .dsh-notify-result[data-tone=active]{color:var(--dsw-alias-state-business-primary)}
 .dsh-notify-settings{gap:15px;max-width:790px}.dsh-notify-heading{font-size:26px;letter-spacing:-.4px;line-height:1.25}.dsh-notify-settings-head{align-items:flex-start;display:flex;gap:16px;justify-content:space-between}.dsh-notify-settings-intro{color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.55;margin:8px 0 0}.dsh-notify-settings-status{align-items:center;background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 10%,var(--dsw-alias-bg-layer-2));border:1px solid color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 40%,var(--dsw-alias-border-l2));border-radius:999px;color:var(--dsw-alias-state-success-primary,#07865a);display:flex;font-size:12px;gap:7px;line-height:1;padding:8px 10px;white-space:nowrap}.dsh-notify-settings-status::before{background:currentColor;border-radius:50%;content:"";height:7px;width:7px}.dsh-notify-card{border-radius:13px;box-shadow:0 2px 7px rgb(29 41 57 / 6%);padding:19px 20px}.dsh-notify-card-head{align-items:flex-start;display:flex;gap:12px;margin-bottom:17px}.dsh-notify-card-icon{align-items:center;background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#315ee8) 10%,var(--dsw-alias-bg-layer-2));border-radius:9px;color:var(--dsw-alias-state-business-primary,#315ee8);display:flex;flex:none;font-size:16px;height:31px;justify-content:center;width:31px}.dsh-notify-card-head .dsh-notify-card-title{font-size:15px}.dsh-notify-card-head .dsh-notify-hint{margin-top:4px}.dsh-notify-rows{border-top:1px solid var(--dsw-alias-border-l2)}.dsh-notify-setting-row{align-items:center;border-bottom:1px solid var(--dsw-alias-border-l2);display:flex;gap:16px;min-width:0;padding:15px 0}.dsh-notify-setting-row:last-child{border-bottom:0;padding-bottom:0}.dsh-notify-setting-copy{flex:1;min-width:0}.dsh-notify-setting-label{font-size:13px;font-weight:650}.dsh-notify-setting-help{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1.55;margin:3px 0 0}.dsh-notify-setting-field{align-items:center;border-bottom:1px solid var(--dsw-alias-border-l2);display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 210px;padding:15px 0}.dsh-notify-setting-field:last-child{border-bottom:0;padding-bottom:0}.dsh-notify-segmented{background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:flex;gap:4px;padding:4px}.dsh-notify-segmented button{background:transparent;border:0;border-radius:7px;color:var(--dsw-alias-label-secondary);cursor:pointer;flex:1;font:600 12px inherit;padding:8px 11px;white-space:nowrap}.dsh-notify-segmented button[data-active=true]{background:var(--dsw-alias-bg-layer-2);box-shadow:0 1px 3px rgb(0 0 0 / 10%);color:var(--dsw-alias-state-business-primary,#315ee8)}.dsh-notify-preview{align-items:center;background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border-radius:9px;color:var(--dsw-alias-label-secondary);display:flex;font-size:12px;gap:10px;margin-top:14px;padding:12px}.dsh-notify-preview::before{background:var(--dsw-alias-state-success-primary,#07865a);border-radius:50%;box-shadow:0 0 0 3px color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 14%,transparent);content:"";flex:none;height:9px;width:9px}.dsh-notify-preview strong{color:var(--dsw-alias-label-primary);display:block;font-size:12px}.dsh-notify-settings .dsh-notify-toggle{align-items:center;cursor:default}.dsh-notify-settings .dsh-notify-toggle input{appearance:none;background:#aeb8c7;border:0;border-radius:999px;cursor:pointer;flex:0 0 42px;height:24px;margin:0;max-width:42px;min-height:24px;min-width:42px;position:relative;width:42px}.dsh-notify-settings .dsh-notify-toggle input::after{background:#fff;border-radius:50%;box-shadow:0 1px 2px rgb(0 0 0 / 22%);content:"";height:18px;left:3px;position:absolute;top:3px;transition:left .18s;width:18px}.dsh-notify-settings .dsh-notify-toggle input:checked{background:var(--dsw-alias-state-business-primary,#315ee8)}.dsh-notify-settings .dsh-notify-toggle input:checked::after{left:21px}.dsh-notify-settings .dsh-notify-toggle>span{display:none}.dsh-notify-settings .dsh-notify-card>*+*{margin-top:0}
 .dsh-notify-test-panel{display:grid;gap:14px}.dsh-notify-test-caption{font-size:13px;font-weight:650;margin:0}.dsh-notify-test-grid{display:grid;gap:8px;grid-template-columns:repeat(4,minmax(0,1fr))}.dsh-notify-test-action{align-items:center;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:9px;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;font:600 13px inherit;gap:7px;justify-content:center;min-height:40px;padding:6px 8px;white-space:nowrap}.dsh-notify-test-action:hover{background:var(--dsw-alias-button-floating-hover)}.dsh-notify-test-action::before{background:var(--dsh-test-tone,var(--dsw-alias-label-tertiary));border-radius:50%;content:"";height:8px;width:8px}.dsh-notify-test-action[data-tone=success]{--dsh-test-tone:var(--dsw-alias-state-success-primary,#07865a)}.dsh-notify-test-action[data-tone=warning]{--dsh-test-tone:var(--dsw-alias-state-warn-primary,#bc6508)}.dsh-notify-test-action[data-tone=error]{--dsh-test-tone:var(--dsw-alias-state-error-primary,#cf3044)}.dsh-notify-test-action[data-tone=info]{--dsh-test-tone:var(--dsw-alias-state-business-primary,#2862db)}.dsh-notify-test-primary{background:var(--dsw-alias-state-business-primary,#315ee8);border:0;border-radius:9px;color:#fff;cursor:pointer;font:700 13px inherit;justify-self:start;min-height:40px;min-width:238px;padding:7px 14px;width:auto}.dsh-notify-test-primary:hover{filter:brightness(1.06)}.dsh-notify-test-secondary{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:9px;color:var(--dsw-alias-label-primary);cursor:pointer;font:600 13px inherit;justify-self:start;min-height:38px;min-width:205px;padding:6px 14px;width:auto}.dsh-notify-test-secondary:hover{background:var(--dsw-alias-button-floating-hover)}
+.dsh-notify-update{align-items:center;display:flex;flex-wrap:wrap;gap:10px;min-width:0}
+.dsh-notify-chip{background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border-radius:999px;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:1;padding:7px 11px;white-space:nowrap}
+.dsh-notify-chip[data-tone=ok]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#07865a) 12%,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-state-success-primary,#07865a)}
+.dsh-notify-chip[data-tone=warn]{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#bc6508) 14%,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-state-warn-primary,#bc6508)}
+.dsh-notify-update-link{color:var(--dsw-alias-label-secondary);font-size:12px;text-decoration:none}
+.dsh-notify-update-link:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}
+.dsh-notify-update-panel{background:var(--dsw-alias-bg-layer-3,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:10px;display:grid;gap:10px;padding:12px 14px}
+.dsh-notify-update-title{font-size:13px;font-weight:650}
+.dsh-notify-update-command{background:var(--dsw-alias-bg-layer-2);border-radius:8px;display:block;font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:1.6;overflow-wrap:anywhere;padding:8px 10px}
 @media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-settings .dsh-notify-toggle input{flex:0 0 42px;height:24px;max-width:42px;min-height:24px;min-width:42px;width:42px}}@media(max-width:620px){.dsh-notify-settings-head{display:block}.dsh-notify-settings-status{display:inline-flex;margin-top:14px}.dsh-notify-setting-field{grid-template-columns:1fr;gap:11px}.dsh-notify-card{padding:16px}.dsh-notify-test-grid{gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-notify-test-action{min-height:44px;padding:8px}.dsh-notify-test-primary,.dsh-notify-test-secondary{justify-self:stretch;min-width:0;width:100%}}`;
 /**
  * Toast presentation: a window anchored in the top-right corner. Each card is one row of
@@ -1000,6 +1010,26 @@ export function resultTone(status) {
   if (status === 'running' || status === 'submitted') return 'active';
   return 'idle';
 }
+/** Where the version row sends people: the repository, its changelog and its issue tracker. */
+export const UPDATE_REPO_URL = 'https://github.com/idoall/dsh-notify';
+/**
+ * The one-line version verdict. A failed lookup says so instead of quietly presenting the running
+ * version as the newest, which is the one wrong answer this feature must never give.
+ */
+export function updateChipText(status) {
+  if (!status) return '检查更新…';
+  const current = `v${typeof status.current === 'string' && status.current !== '' ? status.current : '?'}`;
+  if (status.error) return `${current} · 检查失败`;
+  if (status.hasUpdate === true && typeof status.latest === 'string') return `${current} ➔ v${status.latest}`;
+  return `${current} ✓ 最新`;
+}
+/** Only an available update earns the "act on this" colour; a failed check stays neutral, not red. */
+export function updateTone(status) {
+  if (!status || status.error) return 'idle';
+  return status.hasUpdate === true ? 'warn' : 'ok';
+}
+/** The copyable upgrade command for an available update. This plugin never runs it itself. */
+export function updateCommand(latest) { return `dsh plugin --profile web add ${PACKAGE_NAME}@${latest}`; }
 const action = (label, onClick, extra = {}) => React.createElement('button', { className: 'dsh-notify-action', type: 'button', onClick, ...extra }, label);
 const hint = (children) => React.createElement('p', { className: 'dsh-notify-hint' }, children);
 /** Page-only visual checks: each button uses the same ToastOverlay path as a real delivered record. */
@@ -1022,6 +1052,28 @@ export function NotificationSelfTests() {
 function SettingsSection() {
   const [config, setConfig] = React.useState(null); const [status, setStatus] = React.useState('正在加载…');
   const [customSounds, setCustomSounds] = React.useState([]); const [soundNotice, setSoundNotice] = React.useState(null);
+  const [updateInfo, setUpdateInfo] = React.useState(null); const [updateBusy, setUpdateBusy] = React.useState(false);
+  const [copied, setCopied] = React.useState(null); const [updateNotice, setUpdateNotice] = React.useState(null);
+  // The row's first lookup rides the page load; the button only ever re-asks with `force=1`, so the
+  // host's six-hour cache is bypassed exactly when a human asks for a fresh answer.
+  const loadUpdate = React.useCallback((force) => {
+    setUpdateBusy(true);
+    setUpdateNotice(null);
+    return fetchJson(`/update${force ? '?force=1' : ''}`)
+      .then((value) => setUpdateInfo(value ?? null))
+      .catch(() => setUpdateInfo({ current: '?', latest: null, hasUpdate: false, checkedAtMs: null, error: 'unreachable' }))
+      .finally(() => setUpdateBusy(false));
+  }, []);
+  React.useEffect(() => { void loadUpdate(false); }, [loadUpdate]);
+  const copyText = (value, label) => {
+    // A browser without the clipboard API must say so: claiming 已复制 for a copy that never happened
+    // is worse than the extra sentence, because the command is right there to select by hand.
+    const write = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+    if (typeof write !== 'function') { setUpdateNotice('复制失败，请手动选择文本复制'); return; }
+    void Promise.resolve(write(value))
+      .then(() => { setCopied(label); setUpdateNotice(null); setTimeout(() => setCopied(null), 1500); })
+      .catch(() => setUpdateNotice('复制失败，请手动选择文本复制'));
+  };
   const loadSounds = () => fetchJson('/sounds').then((value) => setCustomSounds(Array.isArray(value?.custom) ? value.custom : [])).catch(() => setCustomSounds([]));
   const uploadSound = async (file) => {
     setSoundNotice(`正在上传 ${file.name}…`);
@@ -1050,8 +1102,26 @@ function SettingsSection() {
   const copy = (label, description) => React.createElement('div', { className: 'dsh-notify-setting-copy' }, React.createElement('div', { className: 'dsh-notify-setting-label' }, label), React.createElement('p', { className: 'dsh-notify-setting-help' }, description));
   const toggle = (label, description, checked, onChange, ariaLabel) => React.createElement('div', { className: 'dsh-notify-setting-row' }, copy(label, description), React.createElement('label', { className: 'dsh-notify-toggle' }, React.createElement('input', { type: 'checkbox', checked, onChange, 'aria-label': ariaLabel }), React.createElement('span', null, label)));
   const style = config?.notificationStyle === 'soft' ? 'soft' : 'strong'; const collapsed = config?.stackCollapsed !== false;
+  // Version detection sits above the cards, next to the same three links the reference settings page
+  // offers. It is the page's own answer to "is what I am running still the newest one?".
+  const updateRow = React.createElement('div', { className: 'dsh-notify-update', 'aria-label': '版本与更新' },
+    React.createElement('span', { className: 'dsh-notify-chip', 'data-tone': updateTone(updateInfo), role: 'status' }, updateChipText(updateInfo)),
+    React.createElement('button', { type: 'button', className: 'dsh-notify-action', disabled: updateBusy, onClick: () => void loadUpdate(true) }, updateBusy ? '检查中…' : '检查更新'),
+    React.createElement('a', { className: 'dsh-notify-update-link', href: UPDATE_REPO_URL, target: '_blank', rel: 'noreferrer' }, 'GitHub'),
+    React.createElement('a', { className: 'dsh-notify-update-link', href: `${UPDATE_REPO_URL}/blob/main/CHANGELOG.md`, target: '_blank', rel: 'noreferrer' }, '更新日志'),
+    React.createElement('a', { className: 'dsh-notify-update-link', href: `${UPDATE_REPO_URL}/issues`, target: '_blank', rel: 'noreferrer' }, '反馈 Issue'));
+  // The upgrade command is only shown when there is something to upgrade TO: a permanent panel would
+  // cost a card-sized block of the page for a command nobody should run.
+  const updatePanel = updateInfo?.hasUpdate !== true ? null : React.createElement('div', { className: 'dsh-notify-update-panel' },
+    React.createElement('div', { className: 'dsh-notify-update-title' }, `发现新版本 v${updateInfo.latest}（当前 v${updateInfo.current}）`),
+    React.createElement('code', { className: 'dsh-notify-update-command' }, updateCommand(updateInfo.latest)),
+    React.createElement('div', { className: 'dsh-notify-actions' }, action(copied === 'update' ? '已复制' : '复制命令', () => copyText(updateCommand(updateInfo.latest), 'update'))),
+    hint('本插件不会自动安装，也不会重启 dsh：执行上面的命令后，需要你手动重启一次 dsh 才生效。'),
+    updateNotice ? React.createElement('p', { className: 'dsh-notify-result', role: 'status' }, updateNotice) : null);
   return React.createElement('section', { className: 'dsh-notify-settings', 'aria-label': '通知设置' },
     React.createElement('div', { className: 'dsh-notify-settings-head' }, React.createElement('div', null, React.createElement('div', { className: 'dsh-notify-eyebrow' }, 'NOTIFICATIONS'), React.createElement('h2', { className: 'dsh-notify-heading' }, '通知'), React.createElement('p', { className: 'dsh-notify-settings-intro' }, '决定什么时候提醒你，以及通知在页面中如何显示。')), React.createElement('p', { className: 'dsh-notify-settings-status', role: 'status' }, status)),
+    updateRow,
+    updatePanel,
     config && card('◉', '通知显示', '显示位置、视觉样式与多条通知的呈现方式。', React.createElement(React.Fragment, null,
       React.createElement('div', { className: 'dsh-notify-rows' },
         React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知位置', '默认出现在会话区右上角，不遮住侧栏。'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '通知位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（推荐）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭页面通知'))),
