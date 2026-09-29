@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.1] - 2026-09-29
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.0-rc.1` compatible.** `dsh.engines.dsh` and every `@deepseek-ai/dsh-*` peer move from `>=0.1.7-rc.1 <0.2.0` to `>=0.1.7-rc.1 <0.3.0`, and `dsh.compatibility.dshReleases` gains `0.2.0-rc.1` while keeping `0.1.7-rc.1` and `0.1.7-rc.2`. DSH refuses an incompatible bundle at profile load by peer range, so the old ceiling would have dropped the plugin as soon as `0.2.0` shipped — `0.2.0-rc.1` only loads today because a prerelease still sorts below `0.2.0`.
+
+### Verified
+
+- **No source change was needed.** The Host events (`agent/status`, `session/event`, `approval/request`, `user-questions/request`, `goal/activation-changed`, `agent/error`, `workflow/end`), the `webServer`/`connection` route and authorization contract, the `jobs` event stream, the two client `slots` seats, and the `--dsw-alias-*` theme tokens are unchanged in `0.2.0-rc.1`; the packages the plugin binds are byte-identical between `dsh-v0.1.7-rc.2` and `dsh-v0.2.0-rc.1`, and the approval-resolves-inline flow it already handles is the same in both.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+- **Real-machine verification** in an isolated `DSH_HOME` under `/tmp` (the user's profile is never touched) with the plugin installed as `link:` and DSH `0.2.0-rc.1` booted: the composed profile mounted the `dsh-notify` row without a compatibility refusal, `/plugins/dsh-notify/health` answered `guiAvailable: true` with `eventErrors: 0`, `/config`, `/pull`, `/sounds` and `/update` (real npm registry) all answered 200, and the browser rendered **设置 → 通知** with a working self-test toast stack and no page errors.
+- Counter-proof: under DSH's real semver evaluation the old ranges do **not** satisfy `0.2.0` or `0.2.1`, so the empty-lookup risk on the `0.2.0` release is real rather than assumed.
+
 ## [0.4.0] - 2026-09-25
 
 ### Added
@@ -226,6 +239,10 @@ First public release. Verified against DeepSeek Harness `0.1.5-rc.1`.
 
 - Browser system notifications (channel B), host OS notifications (channel C) and web push / service worker (channel D), along with the `web-push` and `ipaddr.js` dependencies. Those channels failed invisibly (submitted but never seen) and could not be made reliable across browsers and operating systems.
 
+[0.4.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.4.1
+[0.4.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.4.0
+[0.3.4]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.4
+[0.3.3]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.3
 [0.3.2]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.2
 [0.3.1]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.1
 [0.3.0]: https://github.com/idoall/dsh-notify/releases/tag/v0.3.0
