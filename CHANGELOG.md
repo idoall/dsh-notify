@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.2] - 2026-10-06
+
+### Fixed
+
+- **A task that asked for your approval is announced again when it finishes.** Since `0.3.2` a turn that asked an execution approval or a plan review had its completion withheld forever. That suppression assumed the interactive pause ended the turn and the work resumed in a *new* one. DSH never does that: `approval.request()` requires an open turn and awaits its outcome inside it, and `exit_plan_mode` returns its verdict to the same turn, so the turn that resumes is the turn that asked. Replaying every session log on this machine (362 files, 3830 notifiable turns, 81 of them containing an approval or plan review) shows **8 of those 81 turns announced** before this release and **81 of 81** after it, with no extra record anywhere — the suppression removed no duplicate, it only swallowed real completions. A gate now withholds its turn's completion **only while the human still owes an answer**, which is also the safe reading if a turn ever does end on an open gate.
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.0-rc.2` and `0.2.1-alpha.1` compatible.** `dsh.compatibility.dshReleases` gains `0.2.1-alpha.1` alongside `0.2.0-rc.2`, `0.2.0-rc.1`, `0.1.7-rc.2` and `0.1.7-rc.1`. The requirement itself stays `>=0.1.7-rc.1 <0.3.0`, which already admitted both under DSH's `includePrerelease` evaluation — that is why `0.4.1` was not among the bundles refused at startup, and no range widening was needed.
+
+### Verified
+
+- **No interface this plugin binds changed in `0.2.0-rc.2`.** The Host events (`agent/status`, `session/event`, `approval/request`, `user-questions/request`, `goal/activation-changed`, `agent/error`, `workflow/end`), the `webServer`/`connection` route and authorization contract, the `jobs` event stream, the `slots` seats (`settings.section`, `shell.overlay`), and the `--dsw-alias-*` theme tokens are unchanged; across the packages it binds (`dsh-client-connection`, `dsh-client-ui-session`, `dsh-host-webserver`, `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-layout`, `dsh-client-ui-settings`, `dsh-client-ui-settings-general`) the `dsh-v0.2.0-rc.1..dsh-v0.2.0-rc.2` diff is version bumps plus one internal one-line `scoped-slots` change.
+- DSH's own loader check (`evaluatePluginCompatibility` from `dsh-app-boot`) accepts this manifest on `0.2.0-rc.2` and still refuses the unchanged `@idoall/dsh-session-colors@0.1.6`, reproducing the startup warning exactly.
+- The new `0.2.0-rc.2` reading of `ask_user_question` (an opt-in `mode: 'timed'` row whose foreground wait returns a **pending** result and leaves the question answerable) needs no host change: the tool result settles the record while the turn continues, and the turn's own end is the completion. The default remains the blocking `legacy` tool, which this plugin already handled.
+- **No interface this plugin binds changed in `0.2.1-alpha.1` either.** Across `dsh-v0.2.0-rc.2..dsh-v0.2.1-alpha.1` (266 commits) the bound packages differ only by version bumps and the repository-wide removal of the `invariant` companion modules, which no runtime path loads. The one real source change is `ui-layout` adding the **new** `shell.bottom` seat and a `.frame` grid row for it; the `shell.overlay` seat this plugin mounts into, its `.overlayLayer`, and the `[data-conversation-scroll]` anchor the toast measures are untouched.
+- **Real-machine verification on `0.2.1-alpha.1`** in an isolated `DSH_HOME` under `/tmp` (the operator's profile is never touched): a profile built from the shipped `web` template with this plugin installed as `link:` booted with **no compatibility refusal**, `/plugins/dsh-notify/health` answered `guiAvailable: true` with `eventErrors: 0`, `/config`, `/pull`, `/sounds` and `/update` (real npm registry) all answered 200, the client entry was composed into `window.__DSH_BOOT__` with its full `inject` list, and its bundle served `200` as a `@idoall/dsh-notify` `__ModuleLoader__.load` registration.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+
 ## [0.4.1] - 2026-09-29
 
 ### Changed

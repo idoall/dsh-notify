@@ -1,6 +1,6 @@
 {
   "name": "@idoall/dsh-notify",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "description": "DSH web plugin: in-page task notifications for DeepSeek Harness — enhanced or soft status toasts, a collapsible top-right stack, answer buttons, background-tab attention, and a WebAudio cue that also plays while the page is hidden. Live delivery only: no history, no service worker, no web push, no OS notification matrix.",
   "main": "./dist/index.js",
@@ -38,7 +38,9 @@
       "dshReleases": {
         "0.1.7-rc.1": "compatible",
         "0.1.7-rc.2": "compatible",
-        "0.2.0-rc.1": "compatible"
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-alpha.1": "compatible"
       }
     }
   },

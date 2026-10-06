@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm 版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.2.0--rc.1-4B6BFB" alt="DSH 0.2.0-rc.1">
+  <img src="https://img.shields.io/badge/DSH-0.2.1--alpha.1-4B6BFB" alt="DSH 0.2.1-alpha.1">
 </p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
@@ -46,7 +46,7 @@
 
 - 带 Web profile 的 DeepSeek Harness
 - Node.js 20 或更新
-- 已验证的 DeepSeek Harness：`0.2.0-rc.1`
+- 已验证的 DeepSeek Harness：`0.2.1-alpha.1`
 
 从 npm 安装：
 
@@ -100,11 +100,12 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布：插件 **`0.4.1`** 已在 DeepSeek Harness **`0.2.0-rc.1`** 上验证。
+当前发布：插件 **`0.4.2`** 已在 DeepSeek Harness **`0.2.1-alpha.1`** 上验证。
 
 | 插件 | 已验证的 DeepSeek Harness | 这一版是什么 |
 | --- | --- | --- |
-| **`0.4.1`** | `0.2.0-rc.1` | 兼容性跟进：声明支持 DSH `0.2.0` 线（`>=0.1.7-rc.1 <0.3.0`），`0.2.0` 正式版发布时插件不会再在 profile 加载阶段被丢弃。无源码改动——它绑定的接口都没有变化 |
+| **`0.4.2`** | `0.2.1-alpha.1` | 走了审批的任务在完成时重新会通知（自 `0.3.2` 起这类完成通知被永久吞掉）；同时声明兼容 `0.2.0-rc.2` 与 `0.2.1-alpha.1`——各一行 `dshReleases`，因为 `>=0.1.7-rc.1 <0.3.0` 本来就接纳它们 |
+| `0.4.1` | `0.2.0-rc.1` | 兼容性跟进：声明支持 DSH `0.2.0` 线（`>=0.1.7-rc.1 <0.3.0`），`0.2.0` 正式版发布时插件不会再在 profile 加载阶段被丢弃。无源码改动——它绑定的接口都没有变化 |
 | `0.4.0` | `0.1.7-rc.2` | 设置 → 通知新增在线版本检测：当前版本 vs npm 最新版、手动**检查更新**（`?force=1`）、仓库/更新日志/Issue 入口，以及可复制的升级命令——只读、带缓存，绝不自动安装、绝不重启 |
 | `0.3.4` | `0.1.7-rc.1` | 触发时序修复：失败在 `agent/error` 时即投递（与 `turn/end` 共用同一张卡）、同栈 `idle → running` 抖动不再误报完成、客户端在会话状态变化与标签页重新可见时立即拉取（保留 1.5s 兜底） |
 | `0.3.3` | `0.1.7-rc.1` | 适配 DSH 0.1.7：后台任务完成走 `jobs.events.subscribe`，工具结果读取扁平化后的 tool-role 消息，卡片内回答读取 `uiSession.sessionStatus`，`@deepseek-ai/schemastery` 改为 peer |
@@ -118,7 +119,9 @@ dsh plugin --profile web add "link:$(pwd)"
 
 - **`0.3.3` 只支持 DSH `0.1.7` 线。** DSH `0.1.7` 移除了 `jobs.onJobDone`，把工具结果身份扁平化到 tool-role 消息上，并用统一的 `sessionStatus` 快照替换了 `uiSession.pendingInteractions`。更早的 DSH（含 `0.1.6-alpha.1`）请继续用插件 **`0.3.2`**。
 - 两处声明决定插件能否加载：`dsh.engines.dsh` 与每一个 `@deepseek-ai/dsh-*` peer 都写同一条要求，自 `0.4.1` 起为 `>=0.1.7-rc.1 <0.3.0`。DSH 会在 profile 加载时拒绝不兼容的 bundle，范围写错就会静默丢掉插件——旧的 `<0.2.0` 上限在 `0.2.0` 正式版上正是如此。
+- **交互门禁只在「还没等到人回答」时压住完成通知。** DSH 的执行审批与计划审批都是在**提问的那个回合内**解决的（`approval.request()` 必须处于打开的回合中并原地等待结果；`exit_plan_mode` 把结论交回同一回合），所以接着干活的回合就是提问的那个回合，它的结束就是用户任务的完成。`0.4.2` 以此为规则；`0.3.2`–`0.4.1` 压掉了整个回合，于是每个带审批的任务都静默丢失完成通知。
 - `@deepseek-ai/schemastery` 是 **peer**，不是普通依赖：DSH 只会把 **link 形态**插件的 peer 解析到当前安装；若仍写成普通依赖，`link:` 安装的 Host 半会导入失败。
+- **声明的是「实测验证过的版本」，不是语义化猜测。** `dsh.compatibility.dshReleases` 列出真正启动验证过的每个版本（截至 `0.4.2`：`0.1.7-rc.1`、`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.1-alpha.1`），一旦其中某个落在声明范围之外，`npm run pack:check` 会直接失败。
 
 同时在 390px 手机视口检查：设置控件会重排，Toast 会满宽显示且不会被移动端侧栏遮挡。
 
@@ -149,8 +152,8 @@ npm run pack:check # 发布前置条件 + 客户端注册校验
 发版由 tag 驱动。更新 `package.json`、将对应 CHANGELOG 段落移出 `Unreleased`、编写 `release-notes/v<版本>.md` 后，推送发版提交与 tag：
 
 ```sh
-git tag v0.4.1
-git push origin v0.4.1
+git tag v0.4.2
+git push origin v0.4.2
 ```
 
 发版工作流会运行 `npm run verify`、打包插件、通过 npm trusted publishing（OIDC）发布，并创建附带 tarball 与 sha256 的 GitHub Release。

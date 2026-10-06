@@ -408,24 +408,75 @@ test('a subtask failure stays as quiet as a subtask completion', async (t) => {
   await runtime();
 });
 
-test('an interactive pause and its post-decision work yield one completion notification', async (t) => {
+/**
+ * DSH resolves a plan review inside the turn that asked it: `exit_plan_mode` returns its verdict to
+ * that same turn, which then keeps working, and only its own `turn/end` ends the task. That is the
+ * shape every one of this machine's 81 real approval/plan-review turns has, so the resume is one turn
+ * — not a pause turn plus a work turn — and the turn end after the verdict is the completion to
+ * announce.
+ */
+test('a plan review resolved in its own turn still announces that turn completion', async (t) => {
   const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
   const session = { id: 'one-task-session', header: {} };
   const agent = { session };
   listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 10 } });
   listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 10, callId: 'review-1', name: 'exit_plan_mode', arguments: '{}' } });
   listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 10, message: { toolCallId: 'review-1', isError: false } } });
+  // The approved plan is executed by the same turn it was asked in.
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 10, callId: 'work-1', name: 'bash', arguments: '{}' } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 10, message: { toolCallId: 'work-1', isError: false } } });
   listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 10, reason: { kind: 'completed' } } });
   listeners.get('agent/status')({ agent, status: 'idle' });
-  await settle();
-  assert.equal(records().some((record) => record.mergeKey === 'turn:one-task-session:10'), false, 'the plan-review pause is not a completed task');
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:one-task-session:10'));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'one user task gets one completed card despite its plan review');
+  await runtime();
+});
 
+/**
+ * `approval/asked` carries no `turn` of its own, and DSH resolves the approval with a `request()` that
+ * awaits its outcome inside the asking turn before appending `approval/decided`. The decision is
+ * therefore what turns the gate off — the later `tool/result` and the turn's real end are ordinary
+ * work, and that end is the user's task finishing.
+ */
+test('an approval resolved inside its own turn still announces that turn completion', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'inline-approval-session', header: {} };
+  const agent = { session };
   listeners.get('agent/status')({ agent, status: 'running' });
-  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 11 } });
-  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 11, reason: { kind: 'completed' } } });
+  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 4 } });
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 4, callId: 'work-1', name: 'bash', arguments: '{}' } });
+  // No `turn` on the approval itself: the turn comes from the work it interrupts.
+  listeners.get('session/event')(session, { type: 'approval/asked', data: { id: 'inline-approval', toolName: 'bash', callId: 'work-1' } });
+  listeners.get('session/event')(session, { type: 'approval/decided', data: { id: 'inline-approval', outcome: 'allowed-once' } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 4, message: { toolCallId: 'work-1', isError: false } } });
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 4, callId: 'work-2', name: 'bash', arguments: '{}' } });
+  listeners.get('session/event')(session, { type: 'tool/result', data: { turn: 4, message: { toolCallId: 'work-2', isError: false } } });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 4, reason: { kind: 'completed' } } });
   listeners.get('agent/status')({ agent, status: 'idle' });
-  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:one-task-session:11'));
-  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'one user task gets one completed card despite its interactive pause');
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:inline-approval-session:4'));
+  assert.equal(records().filter((record) => record.kind === 'completed').length, 1, 'work after an inline approval still finishes the user task');
+  await runtime();
+});
+
+test('a gate still waiting on the human at turn end keeps withholding that turn completion', async (t) => {
+  const { listeners, records, runtime } = await fixture(t, undefined, { completionGraceMs: 0 });
+  const session = { id: 'open-gate-session', header: {} };
+  const agent = { session };
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 5 } });
+  listeners.get('session/event')(session, { type: 'tool/call', data: { turn: 5, callId: 'review-2', name: 'exit_plan_mode', arguments: '{}' } });
+  // No verdict reached the turn, so this end stopped on the human rather than finishing the task.
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 5, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await settle();
+  assert.equal(records().some((record) => record.mergeKey === 'turn:open-gate-session:5'), false, 'an unanswered plan review is not a completed task');
+  // The next turn is ordinary work again: one stuck gate cannot mute the session forever.
+  listeners.get('agent/status')({ agent, status: 'running' });
+  listeners.get('session/event')(session, { type: 'turn/start', data: { turn: 6 } });
+  listeners.get('session/event')(session, { type: 'turn/end', data: { turn: 6, reason: { kind: 'completed' } } });
+  listeners.get('agent/status')({ agent, status: 'idle' });
+  await waitUntil(() => records().some((record) => record.mergeKey === 'turn:open-gate-session:6'));
   await runtime();
 });
 

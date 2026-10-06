@@ -199,23 +199,60 @@ export async function apply(ctx, config = {}) {
   // A live user-questions/request has no source-proven causal callId, therefore
   // this host must not infer one from an arrival queue or FIFO ordering.
   const pendingToolCalls = new Map();
-  // Plan reviews and execution approvals are control gates: their idle pause is not task completion.
-  // An ordinary question can instead be the last operation of a task, so retain its kind and allow that
-  // directly-settled turn to announce completion once native DSH reaches idle.
-  const interactiveTurns = new Map();
-  const markInteractiveTurn = (sessionId, turn, kind = 'question') => {
+  /**
+   * Plan reviews and execution approvals are control gates: the turn that asks one is not a finished
+   * task while the human still owes an answer. A gate therefore suppresses the completion of its turn
+   * only while it is still UNRESOLVED at that turn's end — and DSH resolves both gates inside the very
+   * turn that asked them (an approval is a `request()` that awaits its outcome and requires an open
+   * turn; `exit_plan_mode` returns its verdict to the same turn). In this machine's 362 real session
+   * logs, every one of the 81 approval/plan-review turns that ended normally had its work continue
+   * inside that same turn, and no gate turn was ever followed by a turn that did not start from a user
+   * message — so the turn end after a settlement is the user's task finishing and must be announced,
+   * and announcing it cannot duplicate anything. A gate still open at a turn end means that turn really
+   * did stop on the human, which is not news; that case should not arise live, and it is kept as the
+   * safe reading rather than a silent false completion.
+   *
+   * Only approvals and plan reviews suppress: an ordinary `ask_user_question` may itself be the last
+   * operation of a task, so its turn announces completion either way.
+   */
+  const gates = new Map();       // sessionId -> Map<turn, Map<token, kind>>
+  const gateTokens = new Map();  // token -> { sessionId, turn, kind }
+  const GATE_KINDS = new Set(['approval', 'plan-review']);
+  const openGate = (sessionId, turn, kind, token) => {
+    if (typeof sessionId !== 'string' || sessionId === '') return;
     if (!Number.isSafeInteger(turn) || turn <= 0) return;
-    let turns = interactiveTurns.get(sessionId);
-    if (!turns) { turns = new Map(); interactiveTurns.set(sessionId, turns); }
-    turns.set(turn, kind);
+    if (typeof token !== 'string' || token === '') return;
+    let turns = gates.get(sessionId);
+    if (!turns) { turns = new Map(); gates.set(sessionId, turns); }
+    let tokens = turns.get(turn);
+    if (!tokens) { tokens = new Map(); turns.set(turn, tokens); }
+    tokens.set(token, kind);
+    gateTokens.set(token, { sessionId, turn, kind });
   };
-  const consumeInteractiveTurn = (sessionId, turn) => {
-    const turns = interactiveTurns.get(sessionId);
-    if (!turns || !turns.has(turn)) return undefined;
-    const kind = turns.get(turn);
+  /** The gate settled: the human answered, so its turn is ordinary work from here on. */
+  const settleGate = (token) => {
+    const entry = typeof token === 'string' ? gateTokens.get(token) : undefined;
+    if (!entry) return;
+    gateTokens.delete(token);
+    const tokens = gates.get(entry.sessionId)?.get(entry.turn);
+    if (!tokens) return;
+    tokens.delete(token);
+    if (!tokens.size) gates.get(entry.sessionId).delete(entry.turn);
+    if (!gates.get(entry.sessionId).size) gates.delete(entry.sessionId);
+  };
+  /** Evaluate and forget a turn's gates: a turn end owns its own bookkeeping either way. */
+  const unresolvedGateAt = (sessionId, turn) => {
+    const turns = gates.get(sessionId);
+    const tokens = turns?.get(turn);
+    if (!tokens) return undefined;
+    let blocking;
+    for (const [token, kind] of tokens) {
+      if (GATE_KINDS.has(kind)) { blocking = kind; break; }
+    }
     turns.delete(turn);
-    if (!turns.size) interactiveTurns.delete(sessionId);
-    return kind;
+    if (!turns.size) gates.delete(sessionId);
+    for (const token of tokens.keys()) gateTokens.delete(token);
+    return blocking;
   };
   const pendingFor = (sessionId) => {
     let calls = pendingToolCalls.get(sessionId);
@@ -354,7 +391,9 @@ export async function apply(ctx, config = {}) {
     const sessionId = session?.id;
     if (Number.isSafeInteger(data.turn) && data.turn > 0) liveTurns.set(sessionId, data.turn);
     if (event?.type === 'tool/call' && data.callId && (data.name === 'ask_user_question' || data.name === 'exit_plan_mode')) {
-      markInteractiveTurn(sessionId, turnOf(sessionId, data), data.name === 'exit_plan_mode' ? 'plan-review' : 'question');
+      // A plan review gates its turn until the verdict returns to it; an ordinary question does not
+      // (it may be the last operation of the task), so only the plan review opens a gate here.
+      if (data.name === 'exit_plan_mode') openGate(sessionId, turnOf(sessionId, data), 'plan-review', `call:${data.callId}`);
       pendingFor(sessionId).add(data.callId);
       const interaction = reducer.question({ sessionId, callId: data.callId, intent: data.name === 'exit_plan_mode' ? { kind: 'plan-review' } : undefined, title: interactionBody(data.name, data.arguments), turn: turnOf(sessionId, data) });
       safely(() => dispatch(interaction));
@@ -370,6 +409,8 @@ export async function apply(ctx, config = {}) {
       const callId = message.toolCallId ?? nested?.toolCallId;
       if (!callId) return; // Unlinked records cannot be guessed closed by an uncorrelated result.
       removePending(sessionId, callId);
+      // The gated call returned, so the human's verdict is in hand and the turn is ordinary work again.
+      settleGate(`call:${callId}`);
       const failed = message.isError === true || nested?.isError === true || data.outcome === 'abort';
       const existing = reducer.questionResult({ sessionId, callId, outcome: failed ? 'abort' : 'settled' });
       if (existing) safely(() => dispatch(existing));
@@ -379,9 +420,12 @@ export async function apply(ctx, config = {}) {
       // Work resumed: whatever turn end is still pending for this session was not the end of the task.
       if (event?.type === 'turn/start' || event?.type === 'tool/call') cancelCompletion(sessionId);
       if (event?.type === 'approval/asked') {
-         markInteractiveTurn(sessionId, turnOf(sessionId, data), 'approval');
+         openGate(sessionId, turnOf(sessionId, data), 'approval', `approval:${data.id}`);
          await dispatch(reducer.approvalAsked({ ...data, turn: turnOf(sessionId, data) }, sessionId));
-      } else if (event?.type === 'approval/decided') await dispatch(reducer.approvalDecided(data.id, data.outcome));
+      } else if (event?.type === 'approval/decided') {
+        settleGate(`approval:${data.id}`);
+        await dispatch(reducer.approvalDecided(data.id, data.outcome));
+      }
       else if (event?.type === 'turn/end') {
         const error = pendingErrors.get(`${sessionId}:${data.turn}`);
         pendingErrors.delete(`${sessionId}:${data.turn}`);
@@ -389,12 +433,10 @@ export async function apply(ctx, config = {}) {
         // leftover whose decision event was never observed, and one leftover used to shadow every
         // later toast. Persist the expiry before the completion notification.
         for (const stale of reducer.expireOpenForSession(sessionId)) await dispatch(stale);
-        // Plan reviews and execution approvals are intermediate native-idle control gates. An ordinary
-         // question may directly finish the task after the user answers, so only the gates are suppressed.
-         const interactionKind = consumeInteractiveTurn(sessionId, data.turn);
-         if (interactionKind !== 'plan-review' && interactionKind !== 'approval') {
-           deferCompletion(sessionId, { sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) });
-         }
+        // A control gate swallows this turn's completion only while the human still owes an answer.
+        if (unresolvedGateAt(sessionId, data.turn) === undefined) {
+          deferCompletion(sessionId, { sessionId, turn: data.turn, reason: data.reason, body: error?.message || String(error || ''), origin: originOf(session) });
+        }
       }
     });
   });
