@@ -132,7 +132,11 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:15px;max-widt
 .dsh-notify-settings .dsh-notify-toggle input{accent-color:var(--dsw-alias-state-business-primary);flex:0 0 18px;height:18px;margin:1px 0 0;max-width:18px;min-height:18px;min-width:18px;width:18px}
 .dsh-notify-settings .dsh-notify-toggle>span{min-width:0;overflow-wrap:anywhere}
 .dsh-notify-field{display:grid;font-size:13px;font-weight:600;gap:8px;min-width:0}
-.dsh-notify-select{background:var(--dsw-specific-input-major,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;font:inherit;font-weight:400;max-width:100%;min-height:36px;min-width:0;padding:0 10px;width:100%}
+/* A bare font:inherit made this the one control that scaled with the host's content font size
+   (--dsh-content-font-size, default 14px and user-settable to 22px), while every label and control
+   around it is pinned — so the two selects sat visibly larger than their own card. Pin the size; the
+   inherited family still comes from font:inherit. */
+.dsh-notify-select{background:var(--dsw-specific-input-major,var(--dsw-alias-bg-layer-2));border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;font:inherit;font-size:13px;font-weight:400;max-width:100%;min-height:36px;min-width:0;padding:0 10px;width:100%}
 .dsh-notify-actions{align-items:center;display:flex;flex-wrap:wrap;gap:8px;min-width:0}
 .dsh-notify-action{background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;color:inherit;cursor:pointer;font:inherit;font-size:12px;line-height:30px;max-width:100%;min-height:32px;padding:0 10px;touch-action:manipulation}
 .dsh-notify-action:hover:not(:disabled){background:var(--dsw-alias-button-floating-hover)}

@@ -100,11 +100,12 @@ Above the cards, the page shows the running version against the newest one on np
 
 ## Compatibility
 
-Current release: plugin **`0.4.2`** is verified against DeepSeek Harness **`0.2.1-alpha.1`**.
+Current release: plugin **`0.4.3`** is verified against DeepSeek Harness **`0.2.1-alpha.1`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
-| **`0.4.2`** | `0.2.1-alpha.1` | A task that asked for your approval is announced again when it finishes (since `0.3.2` those completions were withheld forever), and `0.2.0-rc.2` / `0.2.1-alpha.1` are declared compatible — one `dshReleases` line each, since `>=0.1.7-rc.1 <0.3.0` already admitted them |
+| **`0.4.3`** | `0.2.1-alpha.1` | The 「通知位置」and「提示音」dropdowns pin their own 13px instead of following the host's content font size, which made them render larger than their own labels. Client half only |
+| `0.4.2` | `0.2.1-alpha.1` | A task that asked for your approval is announced again when it finishes (since `0.3.2` those completions were withheld forever), and `0.2.0-rc.2` / `0.2.1-alpha.1` are declared compatible — one `dshReleases` line each, since `>=0.1.7-rc.1 <0.3.0` already admitted them |
 | `0.4.1` | `0.2.0-rc.1` | Compatibility follow-up: declares the DSH `0.2.0` line (`>=0.1.7-rc.1 <0.3.0`), so the plugin is no longer dropped at profile load when `0.2.0` ships. No source change — every interface it binds is unchanged |
 | `0.4.0` | `0.1.7-rc.2` | Online version detection in 设置 → 通知: the running version against npm's newest, a manual **检查更新** (`?force=1`), repository/changelog/issues links, and a copyable upgrade command — read-only, cached, and it never installs or restarts anything |
 | `0.3.4` | `0.1.7-rc.1` | Trigger-timing fixes: a failure is delivered at `agent/error` (one card with `turn/end`), a same-stack `idle → running` flap no longer announces a finished task, and the client pulls at once on a session-state change or a visible-again tab (1.5 s interval kept as fallback) |
@@ -152,8 +153,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.4.2
-git push origin v0.4.2
+git tag v0.4.3
+git push origin v0.4.3
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.
