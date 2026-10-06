@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.3] - 2026-10-06
+
+### Fixed
+
+- **The two settings dropdowns no longer render larger than the labels beside them.** 「通知位置」and「提示音」were the only controls in the section that did not pin their own type size: `.dsh-notify-select` used a bare `font: inherit`, so they followed the host's content font size — `--dsh-content-font-size`, 14px by default and user-settable from 10px to 22px — while every label, hint, toggle, segmented button and action button around them is pinned (13px/12px). The select now states `font-size: 13px` after `font: inherit`, matching its own card, and still inherits the family from the host. No other control was affected: every other `select` in the plugin already sat inside a container that pinned 13px.
+
+### Verified
+
+- `npm run typecheck` gained a static guard: `.dsh-notify-select` must declare its own `font-size`, so the control cannot silently go back to scaling with the host's content font size.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+- Counter-proof: removing `font-size: 13px` from the rule fails `npm run typecheck` with `the settings select must pin its own font-size, not inherit the host content font size`; restoring it passes.
+
 ## [0.4.2] - 2026-10-06
 
 ### Fixed

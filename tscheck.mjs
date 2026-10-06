@@ -20,6 +20,10 @@ if (!host.includes('registry?.events?.subscribe')) throw new Error('the DSH 0.1.
 if (!host.includes('message.toolCallId')) throw new Error('the flattened tool/result seam is not wired');
 const client = await readFile('src/client.js', 'utf8');
 if (!client.includes("slots.inject('settings.section'") || !client.includes("slots.inject('shell.overlay'")) throw new Error('client slots are not wired');
+// Every control in the settings section pins its own size. A bare `font: inherit` would instead follow
+// the host's `--dsh-content-font-size` (default 14px, user-settable up to 22px) and render the selects
+// visibly larger than the labels beside them.
+if (!/\.dsh-notify-select\{[^}]*font-size:/.test(client)) throw new Error('the settings select must pin its own font-size, not inherit the host content font size');
 // DSH 0.1.7 publishes pending interactions through the unified Session status snapshot.
 if (!client.includes('ui?.sessionStatus')) throw new Error('the DSH 0.1.7 Session status seam is not wired');
 // The plugin keeps no history: nothing may write an ack, an epoch or a persisted record. (buffer.js
