@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.4] - 2026-10-15
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.1-alpha.3` compatible.** `dsh.compatibility.dshReleases` gains `0.2.1-alpha.3` after `0.2.1-alpha.1`. The requirement itself stays `>=0.1.7-rc.1 <0.3.0`, which already admitted it — that is why `dsh-notify` was not among the rows the loader refused at startup on `0.2.1-alpha.3`, and no range widening was needed. **No source change.**
+
+### Verified
+
+- **No interface this plugin binds changed in `0.2.1-alpha.2` or `0.2.1-alpha.3`.** Comparing the published packages of `0.2.1-alpha.1` and `0.2.1-alpha.3` field by field, the seams this plugin binds are identical: `connection.requestRejection`, `webServer.register`/`tapIndex`, the `settings.section` and `shell.overlay` seat contracts, `slots.inject`, `uiSession.sessionStatus`, the `session/event` payloads it reads (`tool/call`, `tool/result` with `message.toolCallId`/`message.isError`, `turn/*`), `jobs.events`, `workflow/end` and `tool-workflow/run-start`. What the range added is additive only: the `plugin:` record namespace, `job/registered`, `job/settled`, `working-directory/change`, and the `connection.operator` → `connection.browserPeer` rename, a member this plugin never reads.
+- **A real profile on `0.2.1-alpha.3` admitted this plugin.** The loader disabled the `browser-use` and `browser-use-playwright-mcp` rows and no others, and no exact-version exemption was granted or needed for `@idoall/dsh-notify`.
+- **Host half live on `0.2.1-alpha.3`:** `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`; `/config`, `/sounds` and `/update` (real npm registry: running `0.4.3`, newest `0.4.3`) all answered 200; `/pull` returned six real records from that same day, spanning a completion, a failure and a question still awaiting an answer.
+- **Client half live on `0.2.1-alpha.3`:** the page lists `@idoall/dsh-notify/client.js` in its plugin bundle, and the served bundle carries the `settings.section` and `shell.overlay` registrations and the `dsh-notify-*` markup.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+
 ## [0.4.3] - 2026-10-06
 
 ### Fixed
