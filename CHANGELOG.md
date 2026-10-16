@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.6] - 2026-10-16
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.1-alpha.5` compatible.** `dsh.compatibility.dshReleases` gains `0.2.1-alpha.5` after `0.2.1-alpha.4`. The requirement itself stays `>=0.1.7-rc.1 <0.3.0`, which already admitted it — that is why `dsh-notify` was not among the rows the loader refused at startup on `0.2.1-alpha.5`, and no range widening, exemption or code change was needed.
+
+### Fixed
+
+- **`README.zh.md`'s DSH badge said `0.2.1-alpha.3`, two releases behind.** The English badge, the Requirements line, the Compatibility heading and the release table had all moved on, so the Chinese README advertised a host version the plugin had long since moved past — and a badge is the first thing a reader sees. The badge now tracks the same version as every other declaration, and this release was audited for stale version strings across both READMEs rather than only in the lines being edited.
+
+### Verified
+
+- **Every package this plugin binds is byte-identical across `0.2.1-alpha.4` → `0.2.1-alpha.5`, with two changes off this plugin's paths.** `dsh-host-webserver`, `dsh-client-connection`, `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-layout`, `dsh-client-ui-settings`, `dsh-client-ui-session`, `dsh-session`, `dsh-llm`, `dsh-tool-workflow`, `dsh-workflow`, `dsh-agent-loop`, `dsh-agent` and `dsh-user-questions` carry no source change at all. `dsh-tools` changes only the `run_code` tool's flavour descriptions (TypeScript function-body flavour, argument wording) and never touches `toolCallId`, `isError` or the `tool/result` session payload this plugin reads; `dsh-client-ui-settings-general` only substitutes the displayed host version string in its bundled client. The `settings.section` and `shell.overlay` seats this plugin mounts into are untouched.
+- **A real profile on `0.2.1-alpha.5` admitted this plugin.** The loader disabled the `browser-use` and `browser-use-playwright-mcp` rows and no others, and no exact-version exemption was needed or granted for `@idoall/dsh-notify`.
+- **Host half live on `0.2.1-alpha.5`:** `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`; `/config`, `/sounds` and `/update` (real npm registry: running `0.4.5`, newest `0.4.5`) all answered 200.
+- **Client half live on `0.2.1-alpha.5`:** the page lists `@idoall/dsh-notify/client.js` in its plugin bundle, and the served combo bundle answered `200` (4.4 MB) carrying the `settings.section` and `shell.overlay` registrations and the `dsh-notify-*` markup.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+
 ## [0.4.5] - 2026-10-16
 
 ### Changed
