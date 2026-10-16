@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.5] - 2026-10-16
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.1-alpha.4` compatible.** `dsh.compatibility.dshReleases` gains `0.2.1-alpha.4` after `0.2.1-alpha.3`. The requirement itself stays `>=0.1.7-rc.1 <0.3.0`, which already admitted it — that is why `dsh-notify` was not among the rows the loader refused at startup on `0.2.1-alpha.4`, and no range widening, exemption or code change was needed.
+
+### Verified
+
+- **Every package this plugin binds is byte-identical across `0.2.1-alpha.3` → `0.2.1-alpha.4`, with one additive exception.** Comparing the published packages field by field, `dsh-host-webserver`, `dsh-client-connection`, `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-layout`, `dsh-client-ui-settings`, `dsh-client-ui-session`, `dsh-session`, `dsh-llm`, `dsh-tool-workflow`, `dsh-workflow`, `dsh-agent-loop`, `dsh-agent`, `dsh-user-questions` and `dsh-tools` carry no source change at all. Only `dsh-client-ui-settings-general` differs, and what it adds is off this plugin's paths: a Host release change prompt (`HostReleasePrompt`) with its `hostRelease.*` locale keys, plus a cosmetic renumbering of the bundled CSS variables. The `settings.section` and `shell.overlay` seats this plugin mounts into are untouched.
+- **A real profile on `0.2.1-alpha.4` admitted this plugin.** The loader disabled the `browser-use` and `browser-use-playwright-mcp` rows and no others, and no exact-version exemption was needed or granted for `@idoall/dsh-notify`.
+- **Host half live on `0.2.1-alpha.4`:** `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`; `/config`, `/sounds` and `/update` (real npm registry: running `0.4.4`, newest `0.4.4`) all answered 200.
+- **Client half live on `0.2.1-alpha.4`:** the page lists `@idoall/dsh-notify/client.js` in its plugin bundle, and the served combo bundle answered `200` (4.4 MB) carrying the `settings.section` and `shell.overlay` registrations and the `dsh-notify-*` markup.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+
 ## [0.4.4] - 2026-10-15
 
 ### Changed
