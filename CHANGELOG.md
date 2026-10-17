@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.7] - 2026-10-17
+
+### Changed
+
+- **Declared DeepSeek Harness `0.2.1-rc.2` compatible, the first release candidate of the `0.2.1` line.** `dsh.compatibility.dshReleases` gains `0.2.1-rc.2` after `0.2.1-alpha.5`. The requirement itself stays `>=0.1.7-rc.1 <0.3.0`, which already admitted it — that is why `dsh-notify` was not among the rows the loader refused at startup on `0.2.1-rc.2`, and no range widening, exemption or code change was needed. `0.2.1-rc.1` is deliberately **not** declared: this machine never booted it, and each entry in that list names a real boot rather than a semver guess.
+
+### Verified
+
+- **Of every package this plugin binds, exactly one differs across `0.2.1-alpha.5` → `0.2.1-rc.2`, and it differs only in a displayed string.** `dsh-host-webserver`, `dsh-client-connection`, `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-layout`, `dsh-client-ui-settings`, `dsh-client-ui-session`, `dsh-session`, `dsh-llm`, `dsh-tool-workflow`, `dsh-workflow`, `dsh-agent-loop`, `dsh-agent`, `dsh-user-questions` and `dsh-tools` are byte-identical. The exception is `dsh-client-ui-settings-general`, whose bundled client only substitutes the host version string (`general.currentVersion`) it renders; the `settings.section` and `shell.overlay` seats this plugin mounts into are untouched.
+- **The host's `cordis` and `schemastery` promoted from `4.0.5-alpha.2` / `3.18.5-alpha.2` to stable `4.0.5` / `3.18.5`, with no code difference at all** — the published stable tarballs are byte-identical to the alphas apart from their `package.json`. Both remain inside this plugin's `^4.0.4` / `^3.18.4` peer ranges.
+- **A real profile on `0.2.1-rc.2` admitted this plugin.** The loader disabled the `browser-use` and `browser-use-playwright-mcp` rows and no others, and no exact-version exemption was needed or granted for `@idoall/dsh-notify`.
+- **Host half live on `0.2.1-rc.2`:** `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`; `/config`, `/sounds` and `/update` (real npm registry: running `0.4.6`, newest `0.4.6`) all answered 200.
+- **Client half live on `0.2.1-rc.2`:** the page lists `@idoall/dsh-notify/client.js` in its plugin bundle, and the served combo bundle answered `200` carrying the `settings.section` and `shell.overlay` registrations and the `dsh-notify-*` markup.
+- Full verification passed: static source checks, **110 automated tests**, build, and package precondition checks.
+
 ## [0.4.6] - 2026-10-16
 
 ### Changed

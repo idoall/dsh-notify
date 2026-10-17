@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.2.1--alpha.5-4B6BFB" alt="DSH 0.2.1-alpha.5">
+  <img src="https://img.shields.io/badge/DSH-0.2.1--rc.2-4B6BFB" alt="DSH 0.2.1-rc.2">
 </p>
 
 <p align="center">English | <a href="README.zh.md">中文</a></p>
@@ -46,7 +46,7 @@ Requirements:
 
 - DeepSeek Harness with a Web profile
 - Node.js 20 or newer
-- Verified DeepSeek Harness version: `0.2.1-alpha.5`
+- Verified DeepSeek Harness version: `0.2.1-rc.2`
 
 Install from npm into your Web profile:
 
@@ -100,11 +100,12 @@ Above the cards, the page shows the running version against the newest one on np
 
 ## Compatibility
 
-Current release: plugin **`0.4.6`** is verified against DeepSeek Harness **`0.2.1-alpha.5`**.
+Current release: plugin **`0.4.7`** is verified against DeepSeek Harness **`0.2.1-rc.2`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
-| **`0.4.6`** | `0.2.1-alpha.5` | Declares DeepSeek Harness `0.2.1-alpha.5` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: every package it binds is byte-identical across `0.2.1-alpha.4` → `0.2.1-alpha.5` except two that changed off this plugin's paths — `dsh-tools` (the `run_code` tool description) and `dsh-client-ui-settings-general` (the displayed host version string). Also fixes the Chinese README's DSH badge, which had been left two releases behind |
+| **`0.4.7`** | `0.2.1-rc.2` | Declares DeepSeek Harness `0.2.1-rc.2` compatible, the first release candidate of that line — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: of the packages it binds, only `dsh-client-ui-settings-general` differs across `0.2.1-alpha.5` → `0.2.1-rc.2`, and only in the host version string it displays. The host's `cordis` and `schemastery` also promoted to stable `4.0.5` / `3.18.5`, which are byte-identical to the alphas this plugin already ran against |
+| `0.4.6` | `0.2.1-alpha.5` | Declares DeepSeek Harness `0.2.1-alpha.5` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: every package it binds is byte-identical across `0.2.1-alpha.4` → `0.2.1-alpha.5` except two that changed off this plugin's paths — `dsh-tools` (the `run_code` tool description) and `dsh-client-ui-settings-general` (the displayed host version string). Also fixes the Chinese README's DSH badge, which had been left two releases behind |
 | `0.4.5` | `0.2.1-alpha.4` | Declares DeepSeek Harness `0.2.1-alpha.4` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: every package it binds is byte-identical across `0.2.1-alpha.3` → `0.2.1-alpha.4` except `dsh-client-ui-settings-general`, whose only additions are a Host release prompt and its locale keys |
 | `0.4.4` | `0.2.1-alpha.3` | Declares DeepSeek Harness `0.2.1-alpha.3` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: every interface it binds is unchanged, and the running `0.4.3` was already booting and delivering on `0.2.1-alpha.3` |
 | `0.4.3` | `0.2.1-alpha.1` | The 「通知位置」and「提示音」dropdowns pin their own 13px instead of following the host's content font size, which made them render larger than their own labels. Client half only |
@@ -125,7 +126,7 @@ Current release: plugin **`0.4.6`** is verified against DeepSeek Harness **`0.2.
 - Two declarations decide whether the plugin loads at all: `dsh.engines.dsh` and every `@deepseek-ai/dsh-*` peer state the same requirement, `>=0.1.7-rc.1 <0.3.0` as of `0.4.1`. DSH refuses an incompatible bundle at profile load, so a range that excluded the running release would silently drop the plugin — which is exactly what the old `<0.2.0` ceiling would have done on the `0.2.0` release.
 - **An interactive gate only withholds a completion while it is unanswered.** DSH resolves an execution approval and a plan review *inside* the turn that asked them (`approval.request()` awaits its outcome under an open turn; `exit_plan_mode` returns its verdict to the same turn), so the turn that resumes is the turn that asked, and its end is the user's task finishing. `0.4.2` makes that the rule; `0.3.2`–`0.4.1` suppressed the whole turn, which silently dropped the completion of every approval-gated task.
 - `@deepseek-ai/schemastery` is a **peer**, not a plain dependency: DSH resolves only a linked plugin's peer dependencies from the running installation, so a `link:` install of this directory would otherwise fail to import the Host half.
-- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5` as of `0.4.6`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
+- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5`, `0.2.1-rc.2` as of `0.4.7`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
 
 The layout is also checked at a 390px mobile viewport: the settings controls reflow and the toast becomes full-width without falling behind the mobile sidebar.
 
@@ -156,8 +157,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.4.6
-git push origin v0.4.6
+git tag v0.4.7
+git push origin v0.4.7
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.
