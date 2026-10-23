@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.8] - 2026-10-23
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.1-rc.3` compatible. The existing `>=0.1.7-rc.1 <0.3.0` requirement remains unchanged; no notification source changes are needed.
+- Recheck both READMEs for matching current plugin and DSH versions, badges, compatibility rows, version examples, and release commands. Correct the older statement calling `0.2.1-rc.2` the first RC.
+- Synchronize the lockfile's root version with the release without changing dependency resolutions.
+
+### Verified
+
+- The consumed core Host and Client APIs remain unchanged from `0.2.1-rc.2`; changes to general settings and workspace blank-session handling do not affect the notification entry points.
+- The running `0.2.1-rc.3` host serves the notification routes successfully with `eventErrors: 0`; live Client inspection confirms the notification overlay registration is active. Registration is not a visual screenshot test.
+- Full verification: static checks, 110 automated tests, build, and package checks.
+- Release acceptance includes downloading the published npm tarball, comparing documents and manifest with the release tag, and verifying each distributed build file against a fresh build. The npm `latest` tag and GitHub Release versions must agree.
+
 ## [0.4.7] - 2026-10-17
 
 ### Changed
