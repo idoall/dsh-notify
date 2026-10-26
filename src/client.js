@@ -170,14 +170,20 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:15px;max-widt
  * the browser top layer (see ToastOverlay) so a self-test fired from 设置 stays visible above the
  * settings modal.
  */
-export const TOAST_CSS = `.dsh-notify-frame{position:fixed;z-index:1100;transition:height 390ms cubic-bezier(.16,1,.3,1)}
-.dsh-notify-stack{height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+export const TOAST_CSS = `.dsh-notify-frame{pointer-events:none;position:fixed;z-index:1100;transition:height 390ms cubic-bezier(.16,1,.3,1)}
+.dsh-notify-stack{height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;pointer-events:auto;scrollbar-width:thin}
 .dsh-notify-stack[data-collapsed=true]{overflow:hidden}
 .dsh-notify-stack-inner{pointer-events:none;position:relative}
 .dsh-notify-slot{inset-inline:0;pointer-events:none;position:absolute;top:0;transform-origin:top center;transition:transform 360ms cubic-bezier(.16,1,.3,1)}
 .dsh-notify-stack[data-collapsed=true] .dsh-notify-slot{transition:top 340ms cubic-bezier(.22,.88,.38,1),transform 340ms cubic-bezier(.22,.88,.38,1)}
-.dsh-notify-count{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;inset-inline-end:35px;line-height:18px;padding:0 8px;position:absolute;top:13px;z-index:102}
+.dsh-notify-count{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;inset-inline-end:35px;line-height:18px;padding:0 8px;pointer-events:auto;position:absolute;top:13px;z-index:102}
 .dsh-notify-count:hover{color:var(--dsw-alias-label-primary)}
+/* The strip belongs to the frame, not to a card: it stays put while the pile behind it scrolls, and
+   passing a pointer over the empty part of the strip must still reach the page underneath. */
+.dsh-notify-toolbar{align-items:center;display:flex;justify-content:flex-end;pointer-events:none}
+.dsh-notify-clear-all{background:var(--dsw-alias-interactive-bg-hover-solid,var(--dsw-alias-bg-layer-3,rgb(0 0 0 / 6%)));border:0;border-radius:999px;color:var(--dsw-alias-label-secondary);cursor:pointer;font:inherit;font-size:11px;line-height:20px;padding:0 10px;pointer-events:auto;white-space:nowrap}
+.dsh-notify-clear-all:hover{background:var(--dsw-alias-button-floating-hover);color:var(--dsw-alias-label-primary)}
+.dsh-notify-clear-all:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px}
 .dsh-notify-toast{align-items:flex-start;animation:dsh-notify-card-in 380ms cubic-bezier(.21,1.02,.73,1);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:11px;box-shadow:0 2px 7px rgb(29 41 57 / 10%),0 1px 2px rgb(29 41 57 / 6%);box-sizing:border-box;color:var(--dsw-alias-label-primary);cursor:pointer;display:flex;gap:11px;margin:0;overflow:hidden;padding:14px 34px 17px 14px;pointer-events:auto;position:relative;width:100%}
 .dsh-notify-toast[data-style=strong]{background:color-mix(in srgb,var(--dsh-notify-tone) 7%,var(--dsw-alias-bg-layer-2));border-color:color-mix(in srgb,var(--dsh-notify-tone) 62%,var(--dsw-alias-border-l2))}
 .dsh-notify-toast[data-style=soft]{box-shadow:0 2px 7px rgb(29 41 57 / 7%),0 1px 2px rgb(29 41 57 / 4%)}
@@ -575,6 +581,13 @@ export const TOAST_STACK_PEEK = 10;
 export const TOAST_QUEUE_MAX = 50;
 /** In collapsed mode each older card exposes exactly this much of its lower edge. */
 export const TOAST_STACK_COLLAPSED_PEEK = 18;
+/**
+ * The one clear-all action, on its own strip above the pile. It only earns that strip once there is
+ * more than one card to clear — a single card already has its own × — and the strip is part of the
+ * frame's height, so the pile keeps every exposed edge instead of being covered by a floating pill.
+ */
+export const TOAST_CLEAR_ALL_HEIGHT = 20;
+export const TOAST_CLEAR_ALL_GAP = 6;
 /** A just-arrived card gets one short attention sweep; it never controls dismissal. */
 export const TOAST_ATTENTION_MS = 4000;
 /** Must match the `dsh-notify-card-out` animation; the card is dropped from the DOM when it ends. */
@@ -678,6 +691,16 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     retire(eventId);
   };
   const patchCard = (eventId, patch) => commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, ...patch } : card)));
+  /**
+   * Clear the whole pile: every live card leaves through `dismiss`, so it keeps the same exit
+   * animation and timer cleanup as its own ×. Clearing stays as local as closing one card always
+   * was — nothing is acknowledged, and a pending question or approval is still waiting in its
+   * session. A cleared card also stays cleared: its record is still in `toasted`, so the next poll
+   * that re-delivers it is not news and cannot resurrect the pile.
+   */
+  const clearAll = () => {
+    for (const card of cardsRef.current) if (!card.leaving) dismiss(card.record.eventId);
+  };
   const measureOne = (eventId, node) => {
     const height = Math.ceil(node.offsetHeight || node.getBoundingClientRect?.().height || 0);
     if (!height || heights.current.get(eventId) === height) return false;
@@ -934,12 +957,19 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   const queueCount = frame.overflow ? frame.total : 0;
   const onScreenCount = Math.max(0, frame.total - frame.hidden);
   const rendered = [...liveCards, ...cards.filter((card) => card.leaving)];
+  // One card already has its own ×, so the strip only appears once there is a pile to clear. It is
+  // part of the frame's height rather than laid over the newest card: the card keeps every line of
+  // its body, and the strip stays outside the scroll box when the queue is expanded.
+  const clearAllVisible = liveCards.length > 1;
+  const clearAllStrip = TOAST_CLEAR_ALL_HEIGHT + TOAST_CLEAR_ALL_GAP;
   // The count belongs to the window, not to whichever card happens to be on top: it is pinned to the
   // corner outside the scroll box, so it stays put (and stays the same number) once the user scrolls.
   return React.createElement('div', { ref: frameRef, popover: 'manual', className: 'dsh-notify-frame',
-    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
-    queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,
-    React.createElement('div', { ref: stackRef, className: 'dsh-notify-stack', 'data-overflow': frame.overflow ? 'true' : 'false', 'data-collapsed': collapsed ? 'true' : 'false', onPointerEnter: () => { if (collapsed) setExpanded(true); }, onFocusCapture: () => { if (collapsed) setExpanded(true); } },
+    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight + (clearAllVisible ? clearAllStrip : 0)}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
+    clearAllVisible ? React.createElement('div', { className: 'dsh-notify-toolbar', style: { height: `${TOAST_CLEAR_ALL_HEIGHT}px`, marginBottom: `${TOAST_CLEAR_ALL_GAP}px` } },
+      React.createElement('button', { type: 'button', className: 'dsh-notify-clear-all', 'aria-label': `清除全部 ${liveCards.length} 条通知`, title: '清除当前页面上的全部通知', onClick: (event) => { event.stopPropagation(); clearAll(); } }, '全部清除')) : null,
+    queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, style: { top: `${13 + (clearAllVisible ? clearAllStrip : 0)}px` }, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,
+    React.createElement('div', { ref: stackRef, className: 'dsh-notify-stack', style: { height: `${frame.windowHeight}px` }, 'data-overflow': frame.overflow ? 'true' : 'false', 'data-collapsed': collapsed ? 'true' : 'false', onPointerEnter: () => { if (collapsed) setExpanded(true); }, onFocusCapture: () => { if (collapsed) setExpanded(true); } },
       React.createElement('div', { className: 'dsh-notify-stack-inner', style: { height: `${frame.contentHeight}px` } },
         rendered.map((card) => cardView(card, planById.get(card.record.eventId) ?? slots.current.get(card.record.eventId) ?? { offsetY: frame.contentHeight }, liveCards.findIndex((live) => live.record.eventId === card.record.eventId))))));
 }

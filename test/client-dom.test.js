@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
-import { createLocalSelfTestBatch, mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor, TOAST_STACK_GAP, TOAST_STACK_PEEK } from '../src/client.js';
+import { createLocalSelfTestBatch, mountNotifyClient, NotificationSelfTests, publishLocalSelfTest, setToastConfig, toastAnchor, TOAST_CLEAR_ALL_GAP, TOAST_CLEAR_ALL_HEIGHT, TOAST_STACK_GAP, TOAST_STACK_PEEK } from '../src/client.js';
 
 function response(value) { return { ok: true, json: async () => value }; }
 
@@ -439,6 +439,7 @@ async function mountStackSandbox(t, { host = 'live', cardHeight = 0, sessions = 
     windowHeight: () => document.querySelector('.dsh-notify-frame')?.style.height,
     contentHeight: () => document.querySelector('.dsh-notify-stack-inner')?.style.height,
     badge: () => document.querySelector('.dsh-notify-count')?.textContent ?? null,
+    clearAll: () => document.querySelector('.dsh-notify-clear-all'),
     times: () => nodes().map((node) => node.querySelector('.dsh-notify-toast-time')?.textContent ?? null),
     headParts: (index = 0) => [...nodes()[index].querySelectorAll('.dsh-notify-toast-head > *')],
     tabTitle: () => title.value,
@@ -466,13 +467,66 @@ test('the corner folds a newest-first pile and keeps every card for expansion', 
   assert.deepEqual(sandbox.titles(), ['任务完成 5', '任务完成 4', '任务完成 3', '任务完成 2', '任务完成 1'], 'the newest takes the top slot');
   assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'true');
   assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(18px)', 'translateY(36px)', 'translateY(54px)', 'translateY(72px)'], 'unmeasured cards preserve equal 18px lips until the browser measures them');
-  assert.equal(sandbox.windowHeight(), '58px', 'the folded frame reserves three exposed 18px edges');
+  assert.equal(sandbox.windowHeight(), `${58 + TOAST_CLEAR_ALL_HEIGHT + TOAST_CLEAR_ALL_GAP}px`, 'the folded frame reserves three exposed 18px edges, plus the clear-all strip above the pile');
+  assert.equal(sandbox.stack().style.height, '58px', 'the strip is extra frame height: it does not eat into the space the cards expose');
   assert.equal(sandbox.badge(), null, 'the pile communicates its depth visually instead of with a queue badge');
 
+  // Clearing the pile is one action in the strip, and it stays outside the scroll box when expanded.
+  assert.ok(sandbox.clearAll(), 'a pile of five offers the clear-all action');
   await sandbox.pointer(sandbox.stack(), 'pointerover');
   assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'false', 'entering the pile expands it');
+  assert.ok(sandbox.clearAll(), 'expanding scrolls cards, it does not take the action away');
   assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)'], 'the same cards expand into their complete slots without being recreated');
   assert.equal(sandbox.count(), 5, 'expansion does not discard cards');
+});
+
+test('one click clears the whole pile, and a cleared card stays cleared', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  assert.equal(sandbox.clearAll(), null, 'a single card is closed by its own ×: there is no pile to clear');
+
+  sandbox.push(burstRecord(2));
+  sandbox.push(burstRecord(3));
+  await sandbox.tick();
+  const button = sandbox.clearAll();
+  assert.ok(button, 'a pile gets the clear-all action');
+  assert.equal(button.textContent, '全部清除');
+  assert.equal(button.getAttribute('type'), 'button', 'it is a real button, so Enter and Space work like a click');
+  assert.equal(button.getAttribute('aria-label'), '清除全部 3 条通知', 'the label says how many cards it is about to clear');
+
+  await sandbox.click(button);
+  await sandbox.wait(320);
+  assert.equal(sandbox.count(), 0, 'one click clears every card on the page');
+  assert.equal(sandbox.clearAll(), null, 'and the action leaves with the pile');
+
+  // The host keeps re-delivering everything it buffered, exactly as a real poll does. Clearing is a
+  // decision about notifications already delivered, so the next poll must not treat them as news.
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 0, 'cleared records are not resurrected by the next poll');
+
+  // A delivery that arrives after the clear is a new notification and still gets its own cards.
+  sandbox.push(burstRecord(4));
+  sandbox.push(burstRecord(5));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 2, 'later notifications are presented normally');
+  assert.ok(sandbox.clearAll(), 'the fresh pile brings the clear-all action back');
+});
+
+test('clearing the pile is not an answer to whatever was waiting in it', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  const answered = [];
+  sandbox.push({ eventId: 'ask-clear', mergeKey: 'ask-clear', kind: 'question', sessionId: 's1', title: '需要回复', body: '选一个', at: 1, phase: 'open' });
+  sandbox.push(burstRecord(2));
+  await sandbox.tick();
+  sandbox.publish(new Map([['s1', { kind: 'question', questions: [{ id: 'q1', options: [{ label: '批准' }] }], answer: async (batch) => { answered.push(batch); } }]]));
+  await sandbox.wait(20);
+
+  assert.equal(sandbox.answers(0).length, 2, 'the question is answerable while it is on screen');
+  await sandbox.click(sandbox.clearAll());
+  await sandbox.wait(320);
+  assert.equal(sandbox.count(), 0, 'both the question and the finished card leave');
+  assert.deepEqual(answered, [], 'closing notifications is local: no option is chosen for the user');
 });
 
 test('a card closes on click, and an in-flight answer shows loading before it succeeds or fails', async (t) => {
@@ -636,6 +690,10 @@ test('nothing is dropped: every card expands from the folded pile into its own s
   await sandbox.pointer(sandbox.stack(), 'pointerover');
   assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'false');
   assert.deepEqual(sandbox.transforms(), ['translateY(0px)', 'translateY(12px)', 'translateY(24px)', 'translateY(36px)', 'translateY(48px)', 'translateY(60px)', 'translateY(72px)']);
+  // The queue counter only exists for the scroll window, and it moves down with the clear-all strip so
+  // the two never draw over each other.
+  assert.equal(sandbox.badge(), '+7', 'an overflowing window brings the queue counter back');
+  assert.equal(document.querySelector('.dsh-notify-count').style.top, `${13 + TOAST_CLEAR_ALL_HEIGHT + TOAST_CLEAR_ALL_GAP}px`, 'the counter sits below the clear-all strip instead of under it');
 
   await sandbox.click(sandbox.closer(0));
   await sandbox.wait(320);
@@ -683,7 +741,8 @@ test('a batch delivered by one poll arrives whole, measured before it is ever vi
   assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * 18}px)`),
     'the complete cards are folded under equal 18px exposed edges');
   assert.equal(sandbox.stack().getAttribute('data-collapsed'), 'true');
-  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4}px`, 'the folded stack is fully measured before its first visible paint');
+  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4 + TOAST_CLEAR_ALL_HEIGHT + TOAST_CLEAR_ALL_GAP}px`, 'the folded stack is fully measured before its first visible paint, clear-all strip included');
+  assert.equal(sandbox.stack().style.height, `${cardHeight + 18 * 3 + 4}px`, 'the strip sits above the measured window instead of shrinking it');
   assert.equal(sandbox.badge(), null, 'the visual pile replaces the old queue count');
 });
 
@@ -696,7 +755,7 @@ test('the settings self-test paints finished too: the corner is measured before 
   assert.equal(sandbox.count(), 8, 'eight cards from one self-test');
   assert.deepEqual(sandbox.transforms(), [0, 1, 2, 3, 4, 5, 6, 7].map((index) => `translateY(${index * 18}px)`),
     'the self-test gets the same equal-edge folded treatment');
-  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4}px`);
+  assert.equal(sandbox.windowHeight(), `${cardHeight + 18 * 3 + 4 + TOAST_CLEAR_ALL_HEIGHT + TOAST_CLEAR_ALL_GAP}px`);
   assert.equal(sandbox.badge(), null);
 });
 

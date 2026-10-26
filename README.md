@@ -31,7 +31,7 @@ When a session really stops, fails, asks a question, or needs approval, a card a
 ## What it does
 
 - **Enhanced or soft toast styling.** The default **Enhanced** style gives each notification a clear status colour and a short four-second attention bar; the bar is attention only, not a dismissal timer. **Soft** is a lower-key alternative. A card remains until you close it, open its session, or complete an in-card answer.
-- **A collapsible page-local stack.** With **Collapse multiple notifications** enabled (the default), the second card and onward form a pile: the newest card is fully readable on top, while earlier cards remain complete underneath and expose equal `18px` lower edges. Pointer entry or keyboard focus expands the pile. The page keeps up to 50 live cards; pending actions are prioritised before ordinary cards, then newer cards come first.
+- **A collapsible page-local stack.** With **Collapse multiple notifications** enabled (the default), the second card and onward form a pile: the newest card is fully readable on top, while earlier cards remain complete underneath and expose equal `18px` lower edges. Pointer entry or keyboard focus expands the pile. From two cards on, a **Clear all** action sits above the pile and retires every card on this page at once; clearing stays page-local, so a pending question or approval is untouched and still waits in its session. The page keeps up to 50 live cards; pending actions are prioritised before ordinary cards, then newer cards come first.
 - **Direct, traceable navigation.** Clicking a card opens its session and the exact originating turn. After the host selects that session, the selected row is smoothly revealed in the left session tree, even when it lives in a different off-screen workspace. A card stays put with an explanation if navigation cannot succeed.
 - **Answer in the toast.** A pending question or approval renders the same compatible options as the composer. Execution approvals and plan reviews share DSH's amber decision colour; ordinary questions remain blue. In-card and composer answers share the same host interaction.
 - **Sound and background attention.** Built-in WebAudio cues and validated custom uploads play only after a card is admitted to an enabled visual Toast queue, including while the page is hidden. One polling batch produces one cue. A background tab with unseen notifications receives a temporary bell prefix and favicon attention marker.
@@ -92,7 +92,7 @@ Reload the profile or restart DSH only when its plugin host has not hot-reloaded
 
 Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, not the plugin installation. Uploads are limited to 1 MB and `mp3 / m4a / aac / wav / ogg / flac`; names must be a single path segment.
 
-Above the cards, the page shows the running version against the newest one on npm: `v0.4.8 ✓ 最新`, `v0.4.7 ➔ v0.4.8`, or `v0.4.8 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
+Above the cards, the page shows the running version against the newest one on npm: `v0.4.9 ✓ 最新`, `v0.4.8 ➔ v0.4.9`, or `v0.4.9 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
 
 <p align="center">
   <img src="./assets/version-check.png" width="60%" alt="DSH notification settings with the version row: v0.4.0 newest, Check for updates, GitHub, Changelog and Issues links">
@@ -100,10 +100,11 @@ Above the cards, the page shows the running version against the newest one on np
 
 ## Compatibility
 
-Current release: plugin **`0.4.8`** is verified against DeepSeek Harness **`0.2.1-rc.3`**.
+Current release: plugin **`0.4.9`** is verified against DeepSeek Harness **`0.2.1-rc.3`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
+| **`0.4.9`** | `0.2.1-rc.3` | Adds one-click **clear-all** above the notification pile — page-local, it never answers a waiting interaction; host requirement and DSH declarations are unchanged |
 | **`0.4.8`** | `0.2.1-rc.3` | Declares DSH `0.2.1-rc.3` compatible; notification behavior and the existing host requirement are unchanged |
 | `0.4.7` | `0.2.1-rc.2` | Declares DeepSeek Harness `0.2.1-rc.2` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: of the packages it binds, only `dsh-client-ui-settings-general` differs across `0.2.1-alpha.5` → `0.2.1-rc.2`, and only in the host version string it displays. The host's `cordis` and `schemastery` also promoted to stable `4.0.5` / `3.18.5`, which are byte-identical to the alphas this plugin already ran against |
 | `0.4.6` | `0.2.1-alpha.5` | Declares DeepSeek Harness `0.2.1-alpha.5` compatible — one `dshReleases` line, since `>=0.1.7-rc.1 <0.3.0` already admitted it. No source change: every package it binds is byte-identical across `0.2.1-alpha.4` → `0.2.1-alpha.5` except two that changed off this plugin's paths — `dsh-tools` (the `run_code` tool description) and `dsh-client-ui-settings-general` (the displayed host version string). Also fixes the Chinese README's DSH badge, which had been left two releases behind |
@@ -127,7 +128,7 @@ Current release: plugin **`0.4.8`** is verified against DeepSeek Harness **`0.2.
 - Two declarations decide whether the plugin loads at all: `dsh.engines.dsh` and every `@deepseek-ai/dsh-*` peer state the same requirement, `>=0.1.7-rc.1 <0.3.0` as of `0.4.1`. DSH refuses an incompatible bundle at profile load, so a range that excluded the running release would silently drop the plugin — which is exactly what the old `<0.2.0` ceiling would have done on the `0.2.0` release.
 - **An interactive gate only withholds a completion while it is unanswered.** DSH resolves an execution approval and a plan review *inside* the turn that asked them (`approval.request()` awaits its outcome under an open turn; `exit_plan_mode` returns its verdict to the same turn), so the turn that resumes is the turn that asked, and its end is the user's task finishing. `0.4.2` makes that the rule; `0.3.2`–`0.4.1` suppressed the whole turn, which silently dropped the completion of every approval-gated task.
 - `@deepseek-ai/schemastery` is a **peer**, not a plain dependency: DSH resolves only a linked plugin's peer dependencies from the running installation, so a `link:` install of this directory would otherwise fail to import the Host half.
-- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5`, `0.2.1-rc.2`, `0.2.1-rc.3` as of `0.4.8`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
+- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5`, `0.2.1-rc.2`, `0.2.1-rc.3` as of `0.4.9`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
 
 The layout is also checked at a 390px mobile viewport: the settings controls reflow and the toast becomes full-width without falling behind the mobile sidebar.
 
@@ -158,8 +159,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json`, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.4.8
-git push origin v0.4.8
+git tag v0.4.9
+git push origin v0.4.9
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.
