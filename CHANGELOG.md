@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.9] - 2026-10-26
+
+### Added
+
+- **One-click clear-all above the notification pile.** With two or more live cards, a **全部清除** strip sits above the pile and retires every card on the page at once. Clearing stays page-local: nothing is acknowledged, a pending question or approval is still waiting in its session, and a cleared record is not presented again by the polls that re-deliver it. The strip is part of the frame's height (a 20px pill plus a 6px gap) rather than an overlay on the newest card, so card content keeps every line; the `+N` queue counter moves down by the same amount instead of drawing under it, and the empty part of the strip stays click-through. A single card shows no strip — its own × is the whole story.
+
+### Verified
+
+- New jsdom coverage: a single card offers no strip, one click clears the pile and the next poll does not resurrect it, and clearing a pending question never answers it on the user's behalf.
+- Full verification: static checks, **112 automated tests**, build, and package checks — the pack check materializes the shipped client bundle and requires both the `settings.section` and `shell.overlay` seats to activate.
+- Previewed in a real DeepSeek Harness `0.2.1-rc.3` profile with the built client bundle; the clear-all strip, the settings section, and the toast stack were confirmed in the running page. Compatibility declarations, the `>=0.1.7-rc.1 <0.3.0` host requirement, and `dshReleases` are unchanged.
+
 ## [0.4.8] - 2026-10-23
 
 ### Changed
