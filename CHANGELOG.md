@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.10] - 2026-10-27
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.1-rc.4` compatible. The `>=0.1.7-rc.1 <0.3.0` requirement already admitted it, so no range had to widen; no notification source change is needed.
+- **Of every package this plugin binds, every one is byte-identical across `0.2.1-rc.3` → `0.2.1-rc.4` except `dsh-client-ui-settings-general`, whose bundled client only substitutes the host version string (`general.currentVersion`) it displays.** `dsh-host-webserver`, `dsh-client-connection`, `dsh-client-ui-renderer`, `dsh-client-ui-layout`, `dsh-client-ui-settings`, `dsh-client-ui-session`, `dsh-jobs`, `dsh-app-boot`, `dsh-base` and `dsh-api-remotes` differ only in their `package.json` version and devDependency pins, and `dsh-client-modules` — the package that composes the page's client entry graph — changes only the commit hash it reports in release metadata. `cordis` and `schemastery` are unchanged at `4.0.5` / `3.18.5`.
+- Recheck both READMEs for matching current plugin and DSH versions, badges, compatibility rows, version examples and release commands, and synchronize the lockfile's root version with the release.
+
+### Verified
+
+- The running `0.2.1-rc.4` profile already delivered this plugin's `0.4.9` build: `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`, and `/config`, `/sounds` and `/update` all answered 200, the update check reading the real npm registry.
+- Client half on `0.2.1-rc.4`: the page's boot graph lists `@idoall/dsh-notify/client.js` among 85 client entries, and its served entry answered 200 carrying the `settings.section` and `shell.overlay` registrations plus the `dsh-notify-*` markup.
+- Full verification: static checks, **112 automated tests**, build, and package checks.
+- Release acceptance downloads the published npm tarball, compares its documents and manifest with the release tag, and checks every distributed build file against a fresh build; npm `latest` and the GitHub Release must agree.
+
 ## [0.4.9] - 2026-10-26
 
 ### Added
