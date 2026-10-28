@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.11] - 2026-10-28
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.2-alpha.2` compatible. The `>=0.1.7-rc.1 <0.3.0` requirement already admitted it, so no range had to widen; no notification source change is needed.
+- **Of every package this plugin binds, the ones that own its interfaces are byte-identical across `0.2.1-rc.4` → `0.2.2-alpha.2`; the six that changed did so additively, off this plugin's call path.** `dsh-client-ui-renderer` — which owns the whole `slots` service, `shell.overlay` and `settings.section` — is byte-identical, as are `dsh-client-ui-settings`, `dsh-jobs`, `dsh-client-ui-slots`, `dsh-tool-workflow` and `dsh-client-connection`'s `lib/index.js`, so the seats, the jobs `settled` contract and `requestRejection` cannot have moved. `dsh-host-webserver` adds a second `resource` route style while `register(route)` stays byte-identical and the plugin's `{kind:'exact',path,handler}` route still lands on `responder.handler(req, res)`; `dsh-client-ui-session` adds one `whenAccess()` method; `dsh-client-ui-layout` adds six locale dictionaries; `dsh-client-modules` adds `require.asset` and a `/plugins/<pkg>/assets` route without touching the `dsh.client` validator or the `__ModuleLoader__.load({id, factory})` shape; `dsh-client-ui-settings-general` restyles the host settings panel into a CSS grid (the seat's `{close}` props and `{id,order,label}` row derivation are unchanged); `dsh-client-connection`'s only other change is an optional browser-transport type. The host's `cordis` and `schemastery` moved to `4.0.6-alpha.1` / `3.18.6-alpha.1` — the former changes only the fiber config lifecycle, the latter's code is byte-identical — and the plugin passed DSH's own gate on both releases with no exemption needed or granted.
+- Recheck both READMEs for matching current plugin and DSH versions, badges, compatibility rows, version examples and release commands, and synchronize the lockfile's root version with the release.
+
+### Verified
+
+- The running `0.2.2-alpha.2` host already delivered this plugin's `0.4.10` build: `/plugins/dsh-notify/health` answered `guiAvailable: true` with `services.jobs: "reflected"` and `eventErrors: 0`, and `/config`, `/sounds` and `/update` all answered 200, the update check reading the real npm registry. The profile holds no exact-version exemption for this plugin.
+- Client half on `0.2.2-alpha.2`, inspected in a real browser against the running page: the boot graph lists `@idoall/dsh-notify/client.js` and its served entry answered 200; Settings → Notifications rendered the 通知显示 / 提示音 / 任务提醒 / 预览与自测 sections, the preview sent a real card into `.dsh-notify-frame`, and the console stayed clean. At a 390px viewport the section fits with no horizontal overflow and the toast is full-width.
+- Full verification: static checks, **112 automated tests**, build, and package checks.
+- Release acceptance downloads the published npm tarball, compares its documents and manifest with the release tag, and checks every distributed build file against a fresh build; npm `latest` and the GitHub Release must agree.
+
 ## [0.4.10] - 2026-10-27
 
 ### Changed
