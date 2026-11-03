@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.12] - 2026-11-03
+
+### Fixed
+
+- Make the Client plugin entry non-constructible and return an idempotent disposer instead of a plain runtime object. Cordis treats ordinary functions as constructors and can ignore their cleanup return; passing the old object through its effect path instead throws `Invalid effect`. The prior pack check called `apply` directly and missed these lifecycle errors. Settings and overlay registrations now clean up through the accepted effect contract.
+- Synchronize the lockfile's DSH peer ranges with the manifest (`>=0.1.7-rc.1 <0.3.0`); its root still carried the obsolete `<0.2.0` ceiling. Update locked transitive Zod `4.6.5` → `4.6.7` to resolve the high-severity audit advisory without modifying the host installation.
+
+### Changed
+
+- Declare the running DSH `0.2.2-alpha.3` compatible. Consumed renderer, session UI, connection, webserver, jobs, session, agent, agent-loop and workflow builds are unchanged from alpha.2; additive settings/layout changes and module-loader reconciliation changes preserve the consumed contracts.
+- Add regression checks for bilingual README versions, DSH badges, compatibility rows, release commands, changelog and Release headings, and root lockfile metadata. Refresh both READMEs and clearly separate historical screenshots from this check.
+
+### Verified
+
+- Static checks, **118 automated tests**, build and package checks, including real Cordis client load/unload and release-metadata regressions.
+- Host API inspection and live Client inspection (`dsh-notify-toast` active in `shell.overlay`) on DSH `0.2.2-alpha.3`. The existing profile was not upgraded or changed.
+- Browser automation returned HTTP 401: no new authenticated visual, mobile, audio or end-to-end notification verification is claimed. DSH npm `latest` is `0.2.1-rc.5`; that unbooted RC is not added to the explicitly verified list.
+- Post-publication acceptance compares the npm tarball's documents, manifest, patch and every build file with the release checkout and requires npm `latest`, GitHub Release and tag to match.
+
 ## [0.4.11] - 2026-10-28
 
 ### Changed
