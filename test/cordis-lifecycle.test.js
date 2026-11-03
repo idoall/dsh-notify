@@ -5,6 +5,35 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
 import * as notify from '../src/index.js';
+import * as client from '../src/client.js';
+
+test('real Cordis loads the client and disposes both slot registrations exactly once', async () => {
+  const context = new Context();
+  const active = new Set();
+  let cleaned = 0;
+  context.provide('slots', {
+    inject(_name, callback) { return callback(); },
+    register({ name }) { active.add(name); return () => { active.delete(name); cleaned += 1; }; },
+  });
+  const fiber = context.plugin(client);
+  try {
+    await fiber;
+    assert.equal(fiber.state, 2);
+    assert.deepEqual([...active], ['settings.section', 'shell.overlay']);
+  } finally {
+    await fiber.dispose();
+  }
+  assert.equal(active.size, 0);
+  assert.equal(cleaned, 2);
+});
+
+test('client disposer remains callable and idempotent without slots', () => {
+  const dispose = client.apply({});
+  assert.equal(typeof dispose, 'function');
+  assert.equal(dispose.status.service, 'unavailable');
+  dispose();
+  dispose.destroy();
+});
 
 test('real Cordis rejects an async plugin resolving to an object but loads dsh-notify disposer', async (t) => {
   const invalidContext = new Context();

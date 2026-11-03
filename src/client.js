@@ -1186,4 +1186,12 @@ export function mountNotifyClient({ slots, sessions, uiWorkspace, getSessions, g
   try { disposers.push(slots.inject('shell.overlay', () => activate('shell.overlay', { id: 'dsh-notify-toast', order: 100, inject: () => ({ sessions: sessions ?? getSessions?.(), uiWorkspace: uiWorkspace ?? getUiWorkspace?.(), pendingInteractions: pendingInteractions() }) }, ToastOverlay))); } catch { status.seats['shell.overlay'] = 'unavailable'; }
   return { status, destroy() { for (const dispose of disposers.reverse()) dispose?.(); } };
 }
-export function apply(ctx) { return mountNotifyClient({ slots: ctx?.slots, getSessions: () => ctx?.get?.('sessions'), getUiSession: () => ctx?.get?.('uiSession'), getUiWorkspace: () => ctx?.get?.('uiWorkspace') }); }
+export const apply = (ctx) => {
+  const mounted = mountNotifyClient({ slots: ctx?.slots, getSessions: () => ctx?.get?.('sessions'), getUiSession: () => ctx?.get?.('uiSession'), getUiWorkspace: () => ctx?.get?.('uiWorkspace') });
+  // An arrow avoids Cordis treating an ordinary function as a constructor.
+  // Cordis consumes apply's return as an effect, not a runtime object. Keep
+  // diagnostics available to pack checks while giving the host a real disposer.
+  let disposed = false;
+  const dispose = () => { if (disposed) return; disposed = true; mounted.destroy(); };
+  return Object.assign(dispose, { status: mounted.status, destroy: dispose });
+};

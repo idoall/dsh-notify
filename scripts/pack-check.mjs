@@ -1,10 +1,19 @@
 import { access, readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import vm from 'node:vm';
+import { Context, isConstructor } from '@deepseek-ai/cordis';
+import { checkReleaseMetadata } from './release-check.mjs';
 
 const required = ['package.json', 'cordis.patch.yml', 'dist/index.js', 'dist/core.js', 'dist/buffer.js', 'dist/sound-choices.js', 'dist/sounds.js', 'dist/update.js', 'dist/client.js'];
 for (const file of required) await access(file);
 const manifest = JSON.parse(await readFile('package.json', 'utf8'));
+checkReleaseMetadata({
+  manifest,
+  lock: JSON.parse(await readFile('package-lock.json', 'utf8')),
+  readmes: Object.fromEntries(await Promise.all(['README.md', 'README.zh.md'].map(async name => [name, await readFile(name, 'utf8')]))),
+  changelog: await readFile('CHANGELOG.md', 'utf8'),
+  notes: await readFile(`release-notes/v${manifest.version}.md`, 'utf8'),
+});
 if (manifest.main !== './dist/index.js' || manifest.exports?.['./client'] !== './dist/client.js') throw new Error('package exports do not expose Host and client builds');
 if (manifest.dsh?.client?.platform !== 'web' || manifest.dsh?.bundle?.patch !== './cordis.patch.yml') throw new Error('missing dsh client/bundle declarations');
 // DSH 0.1.7 refuses an incompatible bundle at profile load, and dshmarket derives its host verdict from
@@ -89,9 +98,24 @@ const slots = {
   register(options) { if (!declaredSeats.has(options.name)) throw new Error(`registration missed declared seat: ${options.name}`); registrations.push(options.name); return () => {}; },
 };
 const mounted = clientExports.apply({ slots });
-if (mounted?.status?.service !== 'available' || Object.values(mounted.status.seats).some((state) => state !== 'active') || registrations.length !== 2) throw new Error('materialized client did not activate all official composition seats');
+if (typeof mounted !== 'function' || mounted?.status?.service !== 'available' || Object.values(mounted.status.seats).some((state) => state !== 'active') || registrations.length !== 2) throw new Error('materialized client did not activate all official composition seats');
 mounted.destroy();
 if (clientExports.apply({})?.status?.service !== 'unavailable') throw new Error('materialized client does not degrade without slots service');
+if (isConstructor(clientExports.apply)) throw new Error('client entry must not be interpreted as a Cordis constructor');
+const context = new Context();
+let activeSeats = 0;
+context.provide('slots', {
+  inject(_name, callback) { return callback(); },
+  register() { activeSeats += 1; return () => { activeSeats -= 1; }; },
+});
+const fiber = context.plugin(clientExports);
+try {
+  await fiber;
+  if (activeSeats !== 2) throw new Error('packed client did not activate under real Cordis');
+} finally {
+  await fiber.dispose();
+}
+if (activeSeats !== 0) throw new Error('packed client leaked slot registrations on unload');
 const host = await import(`${pathToFileURL(`${process.cwd()}/dist/index.js`).href}?pack-check=${Date.now()}`);
 if (host.name !== 'dsh-notify' || typeof host.apply !== 'function' || typeof host.Config !== 'function') throw new Error('Host entry is not importable as a DSH plugin');
 console.log(`Package check passed for ${manifest.name}: ${required.length} files, publish preconditions, Host exports, and the lazy-CJS client bundle.`);
