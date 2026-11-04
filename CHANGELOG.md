@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.13] - 2026-11-04
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.2-rc.1` compatible while preserving `>=0.1.7-rc.1 <0.3.0` and all earlier verified releases. No notification source changes are needed.
+- Synchronize both READMEs, the package and lockfile versions, compatibility matrix, DSH badge, channel information and release commands. Clarify that current DSH requires Node.js `>=24.9.0`, while the plugin's own `>=20` requirement is unchanged.
+
+### Verified
+
+- Compared 19 consumed DSH package build trees with published `0.2.2-alpha.3`: only the general-settings display version and client-modules build commit changed; all other compared build files are byte-identical. Current Cordis `4.1.0` passes Host and Client activation and cleanup tests.
+- Static checks, **118 automated tests**, build, package checks and dependency audit pass. Live Client inspection confirms `dsh-notify-toast` active in `shell.overlay`; registration is not a fresh visual, audio or end-to-end test.
+- Release acceptance downloads the npm tarball and checks both file-set differences and each file's bytes against the release checkout, plus npm `latest`, GitHub Release notes, tarball and checksum. No profile or other plugin is modified.
+
 ## [0.4.12] - 2026-11-03
 
 ### Fixed
