@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.14] - 2026-11-14
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.2-rc.3` compatible while preserving `>=0.1.7-rc.1 <0.3.0` and every earlier verified release. No notification source changes are needed.
+- Read all 19 items of the installed `docs/upgrade-guide/v0.2.2-rc.1` section — the only break list that covers `0.2.2-rc.1` → `0.2.2-rc.3`, since `rc.2` and `rc.3` ship no guide. Eighteen name surfaces this plugin never uses (account notification APIs, CUA, Forge, terminals, web-search billing, `BundleInfo`, `Session.append` overrides, runtime-context wording, subagent interrupt defaults). The nineteenth, `window-drag-regions`, tightens macOS Desktop `no-drag` handling for custom Client overlays: this overlay is a fixed layer outside any `data-window-drag` row and sits below the header, so the shell's universal `-webkit-app-region: initial` already keeps its buttons, links and selects non-draggable. No exclusion attribute is required.
+- Byte comparison of the 15 packages this plugin binds across `0.2.2-rc.1` → `0.2.2-rc.3`. `dsh-host-webserver`'s `lib/index.js`, which owns the `register(route)` contract, is byte-identical, as is `dsh-client-connection`'s host half. `dsh-client-ui-slots`, which owns the whole `slots` service, adds only an additive `hoc` slot kind; single, keyed, list and chain registration, ordering and shadowing are untouched. `dsh-jobs` adds `JobError` and `JOB_ERROR_CODES` only, and `dsh-api-remotes` adds one `web/providers-changed` declaration. `dsh-client-modules`' host half changes only the release commit it reports. Client bundles now ship minified with source maps and `src/`, while both seats' `.d.ts` contracts stay identical (`settings.section` only widens `openSettings` with an optional section id).
+- Synchronize both READMEs, the lockfile version, the compatibility matrix, the DSH badge, the npm channel note and the release commands.
+
+### Verified
+
+- Booted against the running `0.2.2-rc.3` installation's own tree: `evaluatePluginCompatibility` reports no unmet requirement (the profile lists the plugin with no incompatibility warning), the Host half mounts on Cordis `4.1.0` / schemastery `3.19.0`, registers all seven routes, and `/plugins/dsh-notify/health`, `/config`, `/sounds` and `/update` answer `200` with live JSON (`guiAvailable: true`, `eventErrors: 0`); disposal returns the fiber to inactive and removes every route.
+- The Client half mounts on the same Cordis `4.1.0`, registers `settings.section` and `shell.overlay`, and disposes both registrations exactly once — the lifecycle fixed in `0.4.12` still holds on the host's own effect implementation.
+- Static checks, **118 automated tests**, build and package checks pass. Authenticated live-page verification stays unavailable: the running profile answers HTTP 401 to unauthenticated requests, so no new visual, audio or end-to-end notification claim is made.
+- Release acceptance compares the published npm tarball's files and bytes with this tag, and checks npm `latest` and the GitHub Release.
+
 ## [0.4.13] - 2026-11-04
 
 ### Changed
