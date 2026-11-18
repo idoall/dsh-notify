@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.15] - 2026-11-18
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.2-rc.4` compatible while preserving `>=0.1.7-rc.1 <0.3.0` and every earlier verified release. No notification source changes are needed.
+- Read the new `docs/upgrade-guide/v0.2.2-rc.3` section, the only break list covering `0.2.2-rc.3` → `0.2.2-rc.4`. Its single item moves the DeepSeek streamed-content refusal code from `MALFORMED_RESPONSE` to `CONTENT_REFUSED` in the LLM error finish and the failed turn's `turn/end`. This plugin classifies no LLM error code: the one code it reads is `ASK_ABORTED`, on the in-toast answer waterfall, and a failed turn is announced from its message text, so a refusal keeps producing the same error card under whichever code the host reports.
+- Byte comparison of the 15 packages this plugin binds across `0.2.2-rc.3` → `0.2.2-rc.4`. Every package except `package.json`'s own version is byte-identical, with exactly two runtime files touched: `dsh-client-ui-settings-general`'s client substitutes the host version string it displays, and `dsh-client-modules`' host half changes the release commit it reports (`6b729fe` → `70005a5`). `dsh-client-ui-slots`, which owns the whole `slots` service, `dsh-host-webserver`, which owns `register(route)`, `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-session` and `dsh-client-connection` are all byte-identical, as are both seats' `.d.ts` contracts.
+- Synchronize both READMEs, the lockfile version, the compatibility matrix, the DSH badge, the npm channel note and the release commands.
+
+### Verified
+
+- Booted against the running `0.2.2-rc.4` installation's own tree: `evaluatePluginCompatibility` reports no unmet requirement, and the profile lists `@idoall/dsh-notify@0.4.14` with no incompatibility warning. The Host half mounts on Cordis `4.1.0` / schemastery `3.19.0`, registers all seven routes, and `/plugins/dsh-notify/health`, `/config`, `/sounds` and `/update` answer `200` with live JSON (`guiAvailable: true`, `eventErrors: 0`); disposal returns the fiber to inactive and removes every route.
+- The Client half mounts on the same Cordis `4.1.0`, registers `settings.section` and `shell.overlay`, and disposes both registrations exactly once.
+- Static checks, **118 automated tests**, build and package checks pass, and the packed tarball matches this checkout byte for byte. Authenticated live-page verification stays unavailable: the running profile answers HTTP 401 to unauthenticated requests, so no new visual, audio or end-to-end notification claim is made.
+- Release acceptance compares the published npm tarball's files and bytes with this tag, and checks npm `latest` and the GitHub Release.
+
 ## [0.4.14] - 2026-11-14
 
 ### Changed
