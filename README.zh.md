@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm 版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.4-4B6BFB" alt="DSH 0.2.2-rc.4">
+  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.5-4B6BFB" alt="DSH 0.2.2-rc.5">
 </p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
@@ -46,7 +46,7 @@
 
 - 带 Web profile 的 DeepSeek Harness
 - 当前 DSH 需要 Node.js 24.9.0 或更新（插件自身声明 Node.js 20+）
-- 已验证的 DeepSeek Harness：`0.2.2-rc.4`
+- 已验证的 DeepSeek Harness：`0.2.2-rc.5`
 
 从 npm 安装：
 
@@ -92,7 +92,7 @@ dsh plugin --profile web add "link:$(pwd)"
 
 自定义提示音保存在 profile 数据目录的 `<dataDir>/sounds/`，而非插件安装目录。上传限制 1 MB，支持 `mp3 / m4a / aac / wav / ogg / flac`，文件名必须是单段路径。
 
-卡片上方是版本检测行：显示当前版本与 npm 上最新版本的关系——`v0.4.15 ✓ 最新`、`v0.4.14 ➔ v0.4.15` 或 `v0.4.15 · 检查失败`。**检查更新**会强制重新查询（`GET /plugins/dsh-notify/update?force=1`，需通过鉴权）；页面加载则复用宿主 6 小时缓存。检测到新版本时，行下方会展开 `dsh plugin --profile web add @idoall/dsh-notify@<版本>` 与复制按钮——是否安装、以及随后是否重启 DSH，都由你决定。
+卡片上方是版本检测行：显示当前版本与 npm 上最新版本的关系——`v0.4.16 ✓ 最新`、`v0.4.15 ➔ v0.4.16` 或 `v0.4.16 · 检查失败`。**检查更新**会强制重新查询（`GET /plugins/dsh-notify/update?force=1`，需通过鉴权）；页面加载则复用宿主 6 小时缓存。检测到新版本时，行下方会展开 `dsh plugin --profile web add @idoall/dsh-notify@<版本>` 与复制按钮——是否安装、以及随后是否重启 DSH，都由你决定。
 
 <p align="center">
   <img src="./assets/version-check.png" width="60%" alt="DSH 通知设置中的版本检测行：v0.4.0 已是最新、检查更新、GitHub、更新日志与反馈 Issue 入口">
@@ -100,11 +100,12 @@ dsh plugin --profile web add "link:$(pwd)"
 
 ## 兼容性
 
-当前发布：插件 **`0.4.15`** 已在 DeepSeek Harness **`0.2.2-rc.4`** 上验证。
+当前发布：插件 **`0.4.16`** 已在 DeepSeek Harness **`0.2.2-rc.5`** 上验证。
 
 | 插件 | 已验证的 DeepSeek Harness | 这一版是什么 |
 | --- | --- | --- |
-| **`0.4.15`** | `0.2.2-rc.4` | 声明兼容 DSH `0.2.2-rc.4`。`rc.3` 以来唯一的破坏性变更把 DeepSeek 拒答错误码改为 `CONTENT_REFUSED`，而本插件从不按该错误码分类。它绑定的 15 个包里，除各包 `package.json` 的版本号外全部逐字节相同；运行时只改了设置页显示的版本号与模块加载器上报的提交号。通知源码无改动。 |
+| **`0.4.16`** | `0.2.2-rc.5` | 声明兼容 DSH `0.2.2-rc.5`——第一个进入 npm `latest` 渠道的 RC。`rc.4` 以来唯一的破坏性变更是搜索提供方默认值，与本插件无关。它绑定的 15 个包里，决定接口的六个除自身版本号外逐字节相同；其余改动也只有同一次搜索调整与发布元数据（一个源码位置字符、界面显示的宿主版本号、上报的提交号）。通知源码无改动。 |
+| `0.4.15` | `0.2.2-rc.4` | 声明兼容 DSH `0.2.2-rc.4`。`rc.3` 以来唯一的破坏性变更把 DeepSeek 拒答错误码改为 `CONTENT_REFUSED`，而本插件从不按该错误码分类。它绑定的 15 个包里，除各包 `package.json` 的版本号外全部逐字节相同；运行时只改了设置页显示的版本号与模块加载器上报的提交号。通知源码无改动。 |
 | `0.4.14` | `0.2.2-rc.3` | 声明兼容 DSH `0.2.2-rc.3`，并逐条核对它与 `rc.1` 之间的全部破坏性变更。它绑定的 15 个包里，没有一处落在通知调用路径上：`dsh-host-webserver` 的 `register(route)` 半边与 `dsh-client-connection` 宿主半边逐字节相同，`hoc` 槽类型、`JobError` 与新事件声明都是叠加式的。通知源码无改动。 |
 | `0.4.13` | `0.2.2-rc.1` | 声明兼容新版 DSH RC，保留既有支持，并同步双语发布信息与当前 DSH 的 Node.js 要求。通知源码无改动。 |
 | `0.4.12` | `0.2.2-alpha.3` | 修复客户端入口的 Cordis 生命周期处理（构造器识别与清理返回值），声明兼容当前 DSH alpha，同步锁文件的 DSH peer 范围、更新锁定的 Zod，并新增中英文发布检查。通知逻辑不变；验证边界见发布说明。 |
@@ -134,7 +135,7 @@ dsh plugin --profile web add "link:$(pwd)"
 - 两处声明决定插件能否加载：`dsh.engines.dsh` 与每一个 `@deepseek-ai/dsh-*` peer 都写同一条要求，自 `0.4.1` 起为 `>=0.1.7-rc.1 <0.3.0`。DSH 会在 profile 加载时拒绝不兼容的 bundle，范围写错就会静默丢掉插件——旧的 `<0.2.0` 上限在 `0.2.0` 正式版上正是如此。
 - **交互门禁只在「还没等到人回答」时压住完成通知。** DSH 的执行审批与计划审批都是在**提问的那个回合内**解决的（`approval.request()` 必须处于打开的回合中并原地等待结果；`exit_plan_mode` 把结论交回同一回合），所以接着干活的回合就是提问的那个回合，它的结束就是用户任务的完成。`0.4.2` 以此为规则；`0.3.2`–`0.4.1` 压掉了整个回合，于是每个带审批的任务都静默丢失完成通知。
 - `@deepseek-ai/schemastery` 是 **peer**，不是普通依赖：DSH 只会把 **link 形态**插件的 peer 解析到当前安装；若仍写成普通依赖，`link:` 安装的 Host 半会导入失败。
-- **声明的是「实测验证过的版本」，不是语义化猜测。** `dsh.compatibility.dshReleases` 列出真正启动验证过的每个版本（截至 `0.4.15`：`0.1.7-rc.1`、`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.1-alpha.1`、`0.2.1-alpha.3`、`0.2.1-alpha.4`、`0.2.1-alpha.5`、`0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4`、`0.2.2-alpha.2`、`0.2.2-alpha.3`、`0.2.2-rc.1`、`0.2.2-rc.3`、`0.2.2-rc.4`），一旦其中某个落在声明范围之外，`npm run pack:check` 会直接失败。
+- **声明的是「实测验证过的版本」，不是语义化猜测。** `dsh.compatibility.dshReleases` 列出真正启动验证过的每个版本（截至 `0.4.16`：`0.1.7-rc.1`、`0.1.7-rc.2`、`0.2.0-rc.1`、`0.2.0-rc.2`、`0.2.1-alpha.1`、`0.2.1-alpha.3`、`0.2.1-alpha.4`、`0.2.1-alpha.5`、`0.2.1-rc.2`、`0.2.1-rc.3`、`0.2.1-rc.4`、`0.2.2-alpha.2`、`0.2.2-alpha.3`、`0.2.2-rc.1`、`0.2.2-rc.3`、`0.2.2-rc.4`、`0.2.2-rc.5`），一旦其中某个落在声明范围之外，`npm run pack:check` 会直接失败。
 
 以下截图来自此前的浏览器验证，并非本次 RC 的新视觉测试；本次验证覆盖接口兼容性、自动化测试与实时浮层注册，不包含新的视觉或声音实测。此前在 390px 手机视口检查：设置控件会重排，Toast 会满宽显示且不会被移动端侧栏遮挡。
 
@@ -142,7 +143,7 @@ dsh plugin --profile web add "link:$(pwd)"
   <img src="./assets/mobile.png" width="34%" alt="390px 手机视口：增强版通知栈满宽显示，最新通知下方有等距状态色边缘">
 </p>
 
-本次发布时 npm DSH 的 `next` 指向当前运行的 `0.2.2-rc.4`，`latest` 指向 `0.2.2-rc.1`，`alpha` 指向 `0.2.2-alpha.3`。`latest` 比本次实测的版本晚三个 RC；三条渠道都在已验证列表里，跑哪个都安全。
+本次发布时 npm DSH 的 `latest` 与 `next` 都指向当前运行的 `0.2.2-rc.5`，`alpha` 指向 `0.2.2-alpha.3`。当前运行的这个版本同时也是渠道默认值，装 `@latest` 拿到的正是本次实测的那一版。
 
 ## 卸载
 
@@ -167,8 +168,8 @@ npm run pack:check # 发布前置条件 + 客户端注册校验
 发版由 tag 驱动。更新 `package.json` 与锁文件根版本、同步中英文 README 和 DSH 声明、将对应 CHANGELOG 段落移出 `Unreleased`、编写 `release-notes/v<版本>.md` 后，推送发版提交与 tag：
 
 ```sh
-git tag v0.4.15
-git push origin v0.4.15
+git tag v0.4.16
+git push origin v0.4.16
 ```
 
 发版工作流会运行 `npm run verify`、打包插件、通过 npm trusted publishing（OIDC）发布，并创建附带 tarball 与 sha256 的 GitHub Release。

@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.16] - 2026-11-21
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.2-rc.5` compatible while preserving `>=0.1.7-rc.1 <0.3.0` and every earlier verified release. No notification source changes are needed. This is the first RC on the `latest` npm channel.
+- Read the new `docs/upgrade-guide/v0.2.2-rc.4` section, the only break list covering `0.2.2-rc.4` → `0.2.2-rc.5`. Its single item is a search-provider default: the shipped base composition no longer pins `web.searchProvider`, so `dsh-web` picks a search provider per model route. This plugin performs no web search and reads no search setting, so it is unaffected.
+- Byte comparison of the 15 packages this plugin binds across `0.2.2-rc.4` → `0.2.2-rc.5`. Six interface owners are byte-identical apart from their own version: `dsh-client-ui-slots` (the whole `slots` service), `dsh-host-webserver` (`register(route)`), `dsh-jobs`, `dsh-client-ui-renderer`, `dsh-client-ui-session` and `dsh-client-connection`. The four files that did change are all either that same search-provider work or release metadata: `dsh-base`'s `cordis.patch.yml` drops the fixed `searchProvider`, `dsh-api-remotes`' client differs in exactly one character (`line:152` → `line:174`, a source-location annotation in the web settings schema), `dsh-client-ui-settings-general`'s client substitutes the host version string it displays, and `dsh-client-modules`' host half changes the reported commit (`70005a5` → `3f85d88`). Both seats' `.d.ts` contracts are unchanged.
+- Synchronize both READMEs, the lockfile version, the compatibility matrix, the DSH badge, the npm channel note and the release commands.
+
+### Verified
+
+- Booted against the running `0.2.2-rc.5` installation's own tree: `evaluatePluginCompatibility` reports no unmet requirement, and the profile lists `@idoall/dsh-notify@0.4.15` with no incompatibility warning. The Host half mounts on Cordis `4.1.0` / schemastery `3.19.0`, registers all seven routes, and `/plugins/dsh-notify/health`, `/config`, `/sounds` and `/update` answer `200` with live JSON (`guiAvailable: true`, `eventErrors: 0`); disposal returns the fiber to inactive and removes every route.
+- The Client half mounts on the same Cordis `4.1.0`, registers `settings.section` and `shell.overlay`, and disposes both registrations exactly once.
+- Static checks, **118 automated tests**, build and package checks pass, and the packed tarball matches this checkout byte for byte. Authenticated live-page verification stays unavailable: the running profile answers HTTP 401 to unauthenticated requests, so no new visual, audio or end-to-end notification claim is made.
+- Release acceptance compares the published npm tarball's files and bytes with this tag, and checks npm `latest` and the GitHub Release.
+
 ## [0.4.15] - 2026-11-18
 
 ### Changed
