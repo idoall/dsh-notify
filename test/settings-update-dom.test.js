@@ -30,7 +30,7 @@ async function mountSettings({ update, failUpdate = false } = {}) {
         return response(update);
       }
       if (path.includes('/sounds')) return response({ builtins: [], custom: [] });
-      if (path.includes('/config')) return response({ verbosity: 'normal', toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, subtaskNotify: false, soundEnabled: true, sound: 'chime', storage: { preferences: 'file' } });
+      if (path.includes('/config')) return response({ verbosity: 'normal', toastPosition: 'conversation-left', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, subtaskNotify: false, soundEnabled: true, sound: 'chime', storage: { preferences: 'file' } });
       return response({});
     },
   };
@@ -52,6 +52,17 @@ async function mountSettings({ update, failUpdate = false } = {}) {
     },
   };
 }
+
+test('the position menu offers the conversation top-left as the default and keeps the others as alternatives', async (t) => {
+  const harness = await mountSettings({ update: { current: '0.4.17', latest: '0.4.17', hasUpdate: false, checkedAtMs: 1, error: null } });
+  t.after(harness.teardown);
+  const { document } = harness.dom.window;
+  const select = document.querySelector('select[aria-label="通知位置"]');
+  assert.ok(select, 'the settings page renders the position menu');
+  assert.deepEqual([...select.options].map((option) => option.value), ['conversation-left', 'conversation', 'viewport', 'off']);
+  assert.deepEqual([...select.options].map((option) => option.textContent), ['会话区左上（默认）', '会话区右上', '屏幕右上', '关闭页面通知']);
+  assert.equal(select.value, 'conversation-left', 'the left corner is what a fresh profile gets');
+});
 
 test('the settings page shows the running version, the three links, and the upgrade command only when one exists', async (t) => {
   const harness = await mountSettings({ update: { current: '0.3.4', latest: '0.4.0', hasUpdate: true, checkedAtMs: 1, error: null } });

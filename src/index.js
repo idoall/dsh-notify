@@ -37,7 +37,12 @@ export function jobNotification(snapshot = {}) {
   const outcome = JOB_STATUS_LABEL[status] ?? status;
   return { title: failed ? '后台任务失败' : '后台任务结束', body: readable ? label : (outcome || undefined) };
 }
-const DEFAULT_SETTINGS = Object.freeze({ verbosity: 'normal', toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, subtaskNotify: false, soundEnabled: true, sound: 'chime' });
+/**
+ * Notification positions, in the order the settings page offers them: the conversation's top-left
+ * corner is the default, and the right corner, the screen corner and off stay as alternatives.
+ */
+export const TOAST_POSITIONS = Object.freeze(['conversation-left', 'conversation', 'viewport', 'off']);
+const DEFAULT_SETTINGS = Object.freeze({ verbosity: 'normal', toastPosition: 'conversation-left', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, subtaskNotify: false, soundEnabled: true, sound: 'chime' });
 const SETTING_KEYS = Object.freeze(Object.keys(DEFAULT_SETTINGS));
 /**
  * Only the settings this version knows about are adopted — or written back. A file left by an older
@@ -52,7 +57,7 @@ function validSettingsPatch(value = {}) {
   if ('subtaskNotify' in value && typeof value.subtaskNotify !== 'boolean') return false;
   if ('soundEnabled' in value && typeof value.soundEnabled !== 'boolean') return false;
   if ('verbosity' in value && !['normal', 'detailed'].includes(value.verbosity)) return false;
-  if ('toastPosition' in value && !['conversation', 'viewport', 'off'].includes(value.toastPosition)) return false;
+  if ('toastPosition' in value && !TOAST_POSITIONS.includes(value.toastPosition)) return false;
   if ('sound' in value && (typeof value.sound !== 'string' || value.sound.length > 96)) return false;
   return true;
 }

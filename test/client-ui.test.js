@@ -1,5 +1,21 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel, updateChipText, updateTone, updateCommand, UPDATE_REPO_URL } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastLeftAnchor, toastAnchors, toastInsets, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel, updateChipText, updateTone, updateCommand, UPDATE_REPO_URL } from '../src/client.js';
+test('the left placement anchors to the conversation column and mirrors the right one', () => {
+  const withScroll = (left, right) => ({ querySelector: () => ({ getBoundingClientRect: () => ({ left, right, width: right - left }) }) });
+  assert.equal(toastLeftAnchor({ document: withScroll(280, 1000), innerWidth: 1908 }), 296, 'conversation left edge plus the 16px gutter');
+  assert.equal(toastLeftAnchor({ document: withScroll(56, 1500), innerWidth: 1908 }), 72, 'a collapsed sidebar moves it left with the column');
+  assert.equal(toastLeftAnchor({ document: { querySelector: () => null }, innerWidth: 1024 }), 168, 'the centred-content guess remains the no-DOM-hook fallback');
+  assert.equal(toastLeftAnchor({ document: withScroll(-40, 900), innerWidth: 1024 }), 16, 'an off-screen rect clamps to the 16px edge inset');
+  assert.equal(toastLeftAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 700, width: 0 }) }) }, innerWidth: 1024 }), 168, 'a collapsed measurement falls back');
+  assert.deepEqual(toastAnchors({ document: withScroll(280, 1000), innerWidth: 1024 }), { right: 40, left: 296 }, 'one measurement serves both sides');
+  // The left placement is the default; every other position keeps the right-pinned geometry.
+  assert.deepEqual(toastInsets({ position: 'conversation-left', anchor: { right: 40, left: 296 } }), { insetInlineStart: '296px', insetInlineEnd: 'auto' });
+  assert.deepEqual(toastInsets({ position: 'conversation', anchor: { right: 40, left: 296 } }), { insetInlineStart: 'auto', insetInlineEnd: '40px' });
+  assert.deepEqual(toastInsets({ position: 'viewport', anchor: { right: 40, left: 296 } }), { insetInlineStart: 'auto', insetInlineEnd: '16px' });
+  assert.deepEqual(toastInsets({ narrow: true, position: 'conversation-left', anchor: { right: 40, left: 296 } }), { insetInlineStart: 'auto', insetInlineEnd: 12 }, 'a phone keeps the full-width gutter');
+  assert.deepEqual(toastInsets(), { insetInlineStart: '16px', insetInlineEnd: 'auto' }, 'the default position is the left corner');
+});
+
 test('narrow layout keeps the coarse-pointer hit target', () => { assert.deepEqual(layoutFor({ width: 375, coarse: true }), { narrow: true, hitTarget: 44 }); });
 test('settings status and self-test result tones drive the colour of one dot and one line', () => {
   assert.equal(statusTone('通知已连接'), 'ok'); assert.equal(statusTone('设置已保存'), 'ok'); assert.equal(statusTone('通知历史已清空'), 'ok');

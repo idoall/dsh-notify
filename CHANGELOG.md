@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.5.0] - 2026-11-23
+
+### Added
+
+- **The notification window now defaults to the conversation's top-left corner.** A fresh profile gets `toastPosition: 'conversation-left'`; the settings page lists it first as 会话区左上（默认）, and keeps 会话区右上, 屏幕右上 and 关闭页面通知 as alternatives, so an existing choice is never rewritten. The left placement uses a new `toastLeftAnchor`, which measures the conversation column's left edge (already clear of the left sidebar) plus the same 16px gutter, with the centred-content guess as the no-hook fallback. `toastInsets` owns the edge decision: the left placement pins the inline start and clears the inline end, the other positions stay right-pinned, and a phone keeps the full-width gutter it always had.
+- One anchor measurement (`toastAnchors`) now serves both sides, so the existing sidebar-following observer — ResizeObserver, MutationObserver, transitionend and the ~450 ms rAF follow — re-anchors the left placement exactly as it re-anchored the right one.
+
+### Changed
+
+- `TOAST_POSITIONS` is the single list the Host validates against, so an unknown position in a stored file or a config POST is still dropped rather than adopted.
+- The package description and both READMEs describe the new default; the settings hint and the option labels say which position is the default.
+
+### Verified
+
+- Static checks, **122 automated tests**, build and package checks pass, and the packed tarball matches this checkout byte for byte. New coverage: left/right anchor measurement and fallbacks, the inset decision for all four positions plus narrow, the settings menu's option order and default, and a DOM test that renders the overlay and reads `insetInlineStart: 296px` / `insetInlineEnd: auto` off the real frame element before re-anchoring it to `376px` through a sidebar transition.
+- Authenticated live-page verification stays unavailable: the running profile answers HTTP 401 to unauthenticated requests, so no new visual claim is made beyond the DOM assertions above.
+
 ## [0.4.17] - 2026-11-23
 
 ### Fixed

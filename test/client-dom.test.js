@@ -39,7 +39,7 @@ test('a new toast asks for the configured sound, and prefers a custom upload whe
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, sound: 'chime', soundEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation-left', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, sound: 'chime', soundEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
 
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
   // jsdom reports hidden=true by default, which is exactly the condition the hidden-mute rule checks.
@@ -311,7 +311,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   };
   const saved = Object.fromEntries(Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation', toastEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
+  t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation-left', toastEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
 
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
   assert.equal(toastAnchor(), 340, 'innerWidth 1024 minus a conversation right edge at 700 plus the 16px gutter');
@@ -324,10 +324,11 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   const fire = async (eventId) => { await act(async () => { publishLocalSelfTest({ eventId, localOnly: true, kind: 'completed', title: '任务完成', body: '自检' }); }); };
   const frame = () => document.querySelector('.dsh-notify-frame');
   await fire('anchor-check'); const toast = document.querySelector('aside[role="status"]');
-  assert.ok(toast); assert.equal(frame().style.insetInlineEnd, '340px', 'the notification window carries the anchor');
-  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 1000, width: 720, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  assert.ok(toast); assert.equal(frame().style.insetInlineStart, '296px', 'by default the window is pinned to the conversation left edge');
+  assert.equal(frame().style.insetInlineEnd, 'auto', 'the left placement clears the right inset');
+  document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 1000, width: 640, x: 360, left: 360, top: 0, bottom: 600, height: 600 });
   await act(async () => { document.dispatchEvent(new dom.window.Event('transitionend', { bubbles: true })); });
-  assert.equal(frame().style.insetInlineEnd, '40px', 'a sidebar grid transition re-anchors to the expanded conversation right edge');
+  assert.equal(frame().style.insetInlineStart, '376px', 'a sidebar grid transition re-anchors the left placement to the moved conversation column');
   assert.match(toast.textContent, /任务完成/);
   assert.equal(toast.dataset.tone, 'success', 'a completed toast carries its tone for the icon/accent colour');
   assert.ok(toast.querySelector('.dsh-notify-toast-icon'), 'react-toastify-style per-result icon');
