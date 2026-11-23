@@ -251,7 +251,7 @@ test('/config persists the user own preferences to the profile directory', async
   const initial = JSON.parse((await invoke(config, request({ path: '/plugins/dsh-notify/config', headers: browserHeaders }))).body);
   assert.equal(initial.storage.records, 'memory', 'records never persist, and the page is told so');
   assert.equal(initial.storage.preferences, 'file');
-  assert.deepEqual({ sound: initial.sound, toastPosition: initial.toastPosition, notificationStyle: initial.notificationStyle, stackCollapsed: initial.stackCollapsed }, { sound: 'chime', toastPosition: 'conversation', notificationStyle: 'strong', stackCollapsed: true });
+  assert.deepEqual({ sound: initial.sound, toastPosition: initial.toastPosition, notificationStyle: initial.notificationStyle, stackCollapsed: initial.stackCollapsed }, { sound: 'chime', toastPosition: 'conversation-left', notificationStyle: 'strong', stackCollapsed: true });
 
   const patched = await invoke(config, request({ method: 'POST', path: '/plugins/dsh-notify/config', headers: browserHeaders, body: { sound: 'alert', toastPosition: 'viewport', notificationStyle: 'soft', stackCollapsed: false, subtaskNotify: true } }));
   assert.equal(patched.statusCode, 200);

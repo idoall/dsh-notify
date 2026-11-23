@@ -21,6 +21,30 @@ export function toastAnchor({ document: doc = globalThis.document, innerWidth = 
   return right === null ? Math.max(16, (innerWidth - fallbackContentWidth) / 2 + 16) : Math.max(16, innerWidth - right + 16);
 }
 /**
+ * In-page toast anchor for the left-hand placement: the conversation column's left edge plus the
+ * same 16px gutter. `rect.left` already accounts for the left sidebar, so the toast follows it
+ * instead of guessing from `100vw`. The fallback is the legacy centered-content guess, used only
+ * when the DSH hook is absent.
+ */
+export function toastLeftAnchor({ document: doc = globalThis.document, innerWidth = globalThis.innerWidth, fallbackContentWidth = 720 } = {}) {
+  const rect = doc?.querySelector?.('[data-conversation-scroll]')?.getBoundingClientRect?.();
+  const left = rect && rect.width > 0 && typeof rect.left === 'number' ? Math.min(rect.left, innerWidth) : null;
+  return left === null ? Math.max(16, (innerWidth - fallbackContentWidth) / 2 + 16) : Math.max(16, left + 16);
+}
+/**
+ * Which edge the window is pinned to. A phone keeps the full-width gutter it always had; the left
+ * placement pins the inline start and clears the inline end, everything else stays right-pinned.
+ */
+export function toastInsets({ narrow = false, position = 'conversation-left', anchor = { right: 16, left: 16 } } = {}) {
+  if (narrow) return { insetInlineStart: 'auto', insetInlineEnd: 12 };
+  if (position === 'conversation-left') return { insetInlineStart: `${anchor.left}px`, insetInlineEnd: 'auto' };
+  return { insetInlineStart: 'auto', insetInlineEnd: `${position === 'viewport' ? 16 : anchor.right}px` };
+}
+/** Both gutters in one measurement, so one observer update re-anchors whichever side is in use. */
+export function toastAnchors(options = {}) {
+  return { right: toastAnchor(options), left: toastLeftAnchor(options) };
+}
+/**
  * Nodes whose size or grid track changes when a sidebar opens or closes. The AppFrame itself does
  * not resize — it animates `grid-template-columns` — so a ResizeObserver on the window or the
  * frame misses the toggle. The conversation node can also be replaced on session switch; callers
@@ -44,7 +68,7 @@ export function watchToastAnchor(onChange, { document: doc = globalThis.document
   let raf = 0;
   let followingUntil = 0;
   const observed = new Set();
-  const measure = () => onChange(toastAnchor({ document: doc, innerWidth: win.innerWidth }));
+  const measure = () => onChange(toastAnchors({ document: doc, innerWidth: win.innerWidth }));
   const tick = () => {
     measure();
     const now = typeof win.performance?.now === 'function' ? win.performance.now() : Date.now();
@@ -160,7 +184,7 @@ export const SETTINGS_CSS = `.dsh-notify-settings{display:grid;gap:15px;max-widt
 .dsh-notify-update-command{background:var(--dsw-alias-bg-layer-2);border-radius:8px;display:block;font-family:var(--ds-font-family-code,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px;line-height:1.6;overflow-wrap:anywhere;padding:8px 10px}
 @media (hover:none) and (pointer:coarse){.dsh-notify-action{line-height:42px;min-height:44px}.dsh-notify-select{min-height:44px}.dsh-notify-settings .dsh-notify-toggle input{flex:0 0 42px;height:24px;max-width:42px;min-height:24px;min-width:42px;width:42px}}@media(max-width:620px){.dsh-notify-settings-head{display:block}.dsh-notify-settings-status{display:inline-flex;margin-top:14px}.dsh-notify-setting-field{grid-template-columns:1fr;gap:11px}.dsh-notify-card{padding:16px}.dsh-notify-test-grid{gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-notify-test-action{min-height:44px;padding:8px}.dsh-notify-test-primary,.dsh-notify-test-secondary{justify-self:stretch;min-width:0;width:100%}}`;
 /**
- * Toast presentation: a window anchored in the top-right corner. Each card is one row of
+ * Toast presentation: a window anchored to the conversation's top corner (left by default). Each card is one row of
  * [tone icon][title + text + actions][close X]. The container is a scroll box exactly as tall as the
  * cards it shows, and every card sits in an absolutely positioned slot whose `transform` is computed
  * from the cards above it — that is what makes a new card push the others down smoothly instead of
@@ -461,7 +485,7 @@ export function toastIcon(tone, status = 'idle') {
   if (tone === 'info') return React.createElement('svg', shared, React.createElement('circle', { cx: 10, cy: 10, r: 7 }), React.createElement('path', { d: 'M10 9.2v4M10 6.7h.01' }));
   return React.createElement('svg', shared, React.createElement('path', { d: 'M10 3.2a4.3 4.3 0 0 0-4.3 4.3c0 3.2-1.2 4.2-1.2 4.2h11s-1.2-1-1.2-4.2A4.3 4.3 0 0 0 10 3.2z' }), React.createElement('path', { d: 'M8.6 14.4a1.6 1.6 0 0 0 2.8 0' }));
 }
-let toastConfig = { toastPosition: 'conversation', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, soundEnabled: true, sound: 'chime' };
+let toastConfig = { toastPosition: 'conversation-left', toastEnabled: true, notificationStyle: 'strong', stackCollapsed: true, soundEnabled: true, sound: 'chime' };
 export function createSoundPlayer({ audio = globalThis, AudioContextClass, AudioElementClass } = {}) {
   let context = null; let unlocked = false; const elements = new Set();
   // Resolved lazily: the bundle may be evaluated before the page exposes these, and tests inject fakes.
@@ -666,7 +690,7 @@ export function stackWindow({ heights = [], visible = TOAST_STACK_VISIBLE, gap =
   return { total: list.length, hidden, windowHeight: windowHeight + (hidden > 0 ? peek : 0), contentHeight: sum(list), overflow: hidden > 0 };
 }
 function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
-  const state = useNotificationState({ sessions, pendingInteractions }); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchor()); const [expanded, setExpanded] = React.useState(false); const [forcedCollapsed, setForcedCollapsed] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
+  const state = useNotificationState({ sessions, pendingInteractions }); const [, refresh] = React.useState(0); const [cards, setCards] = React.useState([]); const [anchor, setAnchor] = React.useState(() => toastAnchors()); const [expanded, setExpanded] = React.useState(false); const [forcedCollapsed, setForcedCollapsed] = React.useState(false); const [, rerender] = React.useState(0); const toasted = React.useRef(new Set()); const primed = React.useRef(false);
   // useSyncExternalStore keeps the hook order stable whether or not the host exposes the service.
   const pendingStore = React.useMemo(() => ({ subscribe: (listener) => pendingInteractions?.subscribe?.(listener) ?? (() => {}), getSnapshot: () => pendingInteractions?.getSnapshot?.() ?? null }), [pendingInteractions]);
   const pending = React.useSyncExternalStore(pendingStore.subscribe, pendingStore.getSnapshot, () => null);
@@ -729,8 +753,8 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     if (changed) rerenderNow();
   };
   React.useEffect(() => { const onConfig = () => refresh((n) => n + 1); globalThis.addEventListener?.('dsh-notify:toast-config', onConfig); return () => globalThis.removeEventListener?.('dsh-notify:toast-config', onConfig); }, []);
-  React.useEffect(() => watchToastAnchor((next) => setAnchor((prev) => (prev === next ? prev : next))), []);
-  React.useEffect(() => { setAnchor(toastAnchor()); }, [cards.length]);
+  React.useEffect(() => watchToastAnchor((next) => setAnchor((prev) => (prev.right === next.right && prev.left === next.left ? prev : next))), []);
+  React.useEffect(() => { setAnchor(toastAnchors()); }, [cards.length]);
   React.useEffect(() => () => {
     for (const id of exits.current.values()) clearTimeout(id);
     for (const id of successes.current.values()) clearTimeout(id);
@@ -965,7 +989,7 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   // The count belongs to the window, not to whichever card happens to be on top: it is pinned to the
   // corner outside the scroll box, so it stays put (and stays the same number) once the user scrolls.
   return React.createElement('div', { ref: frameRef, popover: 'manual', className: 'dsh-notify-frame',
-    style: { inset: 'auto', insetInlineEnd: narrow ? 12 : toastConfig.toastPosition === 'viewport' ? 16 : anchor, insetInlineStart: 'auto', bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight + (clearAllVisible ? clearAllStrip : 0)}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
+    style: { inset: 'auto', ...toastInsets({ narrow, position: toastConfig.toastPosition, anchor }), bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight + (clearAllVisible ? clearAllStrip : 0)}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
     clearAllVisible ? React.createElement('div', { className: 'dsh-notify-toolbar', style: { height: `${TOAST_CLEAR_ALL_HEIGHT}px`, marginBottom: `${TOAST_CLEAR_ALL_GAP}px` } },
       React.createElement('button', { type: 'button', className: 'dsh-notify-clear-all', 'aria-label': `清除全部 ${liveCards.length} 条通知`, title: '清除当前页面上的全部通知', onClick: (event) => { event.stopPropagation(); clearAll(); } }, '全部清除')) : null,
     queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, style: { top: `${13 + (clearAllVisible ? clearAllStrip : 0)}px` }, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,
@@ -1158,7 +1182,7 @@ function SettingsSection() {
     updatePanel,
     config && card('◉', '通知显示', '显示位置、视觉样式与多条通知的呈现方式。', React.createElement(React.Fragment, null,
       React.createElement('div', { className: 'dsh-notify-rows' },
-        React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知位置', '默认出现在会话区右上角，不遮住侧栏。'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '通知位置', value: config.toastPosition || 'conversation', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation' }, '会话区右上（推荐）'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭页面通知'))),
+        React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知位置', '默认出现在会话区左上角；也可以换成右上、屏幕右上，或只保留声音。'), React.createElement('select', { className: 'dsh-notify-select', 'aria-label': '通知位置', value: config.toastPosition || 'conversation-left', onChange: (event) => update({ toastPosition: event.target.value }) }, React.createElement('option', { value: 'conversation-left' }, '会话区左上（默认）'), React.createElement('option', { value: 'conversation' }, '会话区右上'), React.createElement('option', { value: 'viewport' }, '屏幕右上'), React.createElement('option', { value: 'off' }, '关闭页面通知'))),
         React.createElement('div', { className: 'dsh-notify-setting-field' }, copy('通知样式', '增强版使用清晰状态色与短暂提醒条；柔和版更接近当前风格。'), React.createElement('div', { className: 'dsh-notify-segmented', role: 'group', 'aria-label': '通知样式' }, ...['strong', 'soft'].map((value) => React.createElement('button', { key: value, type: 'button', 'data-active': style === value ? 'true' : 'false', onClick: () => update({ notificationStyle: value }) }, value === 'strong' ? '增强版' : '柔和版')))),
         toggle('多条通知折叠显示', '有多条未关闭通知时，最新一条完整显示，其余通知在下方等距露边；移入后展开。', collapsed, (event) => update({ stackCollapsed: event.target.checked }), '多条通知折叠显示')),
       React.createElement('div', { className: 'dsh-notify-preview' }, React.createElement('span', null, React.createElement('strong', null, `${style === 'strong' ? '增强版' : '柔和版'} · 折叠显示${collapsed ? '已开启' : '已关闭'}`), collapsed ? '状态色清晰，提醒条结束后通知仍会保留。' : '多条通知会依次完整显示。')))),
