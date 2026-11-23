@@ -30,7 +30,8 @@ async function fixture(t, rejection, config = {}) {
   const { listeners, register } = createListeners();
   const routes = new Map();
   const webServer = { register(route) { const key = `${route.kind}:${route.path}`; if (routes.has(key)) throw new Error(`duplicate ${key}`); routes.set(key, route); return () => routes.delete(key); } };
-  const connection = { requestRejection: typeof rejection === 'function' ? rejection : () => rejection };
+  // `rejection === 'absent'` models DSH 0.2.3-alpha.1+, whose Connection no longer has requestRejection.
+  const connection = rejection === 'absent' ? {} : { requestRejection: typeof rejection === 'function' ? rejection : () => rejection };
   // Current DSH: one job event stream. `events.subscribe(filter, listener)` is the 0.1.7 seam; `onJobDone`
   // is the pre-0.1.7 listener this plugin still falls back to.
   const jobs = { events: { subscribe(filter, handler) { return register('job/settled', (job) => handler({ type: 'settled', job, cause: 'producer', awaited: false })); } } };
@@ -53,6 +54,18 @@ function response() {
 }
 async function invoke(route, req) { const res = response(); await route.handler(req, res); return res; }
 const browserHeaders = { origin: 'http://127.0.0.1:3080', host: '127.0.0.1:3080', cookie: 'sid=one', 'content-type': 'application/json' };
+
+test('routes declare required admission and survive a Connection without requestRejection', async (t) => {
+  // DSH 0.2.3-alpha.1 moved admission into the WebServer: `auth` defaults to required, the admitted Peer
+  // arrives as the handler's third argument, and `connection.requestRejection` was removed. A plugin that
+  // still called it threw a TypeError on every authenticated request, so the health route must answer.
+  const { routes, runtime } = await fixture(t, 'absent');
+  for (const [key, route] of routes) assert.equal(route.auth, 'required', `${key} must declare required admission`);
+  const health = await invoke(routes.get('exact:/plugins/dsh-notify/health'), request({ path: '/plugins/dsh-notify/health' }));
+  assert.equal(health.statusCode, 200, health.body);
+  assert.equal(JSON.parse(health.body).guiAvailable, true);
+  runtime();
+});
 
 test('sound routes list, upload, serve and delete only allow-listed audio, behind auth', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-notify-host-sounds-'));

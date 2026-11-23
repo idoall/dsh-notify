@@ -156,9 +156,15 @@ function registerRoute(ctx, webServer, route) {
 function registerSensitive(ctx, webServer, connection, path, methods, handler) {
   const allowed = Array.isArray(methods) ? methods : [methods];
   return registerRoute(ctx, webServer, {
-    kind: 'exact', path: `${BASE}${path}`,
+    // `auth` is the DSH 0.2.3-alpha.1+ route admission contract: omitted means required, and the
+    // admitted Peer arrives as the third handler argument. Older hosts do not read the key, so they
+    // keep gating through `connection.requestRejection` below.
+    kind: 'exact', path: `${BASE}${path}`, auth: 'required',
     handler: async (req, res) => {
-      const rejection = connection.requestRejection(req);
+      // DSH 0.2.3-alpha.1 moved admission into the WebServer and removed `Connection.requestRejection`,
+      // so a plugin that still called it threw a TypeError on every authenticated request. Older hosts
+      // (0.1.7–0.2.2) only have the method, so call it when present and let `auth` own the new host.
+      const rejection = typeof connection?.requestRejection === 'function' ? connection.requestRejection(req) : undefined;
       if (rejection !== undefined) { res.statusCode = rejection; res.end(rejection === 401 ? 'unauthorized' : 'forbidden'); return; }
       if (!allowed.includes(req.method)) { res.statusCode = 405; res.setHeader('allow', allowed.join(', ')); res.end(); return; }
       if (req.method !== 'GET' && !sameOriginRequest(req)) { res.statusCode = 403; res.end('forbidden'); return; }
@@ -650,7 +656,10 @@ export async function apply(ctx, config = {}) {
   } else {
     const webServer = contextService(ctx, 'webServer');
     const connection = contextService(ctx, 'connection');
-    if (webServer?.register && connection?.requestRejection) mountWeb(ctx, webServer, connection);
+    // DSH 0.2.3-alpha.1+ dropped `Connection.requestRejection`; there the route-level `auth` owns
+    // admission, so the presence of the connection service — not one method on it — is what this
+    // fallback may test.
+    if (webServer?.register && connection !== undefined && connection !== null) mountWeb(ctx, webServer, connection);
   }
   // Cordis plugins may resolve asynchronously, but an async effect must resolve
   // to a disposer (or null), never an arbitrary runtime object. Keep the
