@@ -13,7 +13,10 @@ for (const file of source.filter((item) => item.endsWith('.js'))) {
 }
 const host = await readFile('src/index.js', 'utf8');
 if (!host.includes('export const inject = [];') || !host.includes("ctx?.on?.('session/event'")) throw new Error('Host API seam is not wired');
-if (!host.includes("kind: 'exact'") || !host.includes('connection.requestRejection(req)')) throw new Error('authenticated raw route seam is not wired');
+if (!host.includes("kind: 'exact'") || !host.includes("auth: 'required'")) throw new Error('authenticated raw route seam is not wired');
+// DSH 0.2.3-alpha.1+ removed Connection.requestRejection and moved admission onto the route's `auth`.
+// The old method must stay callable for 0.1.7-0.2.2 hosts, but only when the service still has it.
+if (!host.includes("typeof connection?.requestRejection === 'function'")) throw new Error('the dual route admission seam is not wired');
 // The DSH 0.1.7 seams: one job event stream (the pre-0.1.7 `onJobDone` listener is gone from the registry)
 // and a tool result flattened onto its tool-role message (the nested `tool-result` content block is gone).
 if (!host.includes('registry?.events?.subscribe')) throw new Error('the DSH 0.1.7 job event stream is not wired');
@@ -24,8 +27,10 @@ if (!client.includes("slots.inject('settings.section'") || !client.includes("slo
 // the host's `--dsh-content-font-size` (default 14px, user-settable up to 22px) and render the selects
 // visibly larger than the labels beside them.
 if (!/\.dsh-notify-select\{[^}]*font-size:/.test(client)) throw new Error('the settings select must pin its own font-size, not inherit the host content font size');
-// DSH 0.1.7 publishes pending interactions through the unified Session status snapshot.
-if (!client.includes('ui?.sessionStatus')) throw new Error('the DSH 0.1.7 Session status seam is not wired');
+// Pending interactions come from whichever surface the host publishes: the unified status snapshot of
+// 0.1.7-0.2.2, or the read-only `uiSession.pendingInteractions` source of 0.2.3-alpha.1+ whose
+// `sessionStatus` throws unless the plugin injects that exact service.
+if (!client.includes('function resolvePendingSource(ui)') || !client.includes('ui.pendingInteractions') || !client.includes('ui.sessionStatus')) throw new Error('the pending-interaction seam is not wired');
 // The plugin keeps no history: nothing may write an ack, an epoch or a persisted record. (buffer.js
 // is exempt because it is the file that explains, in prose, why those concepts are gone.)
 const buffer = await readFile('src/buffer.js', 'utf8');

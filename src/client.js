@@ -1168,16 +1168,37 @@ function SettingsSection() {
 
 }
 export const CLIENT_COMPOSITION = Object.freeze({ service: 'slots', modules: Object.freeze(['@deepseek-ai/dsh-client-ui-renderer', '@deepseek-ai/dsh-client-ui-layout', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-settings-general']), seats: Object.freeze(['settings.section', 'shell.overlay']) });
+/**
+ * Pick the pending-interaction source this host publishes.
+ *
+ * DSH 0.2.3-alpha.1 moved the unified status snapshot onto the separate `uiSession.sessionStatus`
+ * service, which throws `cannot get property "uiSession.sessionStatus" without inject` when a plugin
+ * reads it without injecting that exact service. The read-only `uiSession.pendingInteractions` source
+ * is a plain member of the same service and needs no injection, so a live observable one wins; the
+ * older `sessionStatus` snapshot stays as the fallback for 0.1.7–0.2.2, and a bare pre-0.1.7 map is
+ * only returned when the host offers nothing better, because it carries no subscribe/getSnapshot.
+ *
+ * @param {object | undefined} ui - the `uiSession` service, or nothing when the host has none.
+ * @returns {object | undefined} an observable the toast can subscribe to, or a legacy map.
+ */
+export function resolvePendingSource(ui) {
+  if (!ui) return undefined;
+  const observable = (value) => value !== undefined && value !== null
+    && typeof value.getSnapshot === 'function' && typeof value.subscribe === 'function';
+  let live;
+  try { live = ui.pendingInteractions; } catch { live = undefined; }
+  if (observable(live)) return live;
+  let status;
+  try { status = ui.sessionStatus; } catch { status = undefined; }
+  if (status !== undefined) return status;
+  return live;
+}
 export function mountNotifyClient({ slots, sessions, uiWorkspace, getSessions, getUiSession, getUiWorkspace } = {}) {
   const status = { service: slots?.inject && slots?.register ? 'available' : 'unavailable', seats: {} };
   if (status.service === 'unavailable') return { status, destroy() {} };
   // Resolved lazily: the host may not expose the question surface at all, and the toast degrades to
-  // "go to the session" without it. DSH 0.1.7 moved the answerable interaction into the unified
-  // Session status snapshot; the older dedicated map stays as the fallback for an earlier host.
-  const pendingInteractions = () => {
-    const ui = getUiSession?.();
-    return ui?.sessionStatus ?? ui?.pendingInteractions;
-  };
+  // "go to the session" without it.
+  const pendingInteractions = () => resolvePendingSource(getUiSession?.());
   const disposers = [installClientStyles(), installAudioUnlock()];
   const activate = (name, options, Component) => { status.seats[name] = 'active'; const dispose = slots.register({ name, ...options }, Component); return () => { status.seats[name] = 'waiting'; dispose?.(); }; };
   status.seats['settings.section'] = 'waiting';

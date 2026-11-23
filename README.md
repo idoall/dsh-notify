@@ -6,7 +6,7 @@
   <a href="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml"><img src="https://github.com/idoall/dsh-notify/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@idoall/dsh-notify"><img src="https://img.shields.io/npm/v/@idoall/dsh-notify?label=npm&color=CB3837" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0F172A" alt="MIT"></a>
-  <img src="https://img.shields.io/badge/DSH-0.2.2--rc.5-4B6BFB" alt="DSH 0.2.2-rc.5">
+  <img src="https://img.shields.io/badge/DSH-0.2.3--alpha.2-4B6BFB" alt="DSH 0.2.3-alpha.2">
 </p>
 
 <p align="center">English | <a href="README.zh.md">中文</a></p>
@@ -45,8 +45,8 @@ When a session really stops, fails, asks a question, or needs approval, a card a
 Requirements:
 
 - DeepSeek Harness with a Web profile
-- Node.js 24.9.0 or newer for current DSH (the plugin itself declares Node.js 20+)
-- Verified DeepSeek Harness version: `0.2.2-rc.5`
+- Node.js 24.22.3 or newer in the 24.x line, or 26.13.1 or newer, for current DSH (the plugin itself declares Node.js 20+)
+- Verified DeepSeek Harness version: `0.2.3-alpha.2`
 
 Install from npm into your Web profile:
 
@@ -92,7 +92,7 @@ Reload the profile or restart DSH only when its plugin host has not hot-reloaded
 
 Custom sounds are stored in `<dataDir>/sounds/` in the profile data directory, not the plugin installation. Uploads are limited to 1 MB and `mp3 / m4a / aac / wav / ogg / flac`; names must be a single path segment.
 
-Above the cards, the page shows the running version against the newest one on npm: `v0.4.16 ✓ 最新`, `v0.4.15 ➔ v0.4.16`, or `v0.4.16 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
+Above the cards, the page shows the running version against the newest one on npm: `v0.4.17 ✓ 最新`, `v0.4.16 ➔ v0.4.17`, or `v0.4.17 · 检查失败`. **检查更新** forces a fresh lookup (`GET /plugins/dsh-notify/update?force=1`, authenticated); a page load reuses the host's six-hour cache. When a newer version exists the row reveals `dsh plugin --profile web add @idoall/dsh-notify@<version>` with a copy button — installing it, and restarting DSH afterwards, stays your decision.
 
 <p align="center">
   <img src="./assets/version-check.png" width="60%" alt="DSH notification settings with the version row: v0.4.0 newest, Check for updates, GitHub, Changelog and Issues links">
@@ -100,11 +100,12 @@ Above the cards, the page shows the running version against the newest one on np
 
 ## Compatibility
 
-Current release: plugin **`0.4.16`** is verified against DeepSeek Harness **`0.2.2-rc.5`**.
+Current release: plugin **`0.4.17`** is verified against DeepSeek Harness **`0.2.3-alpha.2`**.
 
 | Plugin | Verified DeepSeek Harness | What that version is |
 | --- | --- | --- |
-| **`0.4.16`** | `0.2.2-rc.5` | Declares DSH `0.2.2-rc.5` compatible — the first RC on npm `latest`. The one break since `rc.4` is a search-provider default this plugin never touches. Of the 15 packages it binds, the six that own its interfaces are byte-identical apart from their own versions; the only other changes are the same search work and release metadata (one source-location character, the displayed host version, the reported commit). No notification source changes. |
+| **`0.4.17`** | `0.2.3-alpha.2` | **Fixes two breaks on the current host.** DSH moved HTTP admission into the WebServer and removed `Connection.requestRejection` — routes now declare `auth: 'required'` and call the method only when it still exists — and moved the Session status snapshot behind a `uiSession.sessionStatus` service that throws unless injected, so the toast reads the injection-free `uiSession.pendingInteractions` source instead. `0.4.16` failed every plugin endpoint and lost in-toast answering on this host. |
+| `0.4.16` | `0.2.2-rc.5` | Declares DSH `0.2.2-rc.5` compatible — the first RC on npm `latest`. The one break since `rc.4` is a search-provider default this plugin never touches. Of the 15 packages it binds, the six that own its interfaces are byte-identical apart from their own versions; the only other changes are the same search work and release metadata (one source-location character, the displayed host version, the reported commit). No notification source changes. |
 | `0.4.15` | `0.2.2-rc.4` | Declares DSH `0.2.2-rc.4` compatible. The one break since `rc.3` moves the DeepSeek refusal code to `CONTENT_REFUSED`, which this plugin never classifies. Of the 15 packages it binds, everything is byte-identical apart from each `package.json`'s version; only the general-settings display version and the module loader's reported commit changed at runtime. No notification source changes. |
 | `0.4.14` | `0.2.2-rc.3` | Declares DSH `0.2.2-rc.3` compatible and reviews every break between it and `rc.1`. Of the 15 packages it binds, nothing on its call path moved: `dsh-host-webserver`'s `register(route)` half and `dsh-client-connection`'s host half are byte-identical, and the `hoc` slot kind, `JobError` and one `web/providers-changed` declaration are all additive. No notification source changes. |
 | `0.4.13` | `0.2.2-rc.1` | Declares the new DSH RC compatible, preserves existing support, and updates bilingual release information and the current DSH Node.js requirement. No notification source changes. |
@@ -135,7 +136,7 @@ Current release: plugin **`0.4.16`** is verified against DeepSeek Harness **`0.2
 - Two declarations decide whether the plugin loads at all: `dsh.engines.dsh` and every `@deepseek-ai/dsh-*` peer state the same requirement, `>=0.1.7-rc.1 <0.3.0` as of `0.4.1`. DSH refuses an incompatible bundle at profile load, so a range that excluded the running release would silently drop the plugin — which is exactly what the old `<0.2.0` ceiling would have done on the `0.2.0` release.
 - **An interactive gate only withholds a completion while it is unanswered.** DSH resolves an execution approval and a plan review *inside* the turn that asked them (`approval.request()` awaits its outcome under an open turn; `exit_plan_mode` returns its verdict to the same turn), so the turn that resumes is the turn that asked, and its end is the user's task finishing. `0.4.2` makes that the rule; `0.3.2`–`0.4.1` suppressed the whole turn, which silently dropped the completion of every approval-gated task.
 - `@deepseek-ai/schemastery` is a **peer**, not a plain dependency: DSH resolves only a linked plugin's peer dependencies from the running installation, so a `link:` install of this directory would otherwise fail to import the Host half.
-- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.2-alpha.2`, `0.2.2-alpha.3`, `0.2.2-rc.1`, `0.2.2-rc.3`, `0.2.2-rc.4`, `0.2.2-rc.5` as of `0.4.16`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
+- **Verified releases are listed, not just matched.** `dsh.compatibility.dshReleases` names every release this plugin was actually booted on (`0.1.7-rc.1`, `0.1.7-rc.2`, `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-alpha.1`, `0.2.1-alpha.3`, `0.2.1-alpha.4`, `0.2.1-alpha.5`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.2-alpha.2`, `0.2.2-alpha.3`, `0.2.2-rc.1`, `0.2.2-rc.3`, `0.2.2-rc.4`, `0.2.2-rc.5`, `0.2.3-alpha.2` as of `0.4.17`) and `npm run pack:check` fails when one of them falls outside the declared range. Each entry means a real boot, not a semver guess.
 
 The screenshots below come from earlier browser verification, not a new RC visual test. This check covers interface compatibility, automated tests and live overlay registration, not a fresh visual or audio test. The layout was checked at a 390px mobile viewport: the settings controls reflow and the toast becomes full-width without falling behind the mobile sidebar.
 
@@ -143,7 +144,7 @@ The screenshots below come from earlier browser verification, not a new RC visua
   <img src="./assets/mobile.png" width="34%" alt="390 pixel mobile viewport showing a full-width enhanced notification stack with equal coloured edges beneath the newest card">
 </p>
 
-At this release, npm DSH `latest` and `next` both point to the running `0.2.2-rc.5`, and `alpha` to `0.2.2-alpha.3`. The running release is now also the channel default, so `@latest` installs exactly the build this release was tried on.
+At this release, npm DSH `latest` and `next` both point to `0.2.2-rc.5`, while the running, newly verified `0.2.3-alpha.2` sits on `alpha`. Both are in the verified list, so either channel is safe; `latest` simply has not caught up with the `0.2.3` line yet.
 
 ## Uninstall
 
@@ -168,8 +169,8 @@ npm run pack:check # publish preconditions + client registration check
 Releases are tag-driven. Bump `package.json` and the lockfile root versions, synchronize both READMEs and the DSH declarations, move the matching CHANGELOG section out of `Unreleased`, write `release-notes/v<version>.md`, then push the release commit and tag:
 
 ```sh
-git tag v0.4.16
-git push origin v0.4.16
+git tag v0.4.17
+git push origin v0.4.17
 ```
 
 The release workflow runs `npm run verify`, packs the plugin, publishes through npm trusted publishing (OIDC), and creates a GitHub Release with the package tarball and sha256.

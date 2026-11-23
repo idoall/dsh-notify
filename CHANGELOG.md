@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.4.17] - 2026-11-23
+
+### Fixed
+
+- **Routes survive the removal of `Connection.requestRejection`.** DSH `0.2.3-alpha.1` moved HTTP admission into the WebServer: `register(route)` takes `auth: 'anonymous' | 'required' | 'deny'` (default `required`), the admitted Peer arrives as the handler's third argument, and `Connection.requestRejection` is gone. Every route now declares `auth: 'required'` and calls `requestRejection` only when the service still has it, so the two surfaces coexist. Without this, `0.4.16` threw `connection.requestRejection is not a function` inside the handler on the current host — `/pull`, `/config`, `/sounds`, `/update` and `/health` all failed for authenticated page loads.
+- **Route mounting no longer requires that removed method.** The reflective composition path tested `connection?.requestRejection` before mounting at all, so a host without the method registered no routes and reported `guiAvailable: false`. The guard is now the presence of the connection service, with the route's `auth` owning admission.
+- **In-toast answering follows the split Session status service.** DSH `0.2.3-alpha.1` moved the unified status snapshot to its own `uiSession.sessionStatus` service, which throws `cannot get property "uiSession.sessionStatus" without inject` when a Client plugin reads it without injecting that service. The toast read it first, so the overlay's pending-interaction wiring broke. `resolvePendingSource` now prefers the read-only `uiSession.pendingInteractions` observable (a plain member of the same service, no injection required), keeps the older `sessionStatus` snapshot as the fallback for `0.1.7`–`0.2.2`, returns a bare pre-`0.1.7` map only when nothing better exists, and tolerates either surface throwing.
+
+### Changed
+
+- Declare DeepSeek Harness `0.2.3-alpha.2` compatible while preserving `>=0.1.7-rc.1 <0.3.0` and every earlier verified release.
+- Read the installed upgrade guides for the whole span: `v0.2.2-rc.5` (14 items, `rc.5` → `0.2.3-alpha.1`) and `v0.2.3-alpha.1` (1 item, `alpha.1` → `alpha.2`). This install also ships a `v0.2.2-rc.2` section (13 items) that earlier installs omitted; two of those items are the breaks fixed above, and the rest name surfaces this plugin never uses (`ctx.root`, package subpaths, ui-primitives search, Python PTC, CUA, tool error codes).
+- **Node.js floor.** DSH now requires Node.js `24.22.3` or newer in the 24.x line, or `26.13.1` or newer; the README states that instead of `24.9.0`. The plugin's own `engines.node` stays `>=20`, which is its own code's floor.
+- **Client bundle.** The client-module metadata change is additive and optional: this plugin keeps its earlier-preset bundle (no `meta`), which still loads. The only consequence is the documented one — Modules no longer removes an earlier preset's `<style data-plugin>` element, so disabling the plugin leaves its styles until the page reloads.
+- Byte comparison of the 17 packages this plugin binds: `dsh-client-ui-slots` changed only by an optional `module` option and a static manifest export, leaving list registration, ordering and shadowing untouched; `dsh-client-ui-settings` still derives section rows from each entry's `{id, order, label}` and still passes `{close}` to the active section through the new `settings.section.view` factory; `dsh-jobs` only reshuffled its error codes and comments; `sessions.open`, `sessions.list` and `uiWorkspace.openSession` are unchanged.
+
+### Verified
+
+- Booted against the running `0.2.3-alpha.2` installation's own tree: `evaluatePluginCompatibility` reports no unmet requirement, the Host half mounts on Cordis `4.2.0-alpha.1` / schemastery `3.20.0-alpha.1`, registers all seven routes **with `auth: 'required'` on each**, and `/health`, `/config`, `/sounds` and `/update` answer `200` with live JSON against a connection service that has **no** `requestRejection`; disposal returns the fiber to inactive and removes every route.
+- The Client half mounts on the same Cordis and registers `settings.section` and `shell.overlay`; a probe with `sessionStatus` throwing on read confirms the overlay wires through `pendingInteractions` without touching it.
+- Static checks, **120 automated tests** (two new regressions: the dual route-admission seam, and pending-source resolution across all three host shapes), build and package checks pass, and the packed tarball matches this checkout byte for byte. Authenticated live-page verification stays unavailable: the running profile answers HTTP 401 to unauthenticated requests, so no new visual, audio or end-to-end notification claim is made.
+- Release acceptance compares the published npm tarball's files and bytes with this tag, and checks npm `latest` and the GitHub Release.
+
 ## [0.4.16] - 2026-11-21
 
 ### Changed

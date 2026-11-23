@@ -1,6 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, CLIENT_COMPOSITION, layoutFor, mountNotifyClient, navigateNotificationRecord } from '../src/client.js';
+import { apply, CLIENT_COMPOSITION, layoutFor, mountNotifyClient, navigateNotificationRecord, resolvePendingSource } from '../src/client.js';
+
+test('pending interactions resolve on both the old status snapshot and the new read-only source', () => {
+  const observable = { getSnapshot: () => new Map(), subscribe: () => () => {} };
+  // 0.1.7–0.2.2 publish the unified status snapshot.
+  assert.equal(resolvePendingSource({ sessionStatus: observable }), observable);
+  // 0.2.3-alpha.1+ publish the read-only source and guard `sessionStatus` behind its own inject.
+  const guarded = new Proxy({ pendingInteractions: observable }, {
+    get(target, key) {
+      if (key === 'sessionStatus') throw new Error('cannot get property "uiSession.sessionStatus" without inject');
+      return Reflect.get(target, key);
+    },
+  });
+  assert.equal(resolvePendingSource(guarded), observable);
+  // A pre-0.1.7 host only has the bare map; it is returned rather than dropped.
+  const legacy = new Map([['s1', { answer: async () => {} }]]);
+  assert.equal(resolvePendingSource({ pendingInteractions: legacy }), legacy);
+  // Either surface can be guarded away without the toast throwing.
+  assert.equal(resolvePendingSource(new Proxy({}, { get() { throw new Error('guarded'); } })), undefined);
+  assert.equal(resolvePendingSource(undefined), undefined);
+});
 
 test('narrow layout keeps a coarse-pointer hit target', () => {
   assert.equal(layoutFor({ width: 375, coarse: true }).hitTarget, 44);
