@@ -32,6 +32,30 @@ export function toastLeftAnchor({ document: doc = globalThis.document, innerWidt
   return left === null ? Math.max(16, (innerWidth - fallbackContentWidth) / 2 + 16) : Math.max(16, left + 16);
 }
 /**
+ * Where the window starts vertically: the top of the conversation body, so the session toolbar above
+ * it (轨迹/上下文/费用/统计) is never covered. `56px` from the viewport top was a guess that landed on
+ * that toolbar whenever the window's header was taller or the browser zoomed; measuring the body
+ * instead follows any layout, and the old value stays as the floor for a host without the hook.
+ */
+const TOAST_TOP_FLOOR = 56;
+const TOAST_TOP_GAP = 8;
+export function toastTopAnchor({ document: doc = globalThis.document, minimum = TOAST_TOP_FLOOR, gap = TOAST_TOP_GAP } = {}) {
+  const rectOf = (selector) => {
+    const rect = doc?.querySelector?.(selector)?.getBoundingClientRect?.();
+    return rect && rect.height > 0 && typeof rect.top === 'number' ? rect : null;
+  };
+  const rect = rectOf('[data-conversation-content]') ?? rectOf('[data-conversation-scroll]');
+  return rect === null ? minimum : Math.max(minimum, Math.round(rect.top) + gap);
+}
+/**
+ * The inline style's `top`. The screen-corner placement keeps the host-aware CSS variable; the two
+ * conversation placements sit below the conversation body's own top edge.
+ */
+export function toastTop({ position = 'conversation-left', anchor = { top: TOAST_TOP_FLOOR } } = {}) {
+  if (position === 'viewport') return 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))';
+  return `${anchor.top ?? TOAST_TOP_FLOOR}px`;
+}
+/**
  * Which edge the window is pinned to. A phone keeps the full-width gutter it always had; the left
  * placement pins the inline start and clears the inline end, everything else stays right-pinned.
  */
@@ -40,9 +64,9 @@ export function toastInsets({ narrow = false, position = 'conversation-left', an
   if (position === 'conversation-left') return { insetInlineStart: `${anchor.left}px`, insetInlineEnd: 'auto' };
   return { insetInlineStart: 'auto', insetInlineEnd: `${position === 'viewport' ? 16 : anchor.right}px` };
 }
-/** Both gutters in one measurement, so one observer update re-anchors whichever side is in use. */
+/** Both gutters and the vertical start in one measurement, so one observer update re-anchors everything. */
 export function toastAnchors(options = {}) {
-  return { right: toastAnchor(options), left: toastLeftAnchor(options) };
+  return { right: toastAnchor(options), left: toastLeftAnchor(options), top: toastTopAnchor(options) };
 }
 /**
  * Nodes whose size or grid track changes when a sidebar opens or closes. The AppFrame itself does
@@ -753,7 +777,7 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     if (changed) rerenderNow();
   };
   React.useEffect(() => { const onConfig = () => refresh((n) => n + 1); globalThis.addEventListener?.('dsh-notify:toast-config', onConfig); return () => globalThis.removeEventListener?.('dsh-notify:toast-config', onConfig); }, []);
-  React.useEffect(() => watchToastAnchor((next) => setAnchor((prev) => (prev.right === next.right && prev.left === next.left ? prev : next))), []);
+  React.useEffect(() => watchToastAnchor((next) => setAnchor((prev) => (prev.right === next.right && prev.left === next.left && prev.top === next.top ? prev : next))), []);
   React.useEffect(() => { setAnchor(toastAnchors()); }, [cards.length]);
   React.useEffect(() => () => {
     for (const id of exits.current.values()) clearTimeout(id);
@@ -989,7 +1013,7 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   // The count belongs to the window, not to whichever card happens to be on top: it is pinned to the
   // corner outside the scroll box, so it stays put (and stays the same number) once the user scrolls.
   return React.createElement('div', { ref: frameRef, popover: 'manual', className: 'dsh-notify-frame',
-    style: { inset: 'auto', ...toastInsets({ narrow, position: toastConfig.toastPosition, anchor }), bottom: 'auto', top: 'calc(env(safe-area-inset-top, 0px) + var(--dsh-toast-top-offset, 56px))', width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight + (clearAllVisible ? clearAllStrip : 0)}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
+    style: { inset: 'auto', ...toastInsets({ narrow, position: toastConfig.toastPosition, anchor }), bottom: 'auto', top: toastTop({ position: toastConfig.toastPosition, anchor }), width: narrow ? 'calc(100vw - 24px)' : 'min(360px, calc(100vw - 32px))', height: `${frame.windowHeight + (clearAllVisible ? clearAllStrip : 0)}px`, margin: 0, padding: 0, border: 0, background: 'transparent', overflow: 'visible' } },
     clearAllVisible ? React.createElement('div', { className: 'dsh-notify-toolbar', style: { height: `${TOAST_CLEAR_ALL_HEIGHT}px`, marginBottom: `${TOAST_CLEAR_ALL_GAP}px` } },
       React.createElement('button', { type: 'button', className: 'dsh-notify-clear-all', 'aria-label': `清除全部 ${liveCards.length} 条通知`, title: '清除当前页面上的全部通知', onClick: (event) => { event.stopPropagation(); clearAll(); } }, '全部清除')) : null,
     queueCount > 0 ? React.createElement('button', { type: 'button', className: 'dsh-notify-count', 'aria-label': `本页共 ${queueCount} 条通知`, title: `共 ${queueCount} 条，已显示 ${onScreenCount} 条，点击在队列两端之间跳转`, style: { top: `${13 + (clearAllVisible ? clearAllStrip : 0)}px` }, onClick: (event) => { event.stopPropagation(); scrollWindow(); } }, `+${queueCount}`) : null,

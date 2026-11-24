@@ -1,5 +1,24 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastLeftAnchor, toastAnchors, toastInsets, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel, updateChipText, updateTone, updateCommand, UPDATE_REPO_URL } from '../src/client.js';
+import { createAttentionIndicator, createLocalSelfTestBatch, createSoundPlayer, installClientStyles, navigateNotificationRecord, queueCards, SELF_TEST_STEP_MS, TOAST_ATTENTION_MS, TOAST_STACK_COLLAPSED_PEEK, collapsedStackPlan, stackWindow, CLIENT_CSS, SETTINGS_CSS, layoutFor, revealSelectedSidebarSession, revealTurn, statusTone, resultTone, toastAnchor, toastLeftAnchor, toastTopAnchor, toastAnchors, toastInsets, toastTop, toastAnchorWatchTargets, toastStackPlan, toastTime, toastTone, toastIcon, pendingInteractionFor, toastAnswer, answerBatch, sessionLabel, updateChipText, updateTone, updateCommand, UPDATE_REPO_URL } from '../src/client.js';
+test('the window starts below the conversation body, never over the session toolbar', () => {
+  const rect = (top, height = 600) => ({ getBoundingClientRect: () => ({ top, left: 280, right: 1000, height, width: 720 }) });
+  const withContent = (top) => ({ querySelector: (selector) => (selector === '[data-conversation-content]' ? rect(top) : null) });
+  assert.equal(toastTopAnchor({ document: withContent(120) }), 128, 'the body top plus the 8px gap clears the toolbar above it');
+  assert.equal(toastTopAnchor({ document: withContent(200) }), 208, 'a taller header pushes the window down with it');
+  assert.equal(toastTopAnchor({ document: withContent(20) }), 56, 'the old 56px value stays as the floor');
+  assert.equal(toastTopAnchor({ document: { querySelector: () => null } }), 56, 'a host without the hook keeps the old offset');
+  assert.equal(toastTopAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ top: 120, height: 0 }) }) } }), 56, 'a collapsed measurement falls back');
+  // The scroll body is the fallback selector when the content wrapper is absent.
+  const scrollOnly = { querySelector: (selector) => (selector === '[data-conversation-scroll]' ? rect(96) : null) };
+  assert.equal(toastTopAnchor({ document: scrollOnly }), 104, 'the scroll body stands in for the content wrapper');
+  assert.deepEqual(toastAnchors({ document: withContent(120) }).top, 128, 'one measurement feeds the vertical start too');
+  // The screen-corner placement keeps the host-aware variable; the conversation placements use the measurement.
+  assert.match(toastTop({ position: 'viewport', anchor: { top: 128 } }), /--dsh-toast-top-offset/);
+  assert.equal(toastTop({ position: 'conversation', anchor: { top: 128 } }), '128px');
+  assert.equal(toastTop({ position: 'conversation-left', anchor: { top: 128 } }), '128px');
+  assert.equal(toastTop(), '56px', 'the default keeps the floor when nothing was measured');
+});
+
 test('the left placement anchors to the conversation column and mirrors the right one', () => {
   const withScroll = (left, right) => ({ querySelector: () => ({ getBoundingClientRect: () => ({ left, right, width: right - left }) }) });
   assert.equal(toastLeftAnchor({ document: withScroll(280, 1000), innerWidth: 1908 }), 296, 'conversation left edge plus the 16px gutter');
@@ -7,7 +26,7 @@ test('the left placement anchors to the conversation column and mirrors the righ
   assert.equal(toastLeftAnchor({ document: { querySelector: () => null }, innerWidth: 1024 }), 168, 'the centred-content guess remains the no-DOM-hook fallback');
   assert.equal(toastLeftAnchor({ document: withScroll(-40, 900), innerWidth: 1024 }), 16, 'an off-screen rect clamps to the 16px edge inset');
   assert.equal(toastLeftAnchor({ document: { querySelector: () => ({ getBoundingClientRect: () => ({ right: 700, width: 0 }) }) }, innerWidth: 1024 }), 168, 'a collapsed measurement falls back');
-  assert.deepEqual(toastAnchors({ document: withScroll(280, 1000), innerWidth: 1024 }), { right: 40, left: 296 }, 'one measurement serves both sides');
+  assert.deepEqual(toastAnchors({ document: withScroll(280, 1000), innerWidth: 1024 }), { right: 40, left: 296, top: 56 }, 'one measurement serves both sides and the vertical start');
   // The left placement is the default; every other position keeps the right-pinned geometry.
   assert.deepEqual(toastInsets({ position: 'conversation-left', anchor: { right: 40, left: 296 } }), { insetInlineStart: '296px', insetInlineEnd: 'auto' });
   assert.deepEqual(toastInsets({ position: 'conversation', anchor: { right: 40, left: 296 } }), { insetInlineStart: 'auto', insetInlineEnd: '40px' });

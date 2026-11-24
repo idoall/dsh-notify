@@ -301,7 +301,7 @@ test('clicking a card opens its session and retires the card, with no history li
 });
 
 test('in-page toast anchors to the conversation column and the 关闭 option removes it without touching history', async (t) => {
-  const dom = new JSDOM('<!doctype html><div data-conversation-scroll></div><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted;
+  const dom = new JSDOM('<!doctype html><div data-conversation-content><div data-conversation-scroll></div></div><main id="root"></main>', { url: 'https://dsh.test/' }); let root; let mounted;
   const values = {
     window: dom.window, document: dom.window.document, navigator: dom.window.navigator, localStorage: dom.window.localStorage,
     Event: dom.window.Event, CustomEvent: dom.window.CustomEvent, MouseEvent: dom.window.MouseEvent,
@@ -314,6 +314,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   t.after(async () => { if (root) await act(async () => { root.unmount(); }); mounted?.destroy(); setToastConfig({ toastPosition: 'conversation-left', toastEnabled: true }); for (const [key, descriptor] of Object.entries(saved)) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; } dom.window.close(); });
 
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 700, width: 420, x: 280, left: 280, top: 0, bottom: 600, height: 600 });
+  document.querySelector('[data-conversation-content]').getBoundingClientRect = () => ({ right: 1000, width: 720, x: 280, left: 280, top: 128, bottom: 600, height: 472 });
   assert.equal(toastAnchor(), 340, 'innerWidth 1024 minus a conversation right edge at 700 plus the 16px gutter');
   const components = new Map();
   const slots = { inject(_name, callback) { const dispose = callback(); return () => dispose?.(); }, register(options, Component) { components.set(options.name, Component); return () => components.delete(options.name); } };
@@ -326,6 +327,7 @@ test('in-page toast anchors to the conversation column and the 关闭 option rem
   await fire('anchor-check'); const toast = document.querySelector('aside[role="status"]');
   assert.ok(toast); assert.equal(frame().style.insetInlineStart, '296px', 'by default the window is pinned to the conversation left edge');
   assert.equal(frame().style.insetInlineEnd, 'auto', 'the left placement clears the right inset');
+  assert.equal(frame().style.top, '136px', 'the window starts below the conversation body (128px) plus its 8px gap, so the 轨迹/统计 toolbar is never covered');
   document.querySelector('[data-conversation-scroll]').getBoundingClientRect = () => ({ right: 1000, width: 640, x: 360, left: 360, top: 0, bottom: 600, height: 600 });
   await act(async () => { document.dispatchEvent(new dom.window.Event('transitionend', { bubbles: true })); });
   assert.equal(frame().style.insetInlineStart, '376px', 'a sidebar grid transition re-anchors the left placement to the moved conversation column');
