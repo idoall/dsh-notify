@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.5.1] - 2026-11-24
+
+### Fixed
+
+- **The window no longer covers the session toolbar above the chat.** Its vertical start was still the hardcoded `56px` offset, so in a window whose header is taller than that — or at a non-100% page zoom — the card landed on the 轨迹 / 上下文 / 费用 / 统计 row. `toastTopAnchor` now measures the conversation body (`[data-conversation-content]`, falling back to `[data-conversation-scroll]`) and starts 8px below its top edge, with the old `56px` kept as the floor for a host without the hook. Because it is measured, it follows a resized header, a collapsed sidebar and a zoom change through the same observer that already re-anchored the horizontal gutter.
+- The screen-corner placement keeps its host-aware `--dsh-toast-top-offset` variable, so 屏幕右上 still means the top of the screen rather than the top of the chat.
+
+### Verified
+
+- Static checks, **123 automated tests**, build and package checks pass, and the packed tarball matches this checkout byte for byte. New coverage measures the body top at 120px → a 128px start, keeps the 56px floor for a short layout and for a host without the hook, falls back to the scroll body, and the DOM test now asserts `style.top === '136px'` on the rendered frame for a body top of 128px.
+
 ## [0.5.0] - 2026-11-23
 
 ### Added
