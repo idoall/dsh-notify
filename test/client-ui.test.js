@@ -212,6 +212,28 @@ test('the tab attention indicator flashes only for a background tab with unread 
   assert.equal(still.active, true, 'reduced motion keeps the marker but never animates it');
 });
 
+test('the indicator never reverts a title or favicon the host changed while it was flashing', () => {
+  let ticks = null;
+  const icon = { href: 'https://dsh.test/favicon.ico', getAttribute: () => 'https://dsh.test/favicon.ico' };
+  const doc = { title: '旧标题 — DeepSeek Harness', querySelector: (selector) => selector.includes('icon') ? icon : null };
+  const indicator = createAttentionIndicator({ document: doc, timers: { setInterval: (fn) => { ticks = fn; return 1; }, clearInterval: () => {} }, reducedMotion: false });
+  indicator.update({ unread: 1, visible: false });
+  assert.equal(doc.title, '🔔 旧标题 — DeepSeek Harness');
+  // The host renames the tab while the marker flashes; stopping must not restore the captured name.
+  doc.title = '新标题 — DeepSeek Harness';
+  icon.href = 'https://dsh.test/new.ico';
+  indicator.update({ unread: 0, visible: true });
+  assert.equal(doc.title, '新标题 — DeepSeek Harness', 'a host-owned title survives the marker');
+  assert.equal(icon.href, 'https://dsh.test/new.ico', 'and so does a host-owned favicon');
+
+  // A page that installs its document after the module was evaluated still gets the marker.
+  const late = { value: undefined };
+  const lazy = createAttentionIndicator({ document: () => late.value, timers: { setInterval: () => 1, clearInterval: () => {} }, reducedMotion: false });
+  late.value = { title: '晚了 — DeepSeek Harness', querySelector: () => null };
+  lazy.update({ unread: 1, visible: false });
+  assert.equal(late.value.title, '🔔 晚了 — DeepSeek Harness', 'the document is resolved when it is needed, not at import time');
+});
+
 test('a record with nowhere to go is still dismissible, while a real session stays retryable', async () => {
   const acked = [];
   const acknowledge = async (record) => { acked.push(record.eventId); };

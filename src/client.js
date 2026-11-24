@@ -579,9 +579,14 @@ const ATTENTION_DOT = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http
  * looked at again, or as soon as nothing is unread (toast closed / handled / deleted), so it can
  * never nag someone who is already looking at the page.
  */
-export function createAttentionIndicator({ document: doc = globalThis.document, timers = {}, intervalMs = 900, reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true } = {}) {
+export function createAttentionIndicator({ document: docSource = globalThis.document, timers = {}, intervalMs = 900, reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true } = {}) {
   const setTimer = timers.setInterval ?? globalThis.setInterval;
   const clearTimer = timers.clearInterval ?? globalThis.clearInterval;
+  // A page can install `document` after this module is evaluated (a Client bundle loads into an
+  // already-running realm, and a test realm swaps the global later), so the target is resolved per
+  // use instead of frozen at import time.
+  let doc = typeof docSource === 'function' ? undefined : docSource;
+  const target = () => (doc = typeof docSource === 'function' ? docSource() : docSource);
   let timer = null; let active = false; let baseTitle = null; let baseIcon = null; let iconNode = null; let phase = false;
   const paint = () => {
     // `phase` alone carries the flash state: with reduced motion it simply never toggles, so the
@@ -594,8 +599,10 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
     if (timer !== null) { clearTimer(timer); timer = null; }
     if (!active) return;
     active = false; phase = false;
-    if (doc && baseTitle !== null) doc.title = baseTitle;
-    if (iconNode && baseIcon !== null) iconNode.href = baseIcon;
+    // Only undo what this indicator painted: if the host renamed the tab while the marker flashed,
+    // the new name is the truth and restoring the captured title would silently revert it.
+    if (doc && baseTitle !== null && (doc.title === baseTitle || doc.title === `🔔 ${baseTitle}`)) doc.title = baseTitle;
+    if (iconNode && baseIcon !== null && iconNode.href === ATTENTION_DOT) iconNode.href = baseIcon;
     if (iconNode && baseIcon === null) { try { iconNode.remove(); } catch { /* gone */ } }
     iconNode = null; baseTitle = null; baseIcon = null;
   };
@@ -606,6 +613,7 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
       const wanted = Boolean(unread > 0 && !visible);
       if (wanted === active) return;
       if (!wanted) { stop(); return; }
+      doc = target();
       if (!doc) return;
       baseTitle = doc.title ?? '';
       iconNode = doc.querySelector?.('link[rel~="icon"]') ?? null;
@@ -617,7 +625,7 @@ export function createAttentionIndicator({ document: doc = globalThis.document, 
     stop,
   };
 }
-const attentionIndicator = createAttentionIndicator();
+const attentionIndicator = createAttentionIndicator({ document: () => globalThis.document });
 export function setToastConfig(config = {}) { toastConfig = { ...toastConfig, ...config }; globalThis.dispatchEvent?.(new Event('dsh-notify:toast-config')); }
 /** How many cards the corner shows at once, and how long the page-scoped queue behind them may grow. */
 export const TOAST_STACK_VISIBLE = 5;
@@ -725,7 +733,8 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   // The ref mirrors every write so two pushes in the same tick (a self-test and a poll, say) cannot
   // race each other through a stale render.
   const commit = (next) => { cardsRef.current = next; setCards(next); };
-  const forget = (eventId) => { heights.current.delete(eventId); };
+  /** Drop a card for good. Its id also leaves the unread set: the user is done with it. */
+  const forget = (eventId) => { heights.current.delete(eventId); unseen.current.delete(eventId); };
   /** Retire a card: the DOM node stays for the slide-out animation and is dropped when it ends. */
   /** Watch a card leave: the node stays for the animation, and the timer takes it out of the stack. */
   const retire = (eventId) => {
@@ -734,6 +743,8 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
   };
   const dismiss = (eventId, { animate = true } = {}) => {
     const success = successes.current.get(eventId); if (success) { clearTimeout(success); successes.current.delete(eventId); }
+    // The marker must stop at the click, not when the slide-out timer lands 260ms later.
+    unseen.current.delete(eventId);
     if (!animate) { forget(eventId); commit(cardsRef.current.filter((card) => card.record.eventId !== eventId)); return; }
     commit(cardsRef.current.map((card) => (card.record.eventId === eventId ? { ...card, leaving: true } : card)));
     retire(eventId);
@@ -899,6 +910,11 @@ function ToastOverlay({ sessions, uiWorkspace, pendingInteractions } = {}) {
     const sync = () => {
       const hidden = Boolean(globalThis.document?.hidden);
       if (!hidden) unseen.current.clear();
+      // Only a card that is still on screen counts as unread. Retiring one prunes the set on its own
+      // path, and this intersection keeps the marker honest for any path that removes a card without
+      // reaching `dismiss` (an eviction, a host-side settlement, a cleared pile).
+      const live = new Set(cardsRef.current.filter((card) => !card.leaving).map((card) => card.record.eventId));
+      for (const id of [...unseen.current]) if (!live.has(id)) unseen.current.delete(id);
       attentionIndicator.update({ unread: hidden && toastConfig.toastPosition !== 'off' ? unseen.current.size : 0, visible: !hidden });
     };
     sync();

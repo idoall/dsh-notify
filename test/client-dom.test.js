@@ -611,6 +611,22 @@ test('a notification that arrived in a background tab is still waiting when the 
   assert.equal(sandbox.count(), 1, 'and looking at it is not a dismissal either');
 });
 
+test('closing the toast also clears the tab-title marker, even while the page counts as hidden', async (t) => {
+  const sandbox = await mountStackSandbox(t);
+  await sandbox.setHidden(true);
+  sandbox.push(burstRecord(1));
+  await sandbox.tick();
+  assert.equal(sandbox.count(), 1, 'a background notification is toasted');
+  assert.match(sandbox.tabTitle(), /^🔔 /, 'and it marks the tab while nothing has been looked at');
+
+  // The user closes it from a window the browser still reports as hidden (an occluded window or a
+  // desktop shell behaves this way). Nothing is unread any more, so the marker must go.
+  await sandbox.click(sandbox.closer());
+  await sandbox.wait(400);
+  assert.equal(sandbox.count(), 0, 'the card is gone');
+  assert.doesNotMatch(sandbox.tabTitle(), /🔔/, 'a notification the user already handled must stop marking the tab');
+});
+
 test('a session state change pulls at once instead of waiting for the next tick', async (t) => {
   const listListeners = new Set();
   const sessions = { list: { subscribe: (listener) => { listListeners.add(listener); return () => listListeners.delete(listener); }, getSnapshot: () => ({ current: undefined, byId: {} }) } };
