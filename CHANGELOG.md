@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). GitHub Releases use the same bilingual layout as [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1).
 
+## [0.5.2] - 2026-11-24
+
+### Fixed
+
+- **Handling a notification now clears the tab marker too.** The 🔔 title prefix and the red favicon dot only stopped when the page became visible, so a notification closed (or cleared, or answered, or jumped to) from a window the browser still reports as hidden — an occluded window, a second display, a desktop shell — left the tab flashing about work that was already done. A retiring card is now dropped from the unread set at the click, the slide-out timer also drops it, and the marker is recomputed against the cards still on screen, so no removal path can leave a stale count behind.
+- **The indicator no longer reverts a title or favicon the host changed while it flashed.** Stopping used to restore the exact title captured when it started, which silently undid a session rename made in the meantime; it now restores only what it painted itself.
+- **The indicator resolves `document` when it needs it** instead of capturing it at module load. A Client bundle evaluated before the page installs its document (and every test realm that swaps the global afterwards) used to get an indicator that silently did nothing.
+
+### Verified
+
+- Static checks, **125 automated tests**, build and package checks pass, and the packed tarball matches this checkout byte for byte. New coverage: a background toast marks the tab, closing it clears the marker while the page still counts as hidden; a host title/favicon change survives the marker; and a document installed after module evaluation is picked up.
+
 ## [0.5.1] - 2026-11-24
 
 ### Fixed
